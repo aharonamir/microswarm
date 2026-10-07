@@ -13,7 +13,7 @@
 
 - [x] T001 Create Cargo workspace, `rust-toolchain.toml`, crate skeletons per plan — `Cargo.toml`, `crates/*/Cargo.toml`
 - [x] T002 [P] CI: fmt, clippy `-D warnings`, test, musl build of `ms-agent` and `ms-tools` — `.github/workflows/ci.yml`
-- [ ] T003 [P] CI line-budget gate: `tokei` on `ms-agent` and `ms-supervisor` (+ their share of `ms-proto`, `ms-store`), fail > 6,000 — `scripts/loc-budget.sh`
+- [x] T003 [P] CI line-budget gate: `tokei` on `ms-agent` and `ms-supervisor` (+ their share of `ms-proto`, `ms-store`), fail > 6,000 — `scripts/loc-budget.sh`
 - [ ] T004 [P] CI dependency gate: fail if the tree contains a second async runtime or a TLS stack other than rustls — `scripts/dep-gate.sh`
 - [ ] T005 [P] `FROM scratch` agent image with static `microswarm-agent`, `microswarm-tools`, CA bundle; non-root UID — `images/agent.Containerfile`
 - [ ] T006 [P] Integration harness: start `microswarmd` against a temp `$MS_HOME` and real Podman/Docker, with a scripted fake model server — `tests/integration/harness.rs`, `tests/fixtures/fake_model.rs`
