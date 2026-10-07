@@ -13,6 +13,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes musl-tools
+      - name: Check dependency policy
+        run: scripts/dep-gate.sh
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint
