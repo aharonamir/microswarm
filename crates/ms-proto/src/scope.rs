@@ -252,6 +252,10 @@ impl Scope {
                     })
                 }
             })
+            && ceiling
+                .limits
+                .as_ref()
+                .is_none_or(|limits| self.limits.is_no_greater_than(limits))
     }
 }
 
@@ -302,16 +306,27 @@ pub fn intersect_scope(
         .collect::<Result<Vec<_>, _>>()?;
     let mut result = request.clone();
     result.mounts.clear();
-    result.credentials = request
-        .credentials
-        .iter()
-        .filter(|credential| {
-            lead.credentials.contains(credential) && !ceiling.credentials.contains(*credential)
-        })
-        .cloned()
-        .collect();
+    result.credentials.clear();
     result.tools.clear();
     result.narrowed.clear();
+    for credential in &request.credentials {
+        let reason = if !lead.credentials.contains(credential) {
+            Some(NarrowedReason::NotInLeadScope)
+        } else if ceiling.credentials.contains(credential) {
+            Some(NarrowedReason::Ceiling)
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            result.narrowed.push(NarrowedItem {
+                dimension: NarrowedDimension::Credential,
+                item: credential.clone(),
+                reason,
+            });
+        } else {
+            result.credentials.push(credential.clone());
+        }
+    }
 
     for requested in &request.mounts {
         let host = canonicalize(&requested.host_path)?;
@@ -340,10 +355,18 @@ pub fn intersect_scope(
             if requested_container != projected {
                 continue;
             }
+            let mode = requested.mode.min(parent.mode);
+            if mode != requested.mode {
+                result.narrowed.push(NarrowedItem {
+                    dimension: NarrowedDimension::Mode,
+                    item: host.display().to_string(),
+                    reason: NarrowedReason::ModeDowngraded,
+                });
+            }
             admitted = Some(Mount {
                 host_path: host.clone(),
                 container_path: projected,
-                mode: requested.mode.min(parent.mode),
+                mode,
             });
             break;
         }
@@ -372,11 +395,15 @@ pub fn intersect_scope(
             continue;
         };
         let mut names = request_grant.tools.intersect(&lead_grant.tools);
-        let server_blocked = ceiling.tools.iter().any(|item| {
-            item == &format!("{}/*", request_grant.server)
-                || names.names().is_none()
-                    && item.starts_with(&format!("{}/", request_grant.server))
-        });
+        let wildcard_blocked = ceiling
+            .tools
+            .contains(&format!("{}/*", request_grant.server));
+        let server_blocked = wildcard_blocked
+            || names.names().is_none()
+                && ceiling
+                    .tools
+                    .iter()
+                    .any(|item| item.starts_with(&format!("{}/", request_grant.server)));
         match (&mut names, server_blocked) {
             (_, true) => names = ToolNames::Selected(BTreeSet::new()),
             (ToolNames::All(value), false) if value != "*" => {
@@ -391,20 +418,53 @@ pub fn intersect_scope(
             }
             _ => {}
         }
-        if names.names().is_some_and(BTreeSet::is_empty) {
+        if server_blocked {
             result.narrowed.push(NarrowedItem {
                 dimension: NarrowedDimension::Tool,
-                item: request_grant.server.clone(),
-                reason: if server_blocked {
-                    NarrowedReason::Ceiling
-                } else {
-                    NarrowedReason::NotInLeadScope
-                },
+                item: format!("{}/*", request_grant.server),
+                reason: NarrowedReason::Ceiling,
             });
+        } else if request_grant.tools.names().is_none() && lead_grant.tools.names().is_some() {
+            result.narrowed.push(NarrowedItem {
+                dimension: NarrowedDimension::Tool,
+                item: format!("{}/*", request_grant.server),
+                reason: NarrowedReason::NotInLeadScope,
+            });
+        } else if let (Some(requested), Some(granted)) =
+            (request_grant.tools.names(), lead_grant.tools.names())
+        {
+            for tool in requested.difference(granted) {
+                result.narrowed.push(NarrowedItem {
+                    dimension: NarrowedDimension::Tool,
+                    item: format!("{}/{}", request_grant.server, tool),
+                    reason: NarrowedReason::NotInLeadScope,
+                });
+            }
+            for tool in requested.intersection(granted) {
+                if ceiling
+                    .tools
+                    .contains(&format!("{}/{}", request_grant.server, tool))
+                {
+                    result.narrowed.push(NarrowedItem {
+                        dimension: NarrowedDimension::Tool,
+                        item: format!("{}/{}", request_grant.server, tool),
+                        reason: NarrowedReason::Ceiling,
+                    });
+                }
+            }
+        }
+        if names.names().is_some_and(BTreeSet::is_empty) {
             continue;
         }
 
         let base = request_grant.policy.max(lead_grant.policy);
+        if base > request_grant.policy {
+            result.narrowed.push(NarrowedItem {
+                dimension: NarrowedDimension::Policy,
+                item: request_grant.server.clone(),
+                reason: NarrowedReason::PolicyTightened,
+            });
+        }
         let mut overrides = BTreeMap::new();
         if let Some(selected) = names.names() {
             for tool in selected {
@@ -418,11 +478,24 @@ pub fn intersect_scope(
                     .get(tool)
                     .copied()
                     .unwrap_or(lead_grant.policy);
-                let effective = requested_policy.max(lead_policy);
+                let effective = requested_policy.max(lead_policy).max(base);
                 if effective != base {
                     overrides.insert(tool.clone(), effective);
                 }
+                if effective > requested_policy {
+                    result.narrowed.push(NarrowedItem {
+                        dimension: NarrowedDimension::Policy,
+                        item: format!("{}/{}", request_grant.server, tool),
+                        reason: NarrowedReason::PolicyTightened,
+                    });
+                }
             }
+        } else if request_grant.policy < base {
+            result.narrowed.push(NarrowedItem {
+                dimension: NarrowedDimension::Policy,
+                item: format!("{}/*", request_grant.server),
+                reason: NarrowedReason::PolicyTightened,
+            });
         }
         result.tools.push(ToolGrant {
             server: request_grant.server.clone(),
@@ -435,6 +508,30 @@ pub fn intersect_scope(
     result.limits = result.limits.min(&lead.limits);
     if let Some(maximum) = &ceiling.limits {
         result.limits = result.limits.min(maximum);
+    }
+    for (name, was_capped) in [
+        (
+            "memory_mb",
+            result.limits.memory_mb < request.limits.memory_mb,
+        ),
+        ("pids", result.limits.pids < request.limits.pids),
+        ("tmp_mb", result.limits.tmp_mb < request.limits.tmp_mb),
+        (
+            "max_turns",
+            result.limits.max_turns < request.limits.max_turns,
+        ),
+        (
+            "max_tokens",
+            result.limits.max_tokens < request.limits.max_tokens,
+        ),
+    ] {
+        if was_capped {
+            result.narrowed.push(NarrowedItem {
+                dimension: NarrowedDimension::Limit,
+                item: name.to_owned(),
+                reason: NarrowedReason::LimitCapped,
+            });
+        }
     }
     result.update_hash();
     Ok(result)
