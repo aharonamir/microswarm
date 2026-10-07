@@ -11,8 +11,8 @@ RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
     -p ms-agent -p ms-tools
 
 FROM scratch
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/ms-agent /microswarm-agent
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/ms-tools /microswarm-tools
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/microswarm-agent /microswarm-agent
+COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/microswarm-tools /microswarm-tools
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 USER 65532:65532
