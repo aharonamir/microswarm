@@ -24,7 +24,11 @@
 
 **Rationale:** the review of agent-core 0.1.17 found the harness public surface is small (eight exported symbols) and that the valuable parts for this product are the loop, tool dispatch, permission tiers and team semantics. Everything else is cognitive or orchestration-of-other-harnesses.
 
-**⚠ verify:** confirm the permission tier vocabulary and rule format in `harness/security/` so `permit.toml` stays compatible enough to import existing rules.
+**Verified 2026-10-07:** source review pinned to openJiuwen agent-core commit [`8345a27`](https://github.com/openJiuwen-ai/agent-core/tree/8345a2730d6e4fad33ee5760a37b506855461049). `openjiuwen/harness/security/permission_engine/models.py` defines the `allow`, `ask`, and `deny` levels. Its `PermissionsSection` describes tool defaults, per-tool `tools`, and parameterized `rules`; it also includes separate `file_guard`, `net_guard`, and `approval_overrides` sections.
+
+**MicroSwarm decision:** port tool defaults and per-tool rules into `policy.toml` and `scope.tools`. Do not port file guard or network guard because mounts and the credential proxy enforce those boundaries at the OS and proxy layers. Defer approval overrides (“always allow”) in v1 because persistent grants conflict with session-scoped scope. These decisions preserve the permission vocabulary while using MicroSwarm's policy and scope contracts.
+
+Evidence: [agent-core `models.py` at 8345a27](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/models.py) and [`tool_policy.py`](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/tool_policy.py).
 
 ---
 
@@ -92,11 +96,13 @@ With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baselin
 
 ## R-07 — Shell command evaluation
 
-**Decision:** the permission engine evaluates shell tool calls by tokenizing with a POSIX shell lexer; any command containing pipes to interpreters, command substitution, or redirections to paths outside mounts escalates to `ask`. Unparseable input is `deny`.
+**Decision:** shell evaluation distinguishes parseable commands from unparseable input. Parseable but complex commands (including pipes, command substitution, interpreter sinks, or redirections outside mounts) escalate to `ask`. The approval prompt shows the parsed command structure as well as the raw command. Unparseable input is `deny`, with a structured tool error explaining that parsing failed and asking the model to rewrite the command more simply; it does not produce an approval prompt.
 
-**Rationale:** mirrors the shell-AST approach in agent-core's security layer while staying small; the container already bounds blast radius, so the lexer is a second layer, not the boundary.
+**Rationale:** parseable complex commands follow agent-core's shell AST policy. Denying unparseable input follows Constitution VII (“When the system does not know, it denies”) and avoids asking the user to approve an opaque string (OWASP ASI09); the model can retry with simpler syntax. The container remains the OS security boundary, while shell evaluation is an additional policy gate.
 
-**⚠ verify:** choose between `shell-words` (tokenize only) and a fuller parser; check what agent-core's shell AST validation flags so rule parity is achievable.
+**Verified 2026-10-07:** agent-core commit [`8345a27`](https://github.com/openJiuwen-ai/agent-core/tree/8345a2730d6e4fad33ee5760a37b506855461049) implements a tree-sitter Bash parser with a conservative fallback in `openjiuwen/harness/security/permission_engine/toolguard/shell_ast.py`. It classifies parseable complex input as `too_complex` and risky input that cannot be analyzed as `parse_unavailable`; `tool_policy.py` raises both to `ask` by default and applies an `interpreter_sink` shell guard to pipelines. MicroSwarm adopts the parser structure checks and interpreter-sink escalation, while retaining `deny` for unparseable input per Constitution VII. Tests are assigned to T027 for both branches.
+
+Evidence: [agent-core `shell_ast.py` at 8345a27](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/shell_ast.py) and [`tool_policy.py`](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/tool_policy.py).
 
 ---
 

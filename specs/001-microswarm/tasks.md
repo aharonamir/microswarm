@@ -21,8 +21,8 @@
 ## Phase 0 research spikes (blocking; run alongside Setup)
 
 - [x] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
-- [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md`
-- [ ] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record parity table — `research.md`
+- [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md` (**BLOCKED: awaiting Podman installation**)
+- [x] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record decisions — `research.md`
 
 **Checkpoint:** every ⚠ item in research.md has a recorded decision.
 
@@ -64,7 +64,7 @@
 - [ ] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs`
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level — `tests/adversarial/mount_escape.rs`
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
-- [ ] T027 [P] [US1] Unit: permit engine decisions incl. shell lexer escalation and unparseable ⇒ deny — `crates/ms-agent/tests/permit.rs`
+- [ ] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs`
 
 ### Agent core
 
