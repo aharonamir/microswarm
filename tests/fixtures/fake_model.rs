@@ -64,10 +64,10 @@ fn respond(stream: TcpStream) -> std::io::Result<()> {
         if reader.read_line(&mut line)? == 0 || line == "\r\n" {
             break;
         }
-        if let Some((name, value)) = line.split_once(':') {
-            if name.eq_ignore_ascii_case("content-length") {
-                content_length = value.trim().parse().unwrap_or(0);
-            }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("content-length")
+        {
+            content_length = value.trim().parse().unwrap_or(0);
         }
     }
     let mut request_body = vec![0; content_length];

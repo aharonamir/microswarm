@@ -5,6 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+ms-proto = { path = "../ms-proto" }
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.6"
+
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "microswarmd"
 path = "src/main.rs"
@@ -12,3 +20,7 @@ path = "src/main.rs"
 [[test]]
 name = "integration-harness"
 path = "../../tests/integration/harness.rs"
+
+[[test]]
+name = "foundational-config-i18n"
+path = "tests/foundational.rs"
