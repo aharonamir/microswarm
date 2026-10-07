@@ -42,9 +42,9 @@
 
 - [x] T015 [P] Shared types: messages, events, exit reasons/codes — `crates/ms-proto/src/{message,event,exit}.rs`
 - [x] T016 Scope types + pure intersection functions (mounts, credentials, tools, limits) + `narrowed` reporting + canonical hash — `crates/ms-proto/src/scope.rs`
-- [ ] T017 [P] SQLite open helper (WAL, pragmas, busy timeout), migrations from contracts, `user_version` check — `crates/ms-store/src/{lib,migrate}.rs`
-- [ ] T018 [P] Session store: inbound append, outbound + cursor transaction, history, event append with gapless `seq` — `crates/ms-store/src/session.rs`
-- [ ] T019 [P] Supervisor store: sessions, delegations, approvals, team_roles, tail_cursors, supervisor_events — `crates/ms-store/src/supervisor.rs`
+- [x] T017 [P] SQLite open helper (WAL, pragmas, busy timeout), migrations from contracts, `user_version` check — `crates/ms-store/src/{lib,migrate}.rs`
+- [x] T018 [P] Session store: inbound append, outbound + cursor transaction, history, event append with gapless `seq` — `crates/ms-store/src/session.rs`
+- [x] T019 [P] Supervisor store: sessions, delegations, approvals, team_roles, tail_cursors, supervisor_events — `crates/ms-store/src/supervisor.rs`
 - [ ] T020 [P] i18n string table en/zh for all user-facing supervisor strings — `crates/ms-supervisor/src/i18n.rs`
 - [ ] T021 Config loading and validation: `microswarm.toml`, `policy.toml`, `ceiling.toml`, `tools.toml` — `crates/ms-supervisor/src/config.rs`
 

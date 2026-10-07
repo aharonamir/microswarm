@@ -443,7 +443,9 @@ dependencies = [
 name = "ms-store"
 version = "0.1.0"
 dependencies = [
+ "ms-proto",
  "rusqlite",
+ "serde_json",
 ]
 
 [[package]]
