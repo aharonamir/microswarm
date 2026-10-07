@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microswarm.dev/schemas/scope/v1.json",
+  "title": "MicroSwarm session scope (scope.json)",
+  "description": "Written and fsynced by the supervisor before the container starts. Immutable while the container runs. For members, every grant is a subset of the lead's scope and outside the system ceiling.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "session_id", "derived_from", "source_ref", "mounts", "credentials", "tools", "limits", "narrowed", "hash"],
+  "properties": {
+    "version": { "const": 1 },
+    "session_id": { "$ref": "#/$defs/ulid" },
+    "derived_from": { "enum": ["config", "team_skill", "delegation"] },
+    "source_ref": {
+      "type": "string",
+      "description": "'config' for leads; '<skill>@<version>#<role>' for team skills; delegation ULID otherwise"
+    },
+    "mounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["host_path", "container_path", "mode"],
+        "properties": {
+          "host_path": { "type": "string", "pattern": "^/", "description": "Canonical, symlinks resolved" },
+          "container_path": { "type": "string", "pattern": "^/(work|skills|data)(/|$)" },
+          "mode": { "enum": ["ro", "rw"] }
+        }
+      }
+    },
+    "credentials": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$" },
+      "description": "Credential names only. Values never leave the supervisor."
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["server", "tools", "policy"],
+        "properties": {
+          "server": { "type": "string" },
+          "tools": {
+            "oneOf": [
+              { "const": "*" },
+              { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+            ]
+          },
+          "policy": { "enum": ["allow", "ask", "deny"] },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": { "enum": ["allow", "ask", "deny"] },
+            "description": "Per-tool policy, stricter-or-equal to 'policy' for members"
+          }
+        }
+      }
+    },
+    "delegation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Present only for leads. Members never receive delegation tools.",
+      "required": ["enabled", "max_members"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "max_members": { "type": "integer", "minimum": 0, "maximum": 32 }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_mb", "pids", "tmp_mb", "max_turns", "max_tokens"],
+      "properties": {
+        "memory_mb": { "type": "integer", "minimum": 32 },
+        "pids": { "type": "integer", "minimum": 8 },
+        "tmp_mb": { "type": "integer", "minimum": 0 },
+        "max_turns": { "type": "integer", "minimum": 1 },
+        "max_tokens": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "narrowed": {
+      "type": "array",
+      "description": "Items removed from the request by intersection or ceiling. Empty for leads.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "item", "reason"],
+        "properties": {
+          "dimension": { "enum": ["mount", "credential", "tool", "mode", "policy", "limit"] },
+          "item": { "type": "string" },
+          "reason": { "enum": ["not_in_lead_scope", "ceiling", "mode_downgraded", "policy_tightened", "limit_capped"] }
+        }
+      }
+    },
+    "hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "$defs": {
+    "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" }
+  }
+}

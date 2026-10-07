@@ -1,0 +1,134 @@
+{
+  "description": "Tools the agent core exposes to a LEAD only. They are implemented inside ms-agent (not an MCP server) because they do not act: each one writes an outbound row that the supervisor decides on. They pass through the permission engine like any other tool. Members never see these tools; the supervisor also rejects any delegation row arriving from a member session.",
+  "tools": [
+    {
+      "name": "spawn_member",
+      "description": "Request a new team member in its own container. Returns once the supervisor has decided. The member starts with an empty scope; it receives only what you request AND you hold. Ask for the least you need.",
+      "permission_default": "allow",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "task", "scope"],
+        "properties": {
+          "role": { "type": "string", "description": "A role from an installed team skill, or 'adhoc'" },
+          "task": { "type": "string", "minLength": 1, "maxLength": 8000 },
+          "timeout_s": { "type": "integer", "minimum": 10, "maximum": 3600, "default": 300 },
+          "scope": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mounts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path", "mode"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": { "type": "string", "description": "Path as YOU see it, e.g. /work/src/auth" },
+                    "mode": { "enum": ["ro", "rw"] }
+                  }
+                }
+              },
+              "credentials": { "type": "array", "items": { "type": "string" } },
+              "tools": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["server"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "server": { "type": "string" },
+                    "tools": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result_schema": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["status", "member_id", "granted", "narrowed"],
+            "properties": {
+              "status": { "const": "spawned" },
+              "member_id": { "type": "string" },
+              "granted": { "$ref": "scope.schema.json" },
+              "narrowed": { "type": "array" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status", "reason"],
+            "properties": {
+              "status": { "const": "denied" },
+              "reason": { "enum": ["policy", "user_denied", "approval_timeout", "limit", "scope_empty", "spawn_error"] }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "send_to_member",
+      "description": "Send a message to one of your members and wait for its reply. If the member does not reply before the deadline, you receive a failure instead.",
+      "permission_default": "allow",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["member_id", "text"],
+        "properties": {
+          "member_id": { "type": "string" },
+          "text": { "type": "string", "minLength": 1 },
+          "timeout_s": { "type": "integer", "minimum": 10, "maximum": 3600 }
+        }
+      },
+      "result_schema": {
+        "oneOf": [
+          { "type": "object", "required": ["status", "text"],
+            "properties": { "status": { "const": "reply" }, "text": { "type": "string" } } },
+          { "type": "object", "required": ["status", "reason"],
+            "properties": { "status": { "const": "failed" },
+              "reason": { "enum": ["timeout", "crashed", "safety", "config", "unknown_member"] } } }
+        ]
+      }
+    },
+    {
+      "name": "dismiss_member",
+      "description": "Tear down a member whose purpose is served. Its container stops; its record is kept. A dismissed member cannot be resumed — spawning the same role again starts fresh.",
+      "permission_default": "allow",
+      "policy_gated": false,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["member_id"],
+        "properties": { "member_id": { "type": "string" } }
+      },
+      "result_schema": {
+        "type": "object",
+        "required": ["status"],
+        "properties": { "status": { "enum": ["dismissed", "already_closed", "unknown_member"] } }
+      }
+    },
+    {
+      "name": "list_members",
+      "description": "List your current members with role, status and granted scope.",
+      "permission_default": "allow",
+      "input_schema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result_schema": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["member_id", "role", "status"],
+          "properties": {
+            "member_id": { "type": "string" },
+            "role": { "type": "string" },
+            "status": { "type": "string" },
+            "scope": { "$ref": "scope.schema.json" }
+          }
+        }
+      }
+    }
+  ],
+  "path_translation": "Lead-visible paths in scope.mounts[].path are translated by the supervisor to host paths using the lead's own scope.json before intersection. A path that does not resolve under any lead mount is narrowed with reason not_in_lead_scope."
+}

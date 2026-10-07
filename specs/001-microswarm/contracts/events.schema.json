@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microswarm.dev/schemas/event/v1.json",
+  "title": "MicroSwarm event",
+  "description": "One row of events.db (source=agent) or supervisor_events (source=supervisor). The type set is closed; adding a type is a MINOR schema version bump.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "ts", "ts_mono", "session_id", "root_session_id", "agent_role", "source", "type", "data"],
+  "properties": {
+    "seq": { "type": "integer", "minimum": 1 },
+    "ts": { "type": "string", "format": "date-time" },
+    "ts_mono": { "type": "integer", "minimum": 0 },
+    "session_id": { "$ref": "#/$defs/ulid" },
+    "root_session_id": { "$ref": "#/$defs/ulid" },
+    "agent_role": { "type": "string" },
+    "source": { "enum": ["agent", "supervisor"] },
+    "type": { "$ref": "#/$defs/type" },
+    "data": { "type": "object" }
+  },
+  "allOf": [
+    { "if": { "properties": { "source": { "const": "agent" } } },
+      "then": { "properties": { "type": { "$ref": "#/$defs/agent_type" } } } },
+    { "if": { "properties": { "source": { "const": "supervisor" } } },
+      "then": { "properties": { "type": { "$ref": "#/$defs/supervisor_type" } } } },
+
+    { "if": { "properties": { "type": { "const": "tool.call" } } },
+      "then": { "properties": { "data": { "required": ["call_id", "server", "tool", "args"] } } } },
+    { "if": { "properties": { "type": { "const": "tool.result" } } },
+      "then": { "properties": { "data": { "required": ["call_id", "ok", "duration_ms"] } } } },
+    { "if": { "properties": { "type": { "const": "permit.decision" } } },
+      "then": { "properties": { "data": { "required": ["call_id", "decision", "rule"],
+        "properties": { "decision": { "enum": ["allow", "ask", "deny"] } } } } } },
+    { "if": { "properties": { "type": { "const": "model.call" } } },
+      "then": { "properties": { "data": { "required": ["model", "input_tokens", "output_tokens", "duration_ms"] } } } },
+    { "if": { "properties": { "type": { "const": "agent.exit" } } },
+      "then": { "properties": { "data": { "required": ["reason", "code"],
+        "properties": { "reason": { "enum": ["ok", "transient", "safety", "config"] } } } } } },
+    { "if": { "properties": { "type": { "const": "scope.narrowed" } } },
+      "then": { "properties": { "data": { "required": ["delegation_id", "narrowed"] } } } },
+    { "if": { "properties": { "type": { "const": "container.exited" } } },
+      "then": { "properties": { "data": { "required": ["container_id", "exit_code", "classified_as"],
+        "properties": { "classified_as": { "enum": ["ok", "transient", "safety", "config", "unknown"] } } } } } }
+  ],
+  "$defs": {
+    "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "agent_type": { "enum": [
+      "agent.ready", "agent.exit",
+      "turn.start", "turn.end",
+      "model.call",
+      "tool.call", "tool.result",
+      "permit.decision",
+      "delegation.request", "delegation.send", "delegation.dismiss"
+    ] },
+    "supervisor_type": { "enum": [
+      "session.created", "session.status", "session.closed",
+      "container.created", "container.started", "container.exited", "container.restart", "container.adopted", "container.orphan_stopped",
+      "scope.written", "scope.narrowed",
+      "delegation.policy", "delegation.spawned", "delegation.denied", "delegation.reply", "delegation.timeout", "delegation.failed", "delegation.dismissed",
+      "approval.requested", "approval.resolved", "approval.expired", "approval.reissued",
+      "message.inbound", "message.delivered",
+      "proxy.request", "proxy.denied",
+      "supervisor.started", "supervisor.recovered"
+    ] },
+    "type": { "anyOf": [ { "$ref": "#/$defs/agent_type" }, { "$ref": "#/$defs/supervisor_type" } ] }
+  }
+}
