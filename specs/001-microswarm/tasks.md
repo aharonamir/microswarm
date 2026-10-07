@@ -32,11 +32,11 @@
 
 ### Contract tests first
 
-- [ ] T010 [P] Contract test: `session-db.sql` applies cleanly; CHECK constraints reject unknown kinds and invalid JSON — `tests/contract/session_db.rs`
-- [ ] T011 [P] Contract test: `supervisor-db.sql` applies; lead/member CHECK; unique pending approval code — `tests/contract/supervisor_db.rs`
-- [ ] T012 [P] Contract test: `ms-proto` scope serializes to JSON valid under `scope.schema.json`; hash is stable — `tests/contract/scope_schema.rs`
-- [ ] T013 [P] Contract test: every `ms-proto` event type serializes valid under `events.schema.json`; agent/supervisor type split enforced — `tests/contract/events_schema.rs`
-- [ ] T014 [P] Property tests for scope algebra: result ⊆ lead; result ∩ ceiling = ∅; mode never upgrades; policy never loosens; symlink canonicalization; never a union — `crates/ms-proto/tests/scope_props.rs`
+- [x] T010 [P] Contract test: `session-db.sql` applies cleanly; CHECK constraints reject unknown kinds and invalid JSON — `tests/contract/session_db.rs`
+- [x] T011 [P] Contract test: `supervisor-db.sql` applies; lead/member CHECK; unique pending approval code — `tests/contract/supervisor_db.rs`
+- [x] T012 [P] Contract test: `ms-proto` scope serializes to JSON valid under `scope.schema.json`; hash is stable — `tests/contract/scope_schema.rs`
+- [x] T013 [P] Contract test: every `ms-proto` event type serializes valid under `events.schema.json`; agent/supervisor type split enforced — `tests/contract/events_schema.rs`
+- [x] T014 [P] Property tests for scope algebra: result ⊆ lead; result ∩ ceiling = ∅; mode never upgrades; policy never loosens; symlink canonicalization; never a union — `crates/ms-proto/tests/scope_props.rs`
 
 ### Implementation
 

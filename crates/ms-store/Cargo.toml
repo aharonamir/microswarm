@@ -7,3 +7,14 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+
+[[test]]
+name = "session-db-contract"
+path = "../../tests/contract/session_db.rs"
+
+[[test]]
+name = "supervisor-db-contract"
+path = "../../tests/contract/supervisor_db.rs"
