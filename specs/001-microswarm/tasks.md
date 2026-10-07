@@ -16,11 +16,11 @@
 - [x] T003 [P] CI line-budget gate: `tokei` on `ms-agent` and `ms-supervisor` (+ their share of `ms-proto`, `ms-store`), fail > 6,000 — `scripts/loc-budget.sh`
 - [x] T004 [P] CI dependency gate: fail if the tree contains a second async runtime or a TLS stack other than rustls — `scripts/dep-gate.sh`
 - [x] T005 [P] `FROM scratch` agent image with static `microswarm-agent`, `microswarm-tools`, CA bundle; non-root UID — `images/agent.Containerfile`
-- [ ] T006 [P] Integration harness: start `microswarmd` against a temp `$MS_HOME` and real Podman/Docker, with a scripted fake model server — `tests/integration/harness.rs`, `tests/fixtures/fake_model.rs`
+- [x] T006 [P] Integration harness: start `microswarmd` against a temp `$MS_HOME` and real Podman/Docker, with a scripted fake model server — `tests/integration/harness.rs`, `tests/fixtures/fake_model.rs`
 
 ## Phase 0 research spikes (blocking; run alongside Setup)
 
-- [ ] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
+- [x] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
 - [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md`
 - [ ] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record parity table — `research.md`
 

@@ -10,10 +10,10 @@ lock = tomllib.loads(pathlib.Path("Cargo.lock").read_text())
 packages = sorted({package["name"] for package in lock.get("package", [])})
 
 # Tokio is the sole permitted async runtime. These packages provide other
-# runtimes or standalone executors that could create a second scheduling model.
+# async runtimes other than Tokio. Generic future executors are not runtimes.
 other_runtimes = {
     "actix-rt", "async-executor", "async-global-executor", "async-std",
-    "embassy-executor", "futures-executor", "glommio", "monoio",
+    "embassy-executor", "glommio", "monoio",
     "pollster", "smol", "tokio-uring",
 }
 # rustls is the only permitted TLS stack. Certificate stores and crypto

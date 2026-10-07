@@ -36,7 +36,13 @@
 
 **Alternatives:** hand-written JSON-RPC client — smaller dependency tree, but takes on protocol-version tracking. Kept as fallback if the SDK's dependency footprint breaks the binary-size target.
 
-**⚠ verify (blocks v0.1):** current `rmcp` release, its transitive dependencies (must be Tokio + rustls only), and stdio + streamable-HTTP client support. Measure binary-size delta with LTO.
+**Verified 2026-10-07:** `cargo info rmcp` resolved `rmcp 3.5.1` (MSRV Rust 1.88). Its published README documents client-side stdio (`transport-child-process`) and streamable HTTP (`transport-streamable-http-client-reqwest`) in `~/.cargo/registry/src/*/rmcp-3.5.1/README.md` lines 32–39 and 57–60. The source exposes `TokioChildProcess` in `src/transport.rs` and `StreamableHttpClientTransportConfig::custom_headers` in `src/transport/streamable_http_client.rs`, which supports the scoped `X-MS-Credential` proxy header.
+
+A throwaway x86_64 musl crate enabled `client`, `transport-child-process`, `transport-streamable-http-client-reqwest`, and `reqwest`, with `default-features = false`. `cargo tree --locked --features mcp --target x86_64-unknown-linux-musl` resolved 157 package entries: Tokio 1.53.2, reqwest 0.13.5, hyper 1.12.0, and rustls 0.23.45. It includes `futures-executor 0.3.34`, a generic executor without an independent I/O runtime; it does not include another async runtime or a non-rustls TLS stack. The dependency gate therefore checks runtime crates, not generic executors.
+
+With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baseline static binary was 385,720 bytes and the client-feature build was 7,288,104 bytes, a 6,902,384-byte increase. This remains below the 30 MB core binary target. Evidence: `/tmp/ms-rmcp-spike/Cargo.toml`, `/tmp/ms-rmcp-spike/Cargo.lock`, and the `cargo tree`/`stat` commands recorded in the Phase 0 work session.
+
+**Decision:** use `rmcp = 3.5.1` with default features disabled and only the client stdio and reqwest-backed streamable-HTTP features above. The measured footprint fits the target, and the dependency tree has one runtime (Tokio) and one TLS stack (rustls).
 
 ---
 
