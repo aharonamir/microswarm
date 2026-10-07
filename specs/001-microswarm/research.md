@@ -62,7 +62,11 @@ With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baselin
 
 **Rationale:** SC-001 counts spawn request → `agent.ready`. The dominant costs are runtime create/start and network attach, not the Rust process. Per-session network creation is done in parallel with `scope.json` write.
 
-**⚠ verify:** measure create+start on Docker and Podman on the reference host; if network attach dominates, pre-create a small pool of internal networks.
+**Docker measurement (2026-10-07; partial):** 20 sequential samples on the reference host, Docker 29.1.3 rootful, using the already-cached `alpine:latest`, an internal network per sample, and `/bin/sh -c 'printf READY'`. Timings include Docker CLI process overhead. `network create`: p50 19.82 ms / p95 26.91 ms; `container create` attached to that network: p50 32.22 ms / p95 36.15 ms; `docker start --attach` to first output byte: p50 89.63 ms / p95 96.76 ms; network create through first byte: p50 141.57 ms / p95 153.29 ms. On one pre-created internal network, start to first byte was p50 87.64 ms / p95 96.61 ms. This is a runtime smoke measurement, not the agent's `agent.ready` latency (the agent is still a stub).
+
+**Provisional decision:** do not pool networks on this Docker evidence. Network creation adds about 20 ms p50 and can overlap with scope writing; it is small relative to container create/start, while sharing networks would need careful preservation of the no-peer-network boundary. Podman is not installed, and the setup instruction says not to install a runtime, so the requested rootless Podman measurement is still outstanding. T008 remains unchecked; repeat the measurement on rootless Podman before treating this decision as final.
+
+**⚠ verify:** complete the rootless Podman measurement on the reference host; if the result changes the pooling decision, update this section before implementation.
 
 ---
 
