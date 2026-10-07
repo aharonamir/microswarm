@@ -8,7 +8,7 @@ fn scope_with_policy(policy: Permission, mount_mode: &str, credentials: Vec<Stri
         "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
         "derived_from": "config",
         "source_ref": "config",
-        "mounts": [{"host_path":"/tmp/ms-root", "container_path":"/work", "mode":mount_mode}],
+        "mounts": [{"host_path":"/tmp", "container_path":"/work", "mode":mount_mode}],
         "credentials": credentials,
         "tools": [{"server":"fs", "tools":["read"], "policy":policy}],
         "limits": { "memory_mb": 128, "pids": 32, "tmp_mb": 64, "max_turns": 8, "max_tokens": 4096 },
