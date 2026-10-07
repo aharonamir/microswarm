@@ -8,3 +8,7 @@ license.workspace = true
 [[bin]]
 name = "microswarmd"
 path = "src/main.rs"
+
+[[test]]
+name = "integration-harness"
+path = "../../tests/integration/harness.rs"
