@@ -7,22 +7,29 @@
 - **[USn]** — the user story the task delivers. Setup, Foundational and Polish tasks carry no story label.
 - Tests are written first and must fail before their implementation task starts.
 
+## Current execution status (2026-10-11)
+
+- Completed: Phase 1 tasks T001–T007 and T009; Phase 2 tasks T010–T021. Contract and property tests T010–T014 passed at the Phase 2 checkpoint.
+- Blocked by explicit user instruction: T008 (rootless Podman runtime measurement). The Phase 0 checkpoint remains open until T008 is unblocked and R-04 has a final decision.
+- Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,159 / 6,000; ms-supervisor + shared crates 1,648 / 6,000.
+- Resume sequence: wait for the user to unblock T008; run and record the rootless Podman benchmark, finalize R-04, and close the Phase 0 checkpoint. Then begin US1 tests-first at T022–T027. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+
 ---
 
 ## Phase 1 — Setup
 
-- [ ] T001 Create Cargo workspace, `rust-toolchain.toml`, crate skeletons per plan — `Cargo.toml`, `crates/*/Cargo.toml`
-- [ ] T002 [P] CI: fmt, clippy `-D warnings`, test, musl build of `ms-agent` and `ms-tools` — `.github/workflows/ci.yml`
-- [ ] T003 [P] CI line-budget gate: `tokei` on `ms-agent` and `ms-supervisor` (+ their share of `ms-proto`, `ms-store`), fail > 6,000 — `scripts/loc-budget.sh`
-- [ ] T004 [P] CI dependency gate: fail if the tree contains a second async runtime or a TLS stack other than rustls — `scripts/dep-gate.sh`
-- [ ] T005 [P] `FROM scratch` agent image with static `microswarm-agent`, `microswarm-tools`, CA bundle; non-root UID — `images/agent.Containerfile`
-- [ ] T006 [P] Integration harness: start `microswarmd` against a temp `$MS_HOME` and real Podman/Docker, with a scripted fake model server — `tests/integration/harness.rs`, `tests/fixtures/fake_model.rs`
+- [x] T001 Create Cargo workspace, `rust-toolchain.toml`, crate skeletons per plan — `Cargo.toml`, `crates/*/Cargo.toml`
+- [x] T002 [P] CI: fmt, clippy `-D warnings`, test, musl build of `ms-agent` and `ms-tools` — `.github/workflows/ci.yml`
+- [x] T003 [P] CI line-budget gate: `tokei` on `ms-agent` and `ms-supervisor` (+ their share of `ms-proto`, `ms-store`), fail > 6,000 — `scripts/loc-budget.sh`
+- [x] T004 [P] CI dependency gate: fail if the tree contains a second async runtime or a TLS stack other than rustls — `scripts/dep-gate.sh`
+- [x] T005 [P] `FROM scratch` agent image with static `microswarm-agent`, `microswarm-tools`, CA bundle; non-root UID — `images/agent.Containerfile`
+- [x] T006 [P] Integration harness: start `microswarmd` against a temp `$MS_HOME` and real Podman/Docker, with a scripted fake model server — `tests/integration/harness.rs`, `tests/fixtures/fake_model.rs`
 
 ## Phase 0 research spikes (blocking; run alongside Setup)
 
-- [ ] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
-- [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md`
-- [ ] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record parity table — `research.md`
+- [x] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
+- [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md` (**BLOCKED: awaiting Podman installation**)
+- [x] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record decisions — `research.md`
 
 **Checkpoint:** every ⚠ item in research.md has a recorded decision.
 
@@ -32,21 +39,21 @@
 
 ### Contract tests first
 
-- [ ] T010 [P] Contract test: `session-db.sql` applies cleanly; CHECK constraints reject unknown kinds and invalid JSON — `tests/contract/session_db.rs`
-- [ ] T011 [P] Contract test: `supervisor-db.sql` applies; lead/member CHECK; unique pending approval code — `tests/contract/supervisor_db.rs`
-- [ ] T012 [P] Contract test: `ms-proto` scope serializes to JSON valid under `scope.schema.json`; hash is stable — `tests/contract/scope_schema.rs`
-- [ ] T013 [P] Contract test: every `ms-proto` event type serializes valid under `events.schema.json`; agent/supervisor type split enforced — `tests/contract/events_schema.rs`
-- [ ] T014 [P] Property tests for scope algebra: result ⊆ lead; result ∩ ceiling = ∅; mode never upgrades; policy never loosens; symlink canonicalization; never a union — `crates/ms-proto/tests/scope_props.rs`
+- [x] T010 [P] Contract test: `session-db.sql` applies cleanly; CHECK constraints reject unknown kinds and invalid JSON — `tests/contract/session_db.rs`
+- [x] T011 [P] Contract test: `supervisor-db.sql` applies; lead/member CHECK; unique pending approval code — `tests/contract/supervisor_db.rs`
+- [x] T012 [P] Contract test: `ms-proto` scope serializes to JSON valid under `scope.schema.json`; hash is stable — `tests/contract/scope_schema.rs`
+- [x] T013 [P] Contract test: every `ms-proto` event type serializes valid under `events.schema.json`; agent/supervisor type split enforced — `tests/contract/events_schema.rs`
+- [x] T014 [P] Property tests for scope algebra: result ⊆ lead; result ∩ ceiling = ∅; mode never upgrades; policy never loosens; symlink canonicalization; never a union — `crates/ms-proto/tests/scope_props.rs`
 
 ### Implementation
 
-- [ ] T015 [P] Shared types: messages, events, exit reasons/codes — `crates/ms-proto/src/{message,event,exit}.rs`
-- [ ] T016 Scope types + pure intersection functions (mounts, credentials, tools, limits) + `narrowed` reporting + canonical hash — `crates/ms-proto/src/scope.rs`
-- [ ] T017 [P] SQLite open helper (WAL, pragmas, busy timeout), migrations from contracts, `user_version` check — `crates/ms-store/src/{lib,migrate}.rs`
-- [ ] T018 [P] Session store: inbound append, outbound + cursor transaction, history, event append with gapless `seq` — `crates/ms-store/src/session.rs`
-- [ ] T019 [P] Supervisor store: sessions, delegations, approvals, team_roles, tail_cursors, supervisor_events — `crates/ms-store/src/supervisor.rs`
-- [ ] T020 [P] i18n string table en/zh for all user-facing supervisor strings — `crates/ms-supervisor/src/i18n.rs`
-- [ ] T021 Config loading and validation: `microswarm.toml`, `policy.toml`, `ceiling.toml`, `tools.toml` — `crates/ms-supervisor/src/config.rs`
+- [x] T015 [P] Shared types: messages, events, exit reasons/codes — `crates/ms-proto/src/{message,event,exit}.rs`
+- [x] T016 Scope types + pure intersection functions (mounts, credentials, tools, limits) + `narrowed` reporting + canonical hash — `crates/ms-proto/src/scope.rs`
+- [x] T017 [P] SQLite open helper (WAL, pragmas, busy timeout), migrations from contracts, `user_version` check — `crates/ms-store/src/{lib,migrate}.rs`
+- [x] T018 [P] Session store: inbound append, outbound + cursor transaction, history, event append with gapless `seq` — `crates/ms-store/src/session.rs`
+- [x] T019 [P] Supervisor store: sessions, delegations, approvals, team_roles, tail_cursors, supervisor_events — `crates/ms-store/src/supervisor.rs`
+- [x] T020 [P] i18n string table en/zh for all user-facing supervisor strings — `crates/ms-supervisor/src/i18n.rs`
+- [x] T021 Config loading and validation: `microswarm.toml`, `policy.toml`, `ceiling.toml`, `tools.toml` — `crates/ms-supervisor/src/config.rs`
 
 **Checkpoint:** T010–T014 pass.
 
@@ -64,7 +71,7 @@
 - [ ] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs`
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level — `tests/adversarial/mount_escape.rs`
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
-- [ ] T027 [P] [US1] Unit: permit engine decisions incl. shell lexer escalation and unparseable ⇒ deny — `crates/ms-agent/tests/permit.rs`
+- [ ] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs`
 
 ### Agent core
 

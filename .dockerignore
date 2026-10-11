@@ -1,0 +1,7 @@
+.git/
+target/
+.microswarm/
+*.db
+*.db-wal
+*.db-shm
+.env

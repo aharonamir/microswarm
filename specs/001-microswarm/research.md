@@ -24,7 +24,11 @@
 
 **Rationale:** the review of agent-core 0.1.17 found the harness public surface is small (eight exported symbols) and that the valuable parts for this product are the loop, tool dispatch, permission tiers and team semantics. Everything else is cognitive or orchestration-of-other-harnesses.
 
-**⚠ verify:** confirm the permission tier vocabulary and rule format in `harness/security/` so `permit.toml` stays compatible enough to import existing rules.
+**Verified 2026-10-07:** source review pinned to openJiuwen agent-core commit [`8345a27`](https://github.com/openJiuwen-ai/agent-core/tree/8345a2730d6e4fad33ee5760a37b506855461049). `openjiuwen/harness/security/permission_engine/models.py` defines the `allow`, `ask`, and `deny` levels. Its `PermissionsSection` describes tool defaults, per-tool `tools`, and parameterized `rules`; it also includes separate `file_guard`, `net_guard`, and `approval_overrides` sections.
+
+**MicroSwarm decision:** port tool defaults and per-tool rules into `policy.toml` and `scope.tools`. Do not port file guard or network guard because mounts and the credential proxy enforce those boundaries at the OS and proxy layers. Defer approval overrides (“always allow”) in v1 because persistent grants conflict with session-scoped scope. These decisions preserve the permission vocabulary while using MicroSwarm's policy and scope contracts.
+
+Evidence: [agent-core `models.py` at 8345a27](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/models.py) and [`tool_policy.py`](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/tool_policy.py).
 
 ---
 
@@ -36,7 +40,13 @@
 
 **Alternatives:** hand-written JSON-RPC client — smaller dependency tree, but takes on protocol-version tracking. Kept as fallback if the SDK's dependency footprint breaks the binary-size target.
 
-**⚠ verify (blocks v0.1):** current `rmcp` release, its transitive dependencies (must be Tokio + rustls only), and stdio + streamable-HTTP client support. Measure binary-size delta with LTO.
+**Verified 2026-10-07:** `cargo info rmcp` resolved `rmcp 3.5.1` (MSRV Rust 1.88). Its published README documents client-side stdio (`transport-child-process`) and streamable HTTP (`transport-streamable-http-client-reqwest`) in `~/.cargo/registry/src/*/rmcp-3.5.1/README.md` lines 32–39 and 57–60. The source exposes `TokioChildProcess` in `src/transport.rs` and `StreamableHttpClientTransportConfig::custom_headers` in `src/transport/streamable_http_client.rs`, which supports the scoped `X-MS-Credential` proxy header.
+
+A throwaway x86_64 musl crate enabled `client`, `transport-child-process`, `transport-streamable-http-client-reqwest`, and `reqwest`, with `default-features = false`. `cargo tree --locked --features mcp --target x86_64-unknown-linux-musl` resolved 157 package entries: Tokio 1.53.2, reqwest 0.13.5, hyper 1.12.0, and rustls 0.23.45. It includes `futures-executor 0.3.34`, a generic executor without an independent I/O runtime; it does not include another async runtime or a non-rustls TLS stack. The dependency gate therefore checks runtime crates, not generic executors.
+
+With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baseline static binary was 385,720 bytes and the client-feature build was 7,288,104 bytes, a 6,902,384-byte increase. This remains below the 30 MB core binary target. Evidence: `/tmp/ms-rmcp-spike/Cargo.toml`, `/tmp/ms-rmcp-spike/Cargo.lock`, and the `cargo tree`/`stat` commands recorded in the Phase 0 work session.
+
+**Decision:** use `rmcp = 3.5.1` with default features disabled and only the client stdio and reqwest-backed streamable-HTTP features above. The measured footprint fits the target, and the dependency tree has one runtime (Tokio) and one TLS stack (rustls).
 
 ---
 
@@ -56,7 +66,13 @@
 
 **Rationale:** SC-001 counts spawn request → `agent.ready`. The dominant costs are runtime create/start and network attach, not the Rust process. Per-session network creation is done in parallel with `scope.json` write.
 
-**⚠ verify:** measure create+start on Docker and Podman on the reference host; if network attach dominates, pre-create a small pool of internal networks.
+**Docker measurement (2026-10-07; partial):** 20 sequential samples on the reference host, Docker 29.1.3 rootful, using the already-cached `alpine:latest`, an internal network per sample, and `/bin/sh -c 'printf READY'`. Timings include Docker CLI process overhead. `network create`: p50 19.82 ms / p95 26.91 ms; `container create` attached to that network: p50 32.22 ms / p95 36.15 ms; `docker start --attach` to first output byte: p50 89.63 ms / p95 96.76 ms; network create through first byte: p50 141.57 ms / p95 153.29 ms. On one pre-created internal network, start to first byte was p50 87.64 ms / p95 96.61 ms. This is a runtime smoke measurement, not the agent's `agent.ready` latency (the agent is still a stub).
+
+**Provisional decision:** do not pool networks on this Docker evidence. Network creation adds about 20 ms p50 and can overlap with scope writing; it is small relative to container create/start, while sharing networks would need careful preservation of the no-peer-network boundary.
+
+**Status (2026-10-11):** the rootless Podman measurement is outstanding. Per the user's instruction, T008 remains blocked until the user unblocks it; do not infer runtime readiness from installation status. The Phase 0 checkpoint remains open. Once unblocked, repeat the benchmark with rootless Podman and finalize the network-pooling decision before starting US1.
+
+**⚠ verify:** complete the rootless Podman measurement on the reference host; if the result changes the pooling decision, update this section before implementation.
 
 ---
 
@@ -82,11 +98,13 @@
 
 ## R-07 — Shell command evaluation
 
-**Decision:** the permission engine evaluates shell tool calls by tokenizing with a POSIX shell lexer; any command containing pipes to interpreters, command substitution, or redirections to paths outside mounts escalates to `ask`. Unparseable input is `deny`.
+**Decision:** shell evaluation distinguishes parseable commands from unparseable input. Parseable but complex commands (including pipes, command substitution, interpreter sinks, or redirections outside mounts) escalate to `ask`. The approval prompt shows the parsed command structure as well as the raw command. Unparseable input is `deny`, with a structured tool error explaining that parsing failed and asking the model to rewrite the command more simply; it does not produce an approval prompt.
 
-**Rationale:** mirrors the shell-AST approach in agent-core's security layer while staying small; the container already bounds blast radius, so the lexer is a second layer, not the boundary.
+**Rationale:** parseable complex commands follow agent-core's shell AST policy. Denying unparseable input follows Constitution VII (“When the system does not know, it denies”) and avoids asking the user to approve an opaque string (OWASP ASI09); the model can retry with simpler syntax. The container remains the OS security boundary, while shell evaluation is an additional policy gate.
 
-**⚠ verify:** choose between `shell-words` (tokenize only) and a fuller parser; check what agent-core's shell AST validation flags so rule parity is achievable.
+**Verified 2026-10-07:** agent-core commit [`8345a27`](https://github.com/openJiuwen-ai/agent-core/tree/8345a2730d6e4fad33ee5760a37b506855461049) implements a tree-sitter Bash parser with a conservative fallback in `openjiuwen/harness/security/permission_engine/toolguard/shell_ast.py`. It classifies parseable complex input as `too_complex` and risky input that cannot be analyzed as `parse_unavailable`; `tool_policy.py` raises both to `ask` by default and applies an `interpreter_sink` shell guard to pipelines. MicroSwarm adopts the parser structure checks and interpreter-sink escalation, while retaining `deny` for unparseable input per Constitution VII. Tests are assigned to T027 for both branches.
+
+Evidence: [agent-core `shell_ast.py` at 8345a27](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/shell_ast.py) and [`tool_policy.py`](https://github.com/openJiuwen-ai/agent-core/blob/8345a2730d6e4fad33ee5760a37b506855461049/openjiuwen/harness/security/permission_engine/toolguard/tool_policy.py).
 
 ---
 
