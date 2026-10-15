@@ -6,8 +6,10 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::process::{Child, ChildStdin, Command, Output, Stdio};
+use std::sync::mpsc::{self, Receiver};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Runtime {
@@ -24,14 +26,22 @@ pub struct IntegrationHarness {
 
 impl IntegrationHarness {
     pub fn start() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_with_approval_tool(false)
+    }
+
+    pub fn start_approval_test() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_with_approval_tool(true)
+    }
+
+    fn start_with_approval_tool(approval_tool: bool) -> Result<Self, Box<dyn std::error::Error>> {
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
-        let model = FakeModelServer::start()?;
+        let model = FakeModelServer::start_with_approval_tool(approval_tool)?;
         let runtime = detect_runtime()?;
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
             .unwrap_or_else(|_| "microswarm-agent:dev".to_owned());
-        write_test_config(&home, &model, runtime, &agent_image)?;
+        write_test_config(&home, &model, runtime, &agent_image, approval_tool)?;
         let supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
             .env("MS_HOME", &home)
             .env("MS_MODEL_BASE_URL", model.base_url())
@@ -43,6 +53,42 @@ impl IntegrationHarness {
             model,
             runtime,
             supervisor: Some(supervisor),
+        })
+    }
+
+    pub fn start_chat(
+        &self,
+        session_id: Option<&str>,
+    ) -> Result<InteractiveChat, Box<dyn std::error::Error>> {
+        let mut child = Command::new(cli_binary()?)
+            .env("MS_HOME", &self.home)
+            .arg("chat")
+            .args(session_id.into_iter().flat_map(|id| ["--session", id]))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+        let stdin = child.stdin.take().expect("stdin is piped");
+        let stdout = child.stdout.take().expect("stdout is piped");
+        let (sender, lines) = mpsc::channel();
+        thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout).lines() {
+                match line {
+                    Ok(line) => {
+                        if sender.send(line).is_err() {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        });
+        Ok(InteractiveChat {
+            child,
+            stdin: Some(stdin),
+            lines,
+            output: String::new(),
         })
     }
 
@@ -161,6 +207,7 @@ fn write_test_config(
     model: &FakeModelServer,
     runtime: Runtime,
     image: &str,
+    approval_tool: bool,
 ) -> std::io::Result<()> {
     let socket = match runtime {
         Runtime::Docker => std::env::var("DOCKER_HOST")
@@ -180,6 +227,11 @@ fn write_test_config(
             }
         },
     };
+    let scope_tools = if approval_tool {
+        "[{ server = \"first-party\", tools = [\"fs.write\"], policy = \"ask\" }]"
+    } else {
+        "[]"
+    };
     let config = format!(
         r#"[runtime]
 socket = {socket:?}
@@ -193,7 +245,7 @@ credential = "fixture-model-key"
 
 [lead.scope]
 credentials = ["fixture-model-key"]
-tools = []
+tools = {scope_tools}
 
 [[channels]]
 kind = "cli"
@@ -204,8 +256,63 @@ kind = "cli"
     fs::write(dir.join("microswarm.toml"), config)?;
     fs::write(dir.join("policy.toml"), "")?;
     fs::write(dir.join("ceiling.toml"), "")?;
-    fs::write(dir.join("tools.toml"), "")?;
+    let tools = if approval_tool {
+        "[[servers]]\nid = \"first-party\"\ntransport = \"stdio\"\ncommand = \"/microswarm-tools\"\n"
+    } else {
+        ""
+    };
+    fs::write(dir.join("tools.toml"), tools)?;
     Ok(())
+}
+
+pub struct InteractiveChat {
+    child: Child,
+    stdin: Option<ChildStdin>,
+    lines: Receiver<String>,
+    output: String,
+}
+
+impl InteractiveChat {
+    pub fn send_line(&mut self, line: &str) -> std::io::Result<()> {
+        let stdin = self.stdin.as_mut().expect("chat input is still open");
+        writeln!(stdin, "{line}")?;
+        stdin.flush()
+    }
+
+    pub fn close_input(&mut self) {
+        self.stdin.take();
+    }
+
+    pub fn wait_for(&mut self, needle: &str, timeout: Duration) -> Result<String, String> {
+        let deadline = Instant::now() + timeout;
+        while !self.output.contains(needle) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "timed out waiting for {needle:?}; output was: {}",
+                    self.output
+                ));
+            }
+            match self.lines.recv_timeout(remaining) {
+                Ok(line) => {
+                    self.output.push_str(&line);
+                    self.output.push('\n');
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "chat output ended before {needle:?}: {error}; output was: {}",
+                        self.output
+                    ));
+                }
+            }
+        }
+        Ok(self.output.clone())
+    }
+
+    pub fn wait(mut self) -> std::io::Result<std::process::ExitStatus> {
+        self.close_input();
+        self.child.wait()
+    }
 }
 
 fn cli_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {

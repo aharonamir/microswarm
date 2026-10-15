@@ -9,9 +9,9 @@
 
 ## Current execution status (2026-10-15)
 
-- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T023, agent tasks T028–T031. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
+- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T024 and agent tasks T028–T031. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
 - Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, target-aware dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,919 / 6,000; ms-supervisor + shared crates 1,679 / 6,000.
-- T022–T023 are red against the current CLI/supervisor stubs; keep them as acceptance gates until the US1 implementation lands. Next add tests T024–T027 before their matching approval, isolation and permission implementations. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- T022–T024 are red against the current CLI/supervisor stubs; keep them as acceptance gates until the US1 implementation lands. Next add tests T025–T027 before their matching isolation and permission implementations. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
 
 ---
 
@@ -67,7 +67,7 @@
 
 - [x] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs`
 - [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file
-- [ ] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs`
+- [x] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs` (red against CLI/supervisor stubs; checks marker absent before approval and present afterward)
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level — `tests/adversarial/mount_escape.rs`
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
 - [ ] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs`
