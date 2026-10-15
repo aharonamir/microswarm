@@ -74,7 +74,7 @@
 
 ### Agent core
 
-- [ ] T028 [US1] Boot: read env, validate `scope.json` hash ⇒ `config` exit on mismatch; open dbs; emit `agent.ready` — `crates/ms-agent/src/main.rs`
+- [x] T028 [US1] Boot: read env, validate `scope.json` hash ⇒ `config` exit on mismatch; open dbs; emit `agent.ready` — `crates/ms-agent/src/main.rs`
 - [ ] T029 [US1] Loop: wake on `SIGUSR1` or 500 ms poll; read past cursor; one turn; write outbound + cursor atomically — `crates/ms-agent/src/loop.rs`
 - [ ] T030 [P] [US1] Model client via `MS_PROXY_URL`, OpenAI- and Anthropic-compatible, credential by name header — `crates/ms-agent/src/model.rs`
 - [ ] T031 [P] [US1] MCP client adapter: launch stdio servers listed in scope, connect HTTP servers via proxy, list + call tools filtered by scope — `crates/ms-agent/src/mcp.rs`

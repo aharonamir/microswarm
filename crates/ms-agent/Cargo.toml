@@ -5,6 +5,16 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+ms-proto = { path = "../ms-proto" }
+ms-store = { path = "../ms-store" }
+serde_json = "1.0.145"
+tokio = { version = "1.53.2", features = ["macros", "rt", "signal", "time"] }
+
 [[bin]]
 name = "microswarm-agent"
 path = "src/main.rs"
+
+[[test]]
+name = "agent-boot"
+path = "tests/boot.rs"
