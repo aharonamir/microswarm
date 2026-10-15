@@ -66,13 +66,18 @@ With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baselin
 
 **Rationale:** SC-001 counts spawn request → `agent.ready`. The dominant costs are runtime create/start and network attach, not the Rust process. Per-session network creation is done in parallel with `scope.json` write.
 
-**Docker measurement (2026-10-07; partial):** 20 sequential samples on the reference host, Docker 29.1.3 rootful, using the already-cached `alpine:latest`, an internal network per sample, and `/bin/sh -c 'printf READY'`. Timings include Docker CLI process overhead. `network create`: p50 19.82 ms / p95 26.91 ms; `container create` attached to that network: p50 32.22 ms / p95 36.15 ms; `docker start --attach` to first output byte: p50 89.63 ms / p95 96.76 ms; network create through first byte: p50 141.57 ms / p95 153.29 ms. On one pre-created internal network, start to first byte was p50 87.64 ms / p95 96.61 ms. This is a runtime smoke measurement, not the agent's `agent.ready` latency (the agent is still a stub).
+**Measurements (2026-10-15):** 20 sequential samples per runtime on the reference x86_64 host. Docker 29.1.3 (rootful) and Podman 5.7.0 (`podman info` reports `rootless=true`) used the same cached image, `alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11`, an internal network per sample, and `/bin/sh -c 'printf READY'`. Timings include CLI process overhead; p95 is nearest-rank over 20 samples (the maximum).
 
-**Provisional decision:** do not pool networks on this Docker evidence. Network creation adds about 20 ms p50 and can overlap with scope writing; it is small relative to container create/start, while sharing networks would need careful preservation of the no-peer-network boundary.
+| Runtime | Network create | Container create on new internal network | Start/attach to first byte | Network create through first byte | Start/attach on pre-created internal network |
+|---|---:|---:|---:|---:|---:|
+| Docker 29.1.3 | p50 20.15 / p95 21.48 ms | p50 33.73 / p95 39.16 ms | p50 92.56 / p95 104.59 ms | p50 207.23 / p95 228.76 ms | p50 88.42 / p95 97.12 ms |
+| Podman 5.7.0 rootless | p50 18.84 / p95 21.20 ms | p50 30.76 / p95 35.69 ms | p50 124.12 / p95 145.99 ms | p50 177.05 / p95 213.66 ms | p50 131.05 / p95 144.14 ms |
 
-**Status (2026-10-11):** the rootless Podman measurement is outstanding. Per the user's instruction, T008 remains blocked until the user unblocks it; do not infer runtime readiness from installation status. The Phase 0 checkpoint remains open. Once unblocked, repeat the benchmark with rootless Podman and finalize the network-pooling decision before starting US1.
+The measurement starts the CLI operation with a monotonic timer; `start --attach` ends at the first stdout byte. The combined network-create-through-first-byte number also includes process and command sequencing overhead and should not be reconstructed by summing component percentiles. This is a runtime smoke measurement, not the agent's `agent.ready` latency (the agent is still a stub). SC-001 is specified as spawn request → first `agent.ready`, p50 ≤ 150 ms and p95 ≤ 400 ms (`spec.md`, SC-001, line 208); these results indicate the runtime portion is plausible but do not verify that outcome.
 
-**⚠ verify:** complete the rootless Podman measurement on the reference host; if the result changes the pooling decision, update this section before implementation.
+**Decision:** retain one internal network per session; do not pool networks. Network creation is about 19–20 ms p50 on both runtimes and can overlap with `scope.json` writing. Reusing networks offers only a small startup saving while requiring additional controls to preserve the no-peer-network boundary (plan.md, Constraints, line 25). The slower rootless Podman start path still leaves the measured runtime-only p95 below 400 ms; verify the full SC-001 path with the actual agent before claiming the target.
+
+**T008 outcome:** rootless Podman and Docker were both measured on the reference host, and the network-pooling decision is final. The Phase 0 research checkpoint is closed.
 
 ---
 

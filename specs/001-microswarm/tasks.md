@@ -7,12 +7,11 @@
 - **[USn]** — the user story the task delivers. Setup, Foundational and Polish tasks carry no story label.
 - Tests are written first and must fail before their implementation task starts.
 
-## Current execution status (2026-10-11)
+## Current execution status (2026-10-15)
 
-- Completed: Phase 1 tasks T001–T007 and T009; Phase 2 tasks T010–T021. Contract and property tests T010–T014 passed at the Phase 2 checkpoint.
-- Blocked by explicit user instruction: T008 (rootless Podman runtime measurement). The Phase 0 checkpoint remains open until T008 is unblocked and R-04 has a final decision.
+- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
 - Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,159 / 6,000; ms-supervisor + shared crates 1,648 / 6,000.
-- Resume sequence: wait for the user to unblock T008; run and record the rootless Podman benchmark, finalize R-04, and close the Phase 0 checkpoint. Then begin US1 tests-first at T022–T027. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- Next: begin US1 tests-first at T022–T027. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
 
 ---
 
@@ -28,7 +27,7 @@
 ## Phase 0 research spikes (blocking; run alongside Setup)
 
 - [x] T007 Verify R-02: `rmcp` client over stdio + streamable HTTP, dependency tree, binary-size delta with LTO; record result — `specs/001-microswarm/research.md`
-- [ ] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md` (**BLOCKED: awaiting Podman installation**)
+- [x] T008 [P] Verify R-04: measure create→start→first byte on Podman rootless and Docker on the reference host; decide on network pooling — `research.md`
 - [x] T009 [P] Verify R-01/R-07: read agent-core `harness/security/` rule format and shell checks; record decisions — `research.md`
 
 **Checkpoint:** every ⚠ item in research.md has a recorded decision.
