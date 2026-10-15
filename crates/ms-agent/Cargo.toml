@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+http-body-util = "0.1.3"
+hyper = { version = "1.12.0", default-features = false, features = ["client", "http1"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
 ms-proto = { path = "../ms-proto" }
 ms-store = { path = "../ms-store" }
 serde_json = "1.0.145"
@@ -18,3 +21,7 @@ path = "src/main.rs"
 [[test]]
 name = "agent-boot"
 path = "tests/boot.rs"
+
+[[test]]
+name = "model-client"
+path = "tests/model.rs"

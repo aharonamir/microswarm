@@ -162,7 +162,7 @@ Every agent container is created with:
 - `/tmp` as a size-limited tmpfs.
 - Network: attached to a per-session internal network whose only reachable endpoint is that session's proxy listener. No route to other containers, the host, or the internet except via the proxy.
 - `--cap-drop=ALL`, `no-new-privileges`, non-root UID, seccomp default profile, pids limit, memory limit.
-- No environment variables carrying secrets. The only env: `MS_SESSION_ID`, `MS_ROLE`, `MS_PROXY_URL`.
+- No environment variables carrying secrets. Runtime metadata may include `MS_SESSION_ID`, `MS_ROLE`, `MS_PROXY_URL`, `MS_MODEL_PROVIDER`, `MS_MODEL_NAME` and `MS_MODEL_CREDENTIAL`; the latter three are non-secret selectors, with `MS_MODEL_CREDENTIAL` containing only a scoped credential name.
 
 ### Scope algebra
 

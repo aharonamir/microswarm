@@ -9,9 +9,9 @@
 
 ## Current execution status (2026-10-15)
 
-- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T023 and agent tasks T028–T029. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
-- Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,427 / 6,000; ms-supervisor + shared crates 1,667 / 6,000.
-- T022–T023 are red against the current CLI/supervisor stubs; keep them as acceptance gates until the US1 implementation lands. Next add tests T024–T027 before their matching approval, isolation, and permission implementations. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T023 and agent tasks T028–T030. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
+- Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,647 / 6,000; ms-supervisor + shared crates 1,667 / 6,000.
+- T022–T023 are red against the current CLI/supervisor stubs; keep them as acceptance gates until the US1 implementation lands. Next add tests T024–T027 and MCP adapter coverage before their matching approval, isolation, permission and MCP implementations. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
 
 ---
 
@@ -76,7 +76,7 @@
 
 - [x] T028 [US1] Boot: read env, validate `scope.json` hash ⇒ `config` exit on mismatch; open dbs; emit `agent.ready` — `crates/ms-agent/src/main.rs`
 - [x] T029 [US1] Loop: wake on `SIGUSR1` or 500 ms poll; read past cursor; one turn; write outbound + cursor atomically — `crates/ms-agent/src/loop.rs`
-- [ ] T030 [P] [US1] Model client via `MS_PROXY_URL`, OpenAI- and Anthropic-compatible, credential by name header — `crates/ms-agent/src/model.rs`
+- [x] T030 [P] [US1] Model client via `MS_PROXY_URL`, OpenAI- and Anthropic-compatible, credential by name header — `crates/ms-agent/src/model.rs`
 - [ ] T031 [P] [US1] MCP client adapter: launch stdio servers listed in scope, connect HTTP servers via proxy, list + call tools filtered by scope — `crates/ms-agent/src/mcp.rs`
 - [ ] T032 [US1] Permission engine: per-tool policy from scope + defaults; shell lexer per R-07; `ask` ⇒ outbound `approval_request` and suspend turn until `approval_result` — `crates/ms-agent/src/permit.rs`
 - [ ] T033 [P] [US1] Event emitter: every agent event type in the schema — `crates/ms-agent/src/emit.rs`

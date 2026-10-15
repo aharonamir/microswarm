@@ -1,22 +1,4 @@
-use ms_agent::agent_loop::{TurnOutput, TurnProcessor};
-use ms_agent::boot::AgentContext;
-use ms_proto::InboundMessage;
-use ms_store::HistoryEntry;
-use std::future::Future;
-use std::pin::Pin;
-
-struct ModelNotConfigured;
-
-impl TurnProcessor for ModelNotConfigured {
-    fn process<'a>(
-        &'a mut self,
-        _context: &'a AgentContext,
-        _message: InboundMessage,
-        _history: Vec<HistoryEntry>,
-    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, String>> + 'a>> {
-        Box::pin(async { Err("model client is not configured".to_owned()) })
-    }
-}
+use ms_agent::model::ModelClient;
 
 fn main() {
     let context = match ms_agent::boot::boot() {
@@ -26,6 +8,13 @@ fn main() {
             std::process::exit(error.exit_code());
         }
     };
+    let processor = match ModelClient::from_env(&context) {
+        Ok(processor) => processor,
+        Err(error) => {
+            eprintln!("agent model configuration failed: {error}");
+            std::process::exit(78);
+        }
+    };
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -33,7 +22,7 @@ fn main() {
             eprintln!("agent runtime failed: {error}");
             std::process::exit(75);
         });
-    if let Err(error) = runtime.block_on(ms_agent::agent_loop::run(context, ModelNotConfigured)) {
+    if let Err(error) = runtime.block_on(ms_agent::agent_loop::run(context, processor)) {
         eprintln!("agent loop failed: {error}");
         std::process::exit(error.exit_code());
     }
