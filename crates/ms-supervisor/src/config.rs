@@ -242,6 +242,8 @@ pub struct ToolServerConfig {
     #[serde(default)]
     pub args: Vec<String>,
     pub url: Option<String>,
+    #[serde(default)]
+    pub credential: Option<String>,
 }
 
 #[derive(Debug)]
@@ -381,7 +383,8 @@ impl ConfigSet {
                         .command
                         .as_deref()
                         .is_some_and(|command| !command.is_empty())
-                        && server.url.is_none() => {}
+                        && server.url.is_none()
+                        && server.credential.is_none() => {}
                 ToolTransport::StreamableHttp
                     if server.command.is_none()
                         && server
@@ -394,6 +397,15 @@ impl ConfigSet {
                         server.id
                     )));
                 }
+            }
+            if let Some(credential) = &server.credential
+                && (!valid_name(credential)
+                    || !self.microswarm.lead.scope.credentials.contains(credential))
+            {
+                return Err(ConfigError(format!(
+                    "tool server {:?} credential must be a valid name granted in lead.scope.credentials",
+                    server.id
+                )));
             }
         }
         Ok(())

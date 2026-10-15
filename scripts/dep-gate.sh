@@ -2,12 +2,9 @@
 set -euo pipefail
 
 python3 - <<'PY'
-import pathlib
+import re
+import subprocess
 import sys
-import tomllib
-
-lock = tomllib.loads(pathlib.Path("Cargo.lock").read_text())
-packages = sorted({package["name"] for package in lock.get("package", [])})
 
 # Tokio is the sole permitted async runtime. These packages provide other
 # async runtimes other than Tokio. Generic future executors are not runtimes.
@@ -24,12 +21,26 @@ other_tls = {
     "tokio-native-tls",
 }
 
+targets = ("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl")
 violations = []
-for package in packages:
-    if package in other_runtimes:
-        violations.append(f"second async runtime/executor: {package}")
-    if package in other_tls:
-        violations.append(f"non-rustls TLS stack: {package}")
+checked = set()
+for target in targets:
+    tree = subprocess.run(
+        [
+            "cargo", "tree", "--locked", "--workspace", "--edges", "normal,build",
+            "--prefix", "none", "--target", target,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    packages = {match.group(1) for match in re.finditer(r"^([^\s]+) v[^\s]+", tree, re.MULTILINE)}
+    checked.update(packages)
+    for package in sorted(packages):
+        if package in other_runtimes:
+            violations.append(f"{target}: second async runtime/executor: {package}")
+        if package in other_tls:
+            violations.append(f"{target}: non-rustls TLS stack: {package}")
 
 if violations:
     print("Dependency policy violations:", file=sys.stderr)
@@ -37,5 +48,5 @@ if violations:
         print(f"  - {violation}", file=sys.stderr)
     raise SystemExit(1)
 
-print(f"Dependency gate passed ({len(packages)} locked packages checked)")
+print(f"Dependency gate passed ({len(checked)} target-reachable packages checked across {len(targets)} targets)")
 PY

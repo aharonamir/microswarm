@@ -48,6 +48,10 @@ With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baselin
 
 **Decision:** use `rmcp = 3.5.1` with default features disabled and only the client stdio and reqwest-backed streamable-HTTP features above. The measured footprint fits the target, and the dependency tree has one runtime (Tokio) and one TLS stack (rustls).
 
+**T031 implementation evidence (2026-10-15):** `ms-agent::mcp` uses `rmcp 3.5.1` `TokioChildProcess` for stdio and the reqwest-backed streamable HTTP transport. `cargo tree --locked --workspace --edges normal,build --target x86_64-unknown-linux-musl` and the corresponding aarch64 target resolve Tokio 1.53.3, rmcp 3.5.1, reqwest 0.13.5, and rustls 0.23.46. Neither target graph contains another async runtime or a TLS implementation other than rustls. `futures-executor` is a generic executor; it is not an I/O runtime. `schannel` and `security-framework` exist in `Cargo.lock` only for other target platforms and are absent from both supported Linux musl graphs. The original dependency gate scanned the entire lockfile and therefore false-flagged these irrelevant platform-specific packages; `scripts/dep-gate.sh` now checks target-reachable normal/build dependencies for both supported targets. The T031 tests use a fake stdio MCP peer for initialization, filtered `tools/list`, and allowed `tools/call`, plus HTTP proxy/credential validation. The actual stripped x86_64 musl `microswarm-agent` release binary is 4,598,808 bytes. The T007 isolated feature delta remains 6,902,384 bytes (baseline 385,720 bytes, rmcp client-feature spike 7,288,104 bytes); the Rust source line budget is separately enforced.
+
+**HTTP MCP routing detail:** an agent sends streamable-HTTP traffic to `MS_PROXY_URL/mcp/<server-id>` and places only the scoped credential name in `X-MS-Credential`. The host-side proxy resolves `<server-id>` to the HTTPS upstream from `tools.toml`; the upstream URL is never the agent's network destination. Stdio process metadata and remote upstream URLs contain no credential values. The proxy must reject unknown server ids and credentials outside the session scope (T041).
+
 ---
 
 ## R-03 — Container runtime interface
@@ -93,7 +97,7 @@ The measurement starts the CLI operation with a monotonic timer; `start --attach
 
 ## R-06 — Credential injection
 
-**Decision:** supervisor runs one HTTP proxy listener per active session on the session's internal network. The agent sends model and remote-MCP requests to `MS_PROXY_URL` with a `X-MS-Credential: <name>` header. The proxy checks the name is in the session's `scope.json` credential set, strips the header, injects the secret, and forwards over TLS.
+**Decision:** supervisor runs one HTTP proxy listener per active session on the session's internal network. The agent sends model requests to `MS_PROXY_URL` and remote-MCP requests to `MS_PROXY_URL/mcp/<server-id>`, with an optional `X-MS-Credential: <name>` header containing a scoped name only. The proxy resolves MCP ids from host `tools.toml`, checks the name is in the session's `scope.json` credential set, strips the header, injects the secret, and forwards over TLS.
 
 **Rationale:** credentials never enter the container (FR-033). Per-session listeners mean the proxy identifies the caller by which listener received the request — no token to steal.
 

@@ -102,6 +102,7 @@ tools = ["fake/admin"]
 id = "fake"
 transport = "streamable_http"
 url = "https://tools.example/mcp"
+credential = "model-key"
 "#,
     );
 
@@ -114,6 +115,17 @@ url = "https://tools.example/mcp"
     assert_eq!(config.policy.tools.defaults["fake/test"], Permission::Ask);
     assert_eq!(config.ceiling.credentials, ["root-key".to_owned()].into());
     assert_eq!(config.tools.servers[0].id, "fake");
+    assert_eq!(
+        config.tools.servers[0].credential.as_deref(),
+        Some("model-key")
+    );
+
+    write_config(
+        &dir,
+        "tools.toml",
+        "[[servers]]\nid='fake'\ntransport='streamable_http'\nurl='https://tools.example/mcp'\ncredential='other-key'\n",
+    );
+    assert!(load_config_dir(&dir).is_err());
     let _ = fs::remove_dir_all(dir);
 }
 
