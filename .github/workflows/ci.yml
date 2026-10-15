@@ -19,6 +19,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Lint
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build host binaries for integration tests
+        run: cargo build --workspace --bins
       - name: Test
         run: cargo test --workspace --all-targets
       - name: Build static musl binaries

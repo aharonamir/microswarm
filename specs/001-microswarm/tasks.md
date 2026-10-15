@@ -65,8 +65,8 @@
 
 ### Tests first
 
-- [ ] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs`
-- [ ] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file
+- [x] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs`
+- [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file
 - [ ] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs`
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level — `tests/adversarial/mount_escape.rs`
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`

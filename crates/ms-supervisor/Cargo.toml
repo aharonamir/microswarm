@@ -22,5 +22,9 @@ name = "integration-harness"
 path = "../../tests/integration/harness.rs"
 
 [[test]]
+name = "us1-single-agent"
+path = "../../tests/integration/us1_single_agent.rs"
+
+[[test]]
 name = "foundational-config-i18n"
 path = "tests/foundational.rs"
