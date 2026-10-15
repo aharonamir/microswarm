@@ -119,6 +119,36 @@ fn session_store_commits_outbound_and_cursor_together_and_appends_gapless_events
 }
 
 #[test]
+fn session_store_reads_the_next_unprocessed_inbound_in_id_order() {
+    let dir = temp_dir("inbound-cursor");
+    let mut store = SessionStore::open_dir(&dir).unwrap();
+    let first_id = store
+        .append_inbound(InboundMessage {
+            id: None,
+            kind: InboundKind::UserMessage,
+            body: json!({"text":"first"}),
+            created_at: None,
+        })
+        .unwrap();
+    let second_id = store
+        .append_inbound(InboundMessage {
+            id: None,
+            kind: InboundKind::UserMessage,
+            body: json!({"text":"second"}),
+            created_at: None,
+        })
+        .unwrap();
+
+    assert_eq!(store.next_inbound(0).unwrap().unwrap().id, Some(first_id));
+    assert_eq!(
+        store.next_inbound(first_id).unwrap().unwrap().id,
+        Some(second_id)
+    );
+    assert!(store.next_inbound(second_id).unwrap().is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn supervisor_store_persists_sessions_and_gapless_supervisor_events() {
     let dir = temp_dir("supervisor");
     let mut store = SupervisorStore::open(dir.join("supervisor.db")).unwrap();

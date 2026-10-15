@@ -5,7 +5,7 @@ use fake_model::FakeModelServer;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -157,7 +157,7 @@ fn detect_runtime() -> Result<Runtime, std::io::Error> {
 }
 
 fn write_test_config(
-    home: &PathBuf,
+    home: &Path,
     model: &FakeModelServer,
     runtime: Runtime,
     image: &str,

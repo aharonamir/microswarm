@@ -9,7 +9,7 @@ license.workspace = true
 ms-proto = { path = "../ms-proto" }
 ms-store = { path = "../ms-store" }
 serde_json = "1.0.145"
-tokio = { version = "1.53.2", features = ["macros", "rt", "signal", "time"] }
+tokio = { version = "1.53.2", features = ["macros", "net", "rt", "signal", "time"] }
 
 [[bin]]
 name = "microswarm-agent"

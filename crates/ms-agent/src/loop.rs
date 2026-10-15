@@ -1,0 +1,90 @@
+use crate::boot::AgentContext;
+use ms_proto::{InboundKind, InboundMessage, OutboundMessage};
+use ms_store::HistoryEntry;
+use std::future::Future;
+use std::pin::Pin;
+use std::time::Duration;
+use tokio::signal::unix::{SignalKind, signal};
+
+pub struct TurnOutput {
+    pub outbound: Vec<OutboundMessage>,
+    pub history: Vec<HistoryEntry>,
+}
+
+pub trait TurnProcessor {
+    fn process<'a>(
+        &'a mut self,
+        context: &'a AgentContext,
+        message: InboundMessage,
+        history: Vec<HistoryEntry>,
+    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, String>> + 'a>>;
+}
+
+#[derive(Debug)]
+pub enum LoopError {
+    Signal(std::io::Error),
+    Store(ms_store::StoreError),
+    Turn(String),
+}
+
+impl LoopError {
+    pub const fn exit_code(&self) -> i32 {
+        75
+    }
+}
+
+impl std::fmt::Display for LoopError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Signal(error) => write!(formatter, "cannot subscribe to SIGUSR1: {error}"),
+            Self::Store(error) => write!(formatter, "session store failed: {error}"),
+            Self::Turn(error) => write!(formatter, "turn failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for LoopError {}
+
+pub async fn run<P: TurnProcessor>(
+    mut context: AgentContext,
+    mut processor: P,
+) -> Result<(), LoopError> {
+    let mut wake = signal(SignalKind::user_defined1()).map_err(LoopError::Signal)?;
+    loop {
+        let cursor = context.store.cursor().map_err(LoopError::Store)?;
+        if let Some(message) = context
+            .store
+            .next_inbound(cursor)
+            .map_err(LoopError::Store)?
+        {
+            let inbound_id = message
+                .id
+                .expect("stored inbound messages always have an id");
+            if message.kind == InboundKind::Control
+                && message.body.get("op").and_then(|op| op.as_str()) == Some("shutdown")
+            {
+                context
+                    .store
+                    .commit_turn(inbound_id, &[], &[])
+                    .map_err(LoopError::Store)?;
+                return Ok(());
+            }
+
+            let history = context.store.history().map_err(LoopError::Store)?;
+            let output = processor
+                .process(&context, message, history)
+                .await
+                .map_err(LoopError::Turn)?;
+            context
+                .store
+                .commit_turn(inbound_id, &output.outbound, &output.history)
+                .map_err(LoopError::Store)?;
+            continue;
+        }
+
+        tokio::select! {
+            _ = wake.recv() => {},
+            _ = tokio::time::sleep(Duration::from_millis(500)) => {},
+        }
+    }
+}

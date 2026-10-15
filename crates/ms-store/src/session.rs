@@ -36,6 +36,26 @@ impl SessionStore {
         Ok(self.inbound.last_insert_rowid())
     }
 
+    pub fn next_inbound(&self, after_id: i64) -> Result<Option<InboundMessage>, StoreError> {
+        let row: Option<(i64, String, String, String)> = self
+            .inbound
+            .query_row(
+                "SELECT id, kind, body, created_at FROM inbound WHERE id > ?1 ORDER BY id LIMIT 1",
+                [after_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        row.map(|(id, kind, body, created_at)| {
+            Ok(InboundMessage {
+                id: Some(id),
+                kind: serde_json::from_value(Value::String(kind))?,
+                body: serde_json::from_str(&body)?,
+                created_at: Some(created_at),
+            })
+        })
+        .transpose()
+    }
+
     pub fn commit_turn(
         &mut self,
         last_inbound_id: i64,
