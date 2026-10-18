@@ -194,8 +194,12 @@ fn each_turn_returns_only_the_two_new_history_entries() {
 }
 
 #[test]
-fn model_http_401_and_403_are_configuration_failures() {
-    for (status, reason) in [(401, "Unauthorized"), (403, "Forbidden")] {
+fn model_http_client_errors_are_configuration_failures() {
+    for (status, reason) in [
+        (400, "Bad Request"),
+        (401, "Unauthorized"),
+        (403, "Forbidden"),
+    ] {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {

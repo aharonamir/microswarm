@@ -57,6 +57,7 @@ pub struct ModelClient {
 pub struct ModelError {
     message: String,
     http_status: Option<u16>,
+    transport_failure: bool,
 }
 
 impl ModelError {
@@ -64,6 +65,15 @@ impl ModelError {
         Self {
             message: message.into(),
             http_status: None,
+            transport_failure: false,
+        }
+    }
+
+    fn transient(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            http_status: None,
+            transport_failure: true,
         }
     }
 
@@ -71,6 +81,7 @@ impl ModelError {
         Self {
             message: message.into(),
             http_status: Some(status.as_u16()),
+            transport_failure: false,
         }
     }
 }
@@ -85,7 +96,15 @@ impl Error for ModelError {}
 
 impl ModelError {
     fn is_configuration_failure(&self) -> bool {
-        matches!(self.http_status, Some(401 | 403))
+        match self.http_status {
+            Some(400..=499) => !matches!(self.http_status, Some(408 | 429)),
+            Some(_) => false,
+            None => !self.transport_failure,
+        }
+    }
+
+    fn is_transient_failure(&self) -> bool {
+        self.transport_failure || matches!(self.http_status, Some(408 | 429 | 500..=599))
     }
 }
 
@@ -168,16 +187,16 @@ impl ModelClient {
         let request = request
             .body(Full::new(Bytes::from(request_body.to_string())))
             .map_err(|error| ModelError::new(format!("cannot build model request: {error}")))?;
-        let response = self
-            .client
-            .request(request)
-            .await
-            .map_err(|error| ModelError::new(format!("model proxy request failed: {error}")))?;
+        let response = self.client.request(request).await.map_err(|error| {
+            ModelError::transient(format!("model proxy request failed: {error}"))
+        })?;
         let status = response.status();
         let body = Limited::new(response.into_body(), MAX_RESPONSE_BYTES)
             .collect()
             .await
-            .map_err(|error| ModelError::new(format!("model proxy response body failed: {error}")))?
+            .map_err(|error| {
+                ModelError::transient(format!("model proxy response body failed: {error}"))
+            })?
             .to_bytes();
         if status != StatusCode::OK {
             let excerpt = String::from_utf8_lossy(&body);
@@ -245,7 +264,7 @@ impl TurnProcessor for ModelClient {
                 .ok_or_else(|| TurnError::Transient("user message is missing text".to_owned()))?;
             let reply = self.complete(&history, user_text).await.map_err(|error| {
                 let message = error.to_string();
-                if error.is_configuration_failure() {
+                if error.is_configuration_failure() || !error.is_transient_failure() {
                     TurnError::Config(message)
                 } else {
                     TurnError::Transient(message)
