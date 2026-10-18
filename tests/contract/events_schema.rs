@@ -51,6 +51,10 @@ fn every_agent_event_round_trips_and_validates_only_as_an_agent_event() {
         ("delegation.request", json!({})),
         ("delegation.send", json!({})),
         ("delegation.dismiss", json!({})),
+        (
+            "inbound.error",
+            json!({"inbound_id":1,"kind":"task","error":"not handled"}),
+        ),
     ];
     for (kind, data) in cases {
         let event = agent_event(kind, data).unwrap();

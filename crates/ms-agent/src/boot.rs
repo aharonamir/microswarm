@@ -112,7 +112,7 @@ fn required_env(name: &str) -> Result<String, BootError> {
         .map_err(|_| BootError::Config(format!("required environment variable {name} is missing")))
 }
 
-fn monotonic_nanos() -> u64 {
+pub(crate) fn monotonic_nanos() -> u64 {
     PROCESS_START
         .get_or_init(Instant::now)
         .elapsed()
@@ -121,7 +121,7 @@ fn monotonic_nanos() -> u64 {
         .unwrap_or(u64::MAX)
 }
 
-fn utc_timestamp() -> String {
+pub(crate) fn utc_timestamp() -> String {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();

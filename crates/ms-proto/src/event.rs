@@ -39,6 +39,8 @@ pub enum AgentEventType {
     DelegationSend,
     #[serde(rename = "delegation.dismiss")]
     DelegationDismiss,
+    #[serde(rename = "inbound.error")]
+    InboundError,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

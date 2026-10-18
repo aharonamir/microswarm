@@ -138,7 +138,7 @@ requested ─▶ awaiting_approval ─▶ spawning ─▶ active ⇄ waiting_rep
 
 **Acknowledgement:** there is no `acked_at` column, because the agent may not write `control/inbound.db` (single writer). Instead the agent records the last processed inbound id in `out/outbound.db.cursor` within the same transaction as the reply. A message is acknowledged when `outbound.cursor.last_inbound_id >= message.id`. On restart the agent resumes from that cursor.
 
-Inbound rows with a kind unknown to this agent version remain recorded in `control/inbound.db`; the agent skips processing and advances the output cursor so an unrecognized row cannot crash or permanently block the session.
+Inbound rows with an unknown kind, a known but unhandled kind, or a malformed user message remain recorded in `control/inbound.db`; the agent appends an `inbound.error` event, acknowledges the row, and continues so invalid input cannot crash or permanently block the session.
 
 **Inbound kinds:** `user_message`, `approval_result`, `delegation_result`, `member_reply`, `member_failed`, `task` (members), `control` (`shutdown`).
 

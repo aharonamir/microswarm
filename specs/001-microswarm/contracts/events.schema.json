@@ -37,6 +37,8 @@
         "properties": { "reason": { "enum": ["ok", "transient", "safety", "config"] } } } } } },
     { "if": { "properties": { "type": { "const": "scope.narrowed" } } },
       "then": { "properties": { "data": { "required": ["delegation_id", "narrowed"] } } } },
+    { "if": { "properties": { "type": { "const": "inbound.error" } } },
+      "then": { "properties": { "data": { "required": ["inbound_id", "kind", "error"] } } } },
     { "if": { "properties": { "type": { "const": "container.exited" } } },
       "then": { "properties": { "data": { "required": ["container_id", "exit_code", "classified_as"],
         "properties": { "classified_as": { "enum": ["ok", "transient", "safety", "config", "unknown"] } } } } } }
@@ -49,7 +51,7 @@
       "model.call",
       "tool.call", "tool.result",
       "permit.decision",
-      "delegation.request", "delegation.send", "delegation.dismiss"
+      "delegation.request", "delegation.send", "delegation.dismiss", "inbound.error"
     ] },
     "supervisor_type": { "enum": [
       "session.created", "session.status", "session.closed",
