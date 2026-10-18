@@ -259,14 +259,52 @@ impl std::error::Error for ConfigError {}
 
 pub fn load_config_dir(path: impl AsRef<Path>) -> Result<ConfigSet, ConfigError> {
     let path = path.as_ref();
-    let config = ConfigSet {
+    let mut config = ConfigSet {
         microswarm: read_toml(path.join("microswarm.toml"))?,
         policy: read_toml(path.join("policy.toml"))?,
         ceiling: read_toml(path.join("ceiling.toml"))?,
         tools: read_toml(path.join("tools.toml"))?,
     };
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let ms_home = std::env::var_os("MS_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    config.ceiling.paths = expand_ceiling_paths(&config.ceiling.paths, &home, &ms_home)?;
     config.validate()?;
     Ok(config)
+}
+
+fn expand_ceiling_paths(
+    paths: &[PathBuf],
+    home: &Path,
+    ms_home: &Path,
+) -> Result<Vec<PathBuf>, ConfigError> {
+    paths
+        .iter()
+        .map(|path| {
+            let value = path.to_string_lossy();
+            let expanded = if value == "$MS_HOME" {
+                ms_home.to_path_buf()
+            } else if let Some(suffix) = value.strip_prefix("$MS_HOME/") {
+                ms_home.join(suffix)
+            } else if value == "~" {
+                home.to_path_buf()
+            } else if let Some(suffix) = value.strip_prefix("~/") {
+                home.join(suffix)
+            } else {
+                path.clone()
+            };
+            if !expanded.is_absolute() {
+                return Err(ConfigError(format!(
+                    "cannot expand ceiling path {} to an absolute path",
+                    path.display()
+                )));
+            }
+            Ok(expanded)
+        })
+        .collect()
 }
 
 fn read_toml<T: DeserializeOwned>(path: PathBuf) -> Result<T, ConfigError> {
@@ -440,5 +478,40 @@ fn validate_url(value: &str, field: &str) -> Result<(), ConfigError> {
         Err(ConfigError(format!(
             "{field} must use HTTPS (HTTP is allowed for loopback only)"
         )))
+    }
+}
+
+#[cfg(test)]
+mod ceiling_path_tests {
+    use super::{CeilingConfig, expand_ceiling_paths};
+    use std::path::Path;
+
+    #[test]
+    fn expands_all_paths_from_the_documented_default_ceiling() {
+        let cli = include_str!("../../../specs/001-microswarm/contracts/cli.md");
+        let paths_line = cli
+            .lines()
+            .find(|line| line.trim_start().starts_with("paths       = [\"$MS_HOME\""))
+            .unwrap();
+        let ceiling: CeilingConfig =
+            toml::from_str(&format!("{paths_line}\ncredentials=[]\ntools=[]")).unwrap();
+        let expanded = expand_ceiling_paths(
+            &ceiling.paths,
+            Path::new("/home/tester"),
+            Path::new("/srv/ms-home"),
+        )
+        .unwrap();
+        assert_eq!(
+            expanded,
+            [
+                Path::new("/srv/ms-home").to_path_buf(),
+                Path::new("/var/run").to_path_buf(),
+                Path::new("/run").to_path_buf(),
+                Path::new("/etc/shadow").to_path_buf(),
+                Path::new("/home/tester/.ssh").to_path_buf(),
+                Path::new("/home/tester/.aws").to_path_buf(),
+                Path::new("/home/tester/.config/gcloud").to_path_buf(),
+            ]
+        );
     }
 }
