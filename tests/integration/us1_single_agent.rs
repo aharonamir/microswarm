@@ -1,13 +1,15 @@
 #[path = "harness.rs"]
-#[allow(dead_code)]
 mod harness;
 
 use harness::IntegrationHarness;
 use std::fs;
 
 #[test]
+#[ignore = "red: T022 — single-agent chat acceptance flow is not implemented yet"]
 fn cli_message_gets_reply_from_one_labeled_container() {
-    let harness = IntegrationHarness::start().expect("integration harness should start");
+    let Some(harness) = IntegrationHarness::start_or_skip() else {
+        return;
+    };
     let output = harness
         .chat(None, &["hello"])
         .expect("CLI chat should complete");
@@ -45,8 +47,11 @@ fn cli_message_gets_reply_from_one_labeled_container() {
 }
 
 #[test]
+#[ignore = "red: T023 — session container reuse acceptance flow is not implemented yet"]
 fn second_cli_message_reuses_the_session_container() {
-    let harness = IntegrationHarness::start().expect("integration harness should start");
+    let Some(harness) = IntegrationHarness::start_or_skip() else {
+        return;
+    };
     let first = harness
         .chat(None, &["first message"])
         .expect("first chat should complete");

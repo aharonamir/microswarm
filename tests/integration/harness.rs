@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[path = "../fixtures/fake_model.rs"]
 mod fake_model;
 
@@ -25,6 +27,25 @@ pub struct IntegrationHarness {
 }
 
 impl IntegrationHarness {
+    pub fn start_or_skip() -> Option<Self> {
+        Self::start_or_skip_with_approval_tool(false)
+    }
+
+    pub fn start_approval_test_or_skip() -> Option<Self> {
+        Self::start_or_skip_with_approval_tool(true)
+    }
+
+    fn start_or_skip_with_approval_tool(approval_tool: bool) -> Option<Self> {
+        if let Err(error) = detect_runtime() {
+            eprintln!("skipping runtime integration test: {error}");
+            return None;
+        }
+        Some(
+            Self::start_with_approval_tool(approval_tool)
+                .expect("integration harness should start when a runtime is reachable"),
+        )
+    }
+
     pub fn start() -> Result<Self, Box<dyn std::error::Error>> {
         Self::start_with_approval_tool(false)
     }
@@ -334,7 +355,9 @@ fn cli_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
 
 #[test]
 fn harness_starts_fake_model_and_supervisor_with_a_real_runtime() {
-    let harness = IntegrationHarness::start().expect("runtime and supervisor should start");
+    let Some(harness) = IntegrationHarness::start_or_skip() else {
+        return;
+    };
     assert!(harness.home.join("config").is_dir());
     assert!(matches!(harness.runtime, Runtime::Docker | Runtime::Podman));
     assert!(harness.supervisor.as_ref().is_some());
