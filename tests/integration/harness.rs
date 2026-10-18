@@ -37,7 +37,10 @@ impl IntegrationHarness {
 
     fn start_or_skip_with_approval_tool(approval_tool: bool) -> Option<Self> {
         if let Err(error) = detect_runtime() {
-            eprintln!("skipping runtime integration test: {error}");
+            runtime_unavailable(
+                &error.to_string(),
+                std::env::var("MS_REQUIRE_RUNTIME").as_deref() == Ok("1"),
+            );
             return None;
         }
         Some(
@@ -183,6 +186,26 @@ impl IntegrationHarness {
             .lines()
             .map(str::to_owned)
             .collect())
+    }
+}
+
+fn runtime_unavailable(reason: &str, required: bool) {
+    let message = format!("skipping runtime integration test: {reason}");
+    eprintln!("{message}");
+    assert!(!required, "MS_REQUIRE_RUNTIME=1: {message}");
+}
+
+#[cfg(test)]
+mod runtime_requirement_tests {
+    #[test]
+    fn required_runtime_turns_skip_into_failure() {
+        let result = std::panic::catch_unwind(|| super::runtime_unavailable("no socket", true));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn optional_runtime_prints_a_skip_instead_of_failing() {
+        super::runtime_unavailable("no socket", false);
     }
 }
 

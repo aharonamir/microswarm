@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
 
+# A future runtime integration job must set MS_REQUIRE_RUNTIME=1.
 jobs:
   rust:
     runs-on: ubuntu-latest
