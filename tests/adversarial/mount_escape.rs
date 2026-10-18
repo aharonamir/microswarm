@@ -79,6 +79,27 @@ fn agent_container_cannot_reach_host_control_or_another_session() {
         "control mount must be read-only"
     );
 
+    // Exercise the filesystem boundary from inside the container. A shell.run
+    // command and the fs.write MCP tool both resolve to an ordinary OS write;
+    // neither may alter the supervisor-owned control files or SQLite sidecars.
+    for path in [
+        "/session/control/inbound.db",
+        "/session/control/scope.json",
+        "/session/control/inbound.db-wal",
+        "/session/control/inbound.db-shm",
+    ] {
+        let command = format!("printf forged > {path}");
+        let result = Command::new(program)
+            .args(["exec", &containers[0], "sh", "-c", &command])
+            .output()
+            .expect("run a write attempt inside the agent container");
+        assert!(
+            !result.status.success(),
+            "container write to {path} must fail at the OS level: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
     let forbidden_sources = [
         std::env::var("HOME").unwrap_or_default() + "/.ssh",
         harness.home.join("supervisor.db").display().to_string(),
