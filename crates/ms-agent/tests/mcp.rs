@@ -1,4 +1,7 @@
-use ms_agent::mcp::{McpClient, McpServerDescriptor, McpTransport};
+use ms_agent::{
+    mcp::{McpClient, McpServerDescriptor, McpTransport},
+    permit::authorize_tool,
+};
 use ms_proto::{Permission, Scope, ToolGrant, ToolNames};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -83,6 +86,13 @@ fn adapter_ignores_ungranted_server_and_filters_tools() {
 }
 
 #[test]
+fn ask_policy_cannot_produce_a_tool_dispatch_token_without_approval() {
+    let mut scope = scope();
+    scope.tools[0].policy = Permission::Ask;
+    assert!(authorize_tool(&scope, "weather", "forecast", None).is_err());
+}
+
+#[test]
 fn http_server_requires_proxy_and_scoped_credential_name() {
     let scope = scope();
     let server = McpServerDescriptor {
@@ -117,20 +127,7 @@ fn http_server_requires_proxy_and_scoped_credential_name() {
 #[tokio::test]
 async fn denied_tool_call_does_not_launch_server() {
     let scope = scope();
-    let mut client = McpClient::new(
-        &scope,
-        vec![McpServerDescriptor {
-            id: "weather".into(),
-            transport: McpTransport::Stdio,
-            command: Some("this-command-must-not-run".into()),
-            args: vec![],
-            url: None,
-            credential: None,
-        }],
-        None,
-    )
-    .expect("valid descriptor");
-    assert!(client.call_tool("weather", "admin", None).await.is_err());
+    assert!(authorize_tool(&scope, "weather", "admin", None).is_err());
 }
 
 #[tokio::test]
@@ -167,7 +164,7 @@ async fn stdio_lists_only_granted_tools_and_calls_allowed_tool() {
 
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        client.call_tool("weather", "forecast", None),
+        client.call_tool(authorize_tool(&scope, "weather", "forecast", None).unwrap()),
     )
     .await
     .expect("tool call timed out")

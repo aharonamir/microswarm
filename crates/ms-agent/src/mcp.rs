@@ -1,8 +1,9 @@
+use crate::permit::PermittedToolCall;
 use http::{HeaderName, HeaderValue};
 use ms_proto::{Scope, ToolGrant};
 use rmcp::{
     ServiceExt,
-    model::{CallToolRequestParams, JsonObject, Tool},
+    model::{CallToolRequestParams, Tool},
     service::{RoleClient, RunningService},
     transport::{
         StreamableHttpClientTransport, TokioChildProcess,
@@ -192,19 +193,20 @@ impl McpClient {
 
     pub async fn call_tool(
         &mut self,
-        server: &str,
-        tool: &str,
-        arguments: Option<JsonObject>,
+        mut call: PermittedToolCall,
     ) -> Result<rmcp::model::CallToolResult, McpError> {
-        if !self.grant(server)?.tools.contains(tool) {
+        let server = call.server().to_owned();
+        let tool = call.tool().to_owned();
+        let arguments = call.arguments();
+        if !self.grant(&server)?.tools.contains(&tool) {
             return Err(McpError(format!(
                 "MCP tool {server}/{tool} is outside the session scope"
             )));
         }
-        self.connect(server).await?;
-        let mut params = CallToolRequestParams::new(tool.to_owned());
+        self.connect(&server).await?;
+        let mut params = CallToolRequestParams::new(tool);
         params.arguments = arguments;
-        self.connections[server]
+        self.connections[&server]
             .peer()
             .call_tool(params)
             .await
