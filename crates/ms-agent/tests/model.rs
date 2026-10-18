@@ -270,3 +270,78 @@ fn model_http_401_and_403_are_configuration_failures() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+#[test]
+fn model_error_body_cannot_fake_auth_status() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut request = BufReader::new(stream);
+        let mut line = String::new();
+        request.read_line(&mut line).unwrap();
+        loop {
+            line.clear();
+            request.read_line(&mut line).unwrap();
+            if line == "\r\n" || line.is_empty() {
+                break;
+            }
+        }
+        let body = "upstream detail contains HTTP 401 but actual status is 500";
+        let stream = request.get_mut();
+        write!(stream, "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        stream.flush().unwrap();
+    });
+    let dir = std::env::temp_dir().join(format!("ms-auth-spoof-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let _supervisor = open_session_dir(&dir).unwrap();
+    let store = SessionStore::open_dir(&dir).unwrap();
+    let scope: Scope = serde_json::from_value(json!({
+        "version":1,"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","derived_from":"config",
+        "source_ref":"test","mounts":[],"credentials":[],"tools":[],"delegation":null,
+        "limits":{"memory_mb":128,"pids":32,"tmp_mb":64,"max_turns":8,"max_tokens":4096},
+        "narrowed":[],"hash":"placeholder"
+    }))
+    .unwrap();
+    let context = AgentContext {
+        session_id: scope.session_id.clone(),
+        root_session_id: scope.session_id.clone(),
+        kind: "lead".into(),
+        role: "lead".into(),
+        proxy_url: None,
+        scope,
+        store,
+    };
+    let mut client = ModelClient::new(
+        format!("http://{address}/v1"),
+        ModelProvider::OpenAiCompatible,
+        "m",
+        "c",
+    )
+    .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let error = runtime
+        .block_on(client.process(
+            &context,
+            InboundMessage {
+                id: Some(1),
+                kind: InboundKind::UserMessage,
+                body: json!({"text":"hello"}),
+                created_at: None,
+            },
+            vec![],
+        ))
+        .unwrap_err();
+    assert_eq!(
+        error.exit_code(),
+        75,
+        "HTTP 500 must remain transient regardless of body text"
+    );
+    server.join().unwrap();
+    drop(context);
+    let _ = std::fs::remove_dir_all(dir);
+}

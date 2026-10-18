@@ -28,7 +28,9 @@ impl ModelProvider {
         match value {
             "openai-compatible" => Ok(Self::OpenAiCompatible),
             "anthropic" => Ok(Self::Anthropic),
-            _ => Err(ModelError(format!("unsupported model provider {value:?}"))),
+            _ => Err(ModelError::new(format!(
+                "unsupported model provider {value:?}"
+            ))),
         }
     }
 
@@ -52,11 +54,30 @@ pub struct ModelClient {
 }
 
 #[derive(Debug)]
-pub struct ModelError(String);
+pub struct ModelError {
+    message: String,
+    http_status: Option<u16>,
+}
+
+impl ModelError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            http_status: None,
+        }
+    }
+
+    fn with_status(status: StatusCode, message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            http_status: Some(status.as_u16()),
+        }
+    }
+}
 
 impl fmt::Display for ModelError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
+        formatter.write_str(&self.message)
     }
 }
 
@@ -64,7 +85,7 @@ impl Error for ModelError {}
 
 impl ModelError {
     fn is_configuration_failure(&self) -> bool {
-        self.0.contains("HTTP 401") || self.0.contains("HTTP 403")
+        matches!(self.http_status, Some(401 | 403))
     }
 }
 
@@ -76,12 +97,12 @@ impl ModelClient {
         credential_name: impl Into<String>,
     ) -> Result<Self, ModelError> {
         let proxy_uri = Uri::from_str(proxy_url.as_ref())
-            .map_err(|error| ModelError(format!("invalid proxy URL: {error}")))?;
+            .map_err(|error| ModelError::new(format!("invalid proxy URL: {error}")))?;
         let authority = proxy_uri
             .authority()
-            .ok_or_else(|| ModelError("MS_PROXY_URL has no authority".to_owned()))?;
+            .ok_or_else(|| ModelError::new("MS_PROXY_URL has no authority".to_owned()))?;
         if proxy_uri.scheme_str() != Some("http") {
-            return Err(ModelError(
+            return Err(ModelError::new(
                 "MS_PROXY_URL must use http for the session proxy".to_owned(),
             ));
         }
@@ -91,11 +112,11 @@ impl ModelClient {
             .authority(authority.clone())
             .path_and_query(endpoint_path)
             .build()
-            .map_err(|error| ModelError(format!("invalid proxy endpoint: {error}")))?;
+            .map_err(|error| ModelError::new(format!("invalid proxy endpoint: {error}")))?;
         let model = model.into();
         let credential_name = credential_name.into();
         if model.trim().is_empty() || credential_name.trim().is_empty() {
-            return Err(ModelError(
+            return Err(ModelError::new(
                 "model and credential name must not be empty".to_owned(),
             ));
         }
@@ -113,17 +134,17 @@ impl ModelClient {
         let proxy_url = context
             .proxy_url
             .as_deref()
-            .ok_or_else(|| ModelError("MS_PROXY_URL is missing".to_owned()))?;
+            .ok_or_else(|| ModelError::new("MS_PROXY_URL is missing".to_owned()))?;
         let provider = ModelProvider::parse(
             &std::env::var("MS_MODEL_PROVIDER")
-                .map_err(|_| ModelError("MS_MODEL_PROVIDER is missing".to_owned()))?,
+                .map_err(|_| ModelError::new("MS_MODEL_PROVIDER is missing".to_owned()))?,
         )?;
         let model = std::env::var("MS_MODEL_NAME")
-            .map_err(|_| ModelError("MS_MODEL_NAME is missing".to_owned()))?;
+            .map_err(|_| ModelError::new("MS_MODEL_NAME is missing".to_owned()))?;
         let credential_name = std::env::var("MS_MODEL_CREDENTIAL")
-            .map_err(|_| ModelError("MS_MODEL_CREDENTIAL is missing".to_owned()))?;
+            .map_err(|_| ModelError::new("MS_MODEL_CREDENTIAL is missing".to_owned()))?;
         if !context.scope.credentials.contains(&credential_name) {
-            return Err(ModelError(
+            return Err(ModelError::new(
                 "model credential name is outside the session scope".to_owned(),
             ));
         }
@@ -146,34 +167,37 @@ impl ModelClient {
         }
         let request = request
             .body(Full::new(Bytes::from(request_body.to_string())))
-            .map_err(|error| ModelError(format!("cannot build model request: {error}")))?;
+            .map_err(|error| ModelError::new(format!("cannot build model request: {error}")))?;
         let response = self
             .client
             .request(request)
             .await
-            .map_err(|error| ModelError(format!("model proxy request failed: {error}")))?;
+            .map_err(|error| ModelError::new(format!("model proxy request failed: {error}")))?;
         let status = response.status();
         let body = Limited::new(response.into_body(), MAX_RESPONSE_BYTES)
             .collect()
             .await
-            .map_err(|error| ModelError(format!("model proxy response body failed: {error}")))?
+            .map_err(|error| ModelError::new(format!("model proxy response body failed: {error}")))?
             .to_bytes();
         if status != StatusCode::OK {
             let excerpt = String::from_utf8_lossy(&body);
-            return Err(ModelError(format!(
-                "model proxy returned HTTP {status}: {}",
-                excerpt.chars().take(512).collect::<String>()
-            )));
+            return Err(ModelError::with_status(
+                status,
+                format!(
+                    "model proxy returned HTTP {status}: {}",
+                    excerpt.chars().take(512).collect::<String>()
+                ),
+            ));
         }
         let response: Value = serde_json::from_slice(&body)
-            .map_err(|error| ModelError(format!("invalid model response JSON: {error}")))?;
+            .map_err(|error| ModelError::new(format!("invalid model response JSON: {error}")))?;
         let content = match self.provider {
             ModelProvider::OpenAiCompatible => response
                 .pointer("/choices/0/message/content")
                 .and_then(Value::as_str),
             ModelProvider::Anthropic => response.pointer("/content/0/text").and_then(Value::as_str),
         }
-        .ok_or_else(|| ModelError("model response has no text content".to_owned()))?;
+        .ok_or_else(|| ModelError::new("model response has no text content".to_owned()))?;
         Ok(content.to_owned())
     }
 
