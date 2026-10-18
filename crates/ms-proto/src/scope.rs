@@ -212,14 +212,27 @@ impl Scope {
                         (Some(_), None) | (None, None) => true,
                         (None, Some(_)) => false,
                     };
-                    names_fit
-                        && grant.tools.names().is_none_or(|names| {
-                            names.iter().all(|tool| {
-                                grant.overrides.get(tool).copied().unwrap_or(grant.policy)
-                                    >= parent.overrides.get(tool).copied().unwrap_or(parent.policy)
-                            })
-                        })
-                        && grant.policy >= parent.policy
+                    if !names_fit || grant.policy < parent.policy {
+                        return false;
+                    }
+                    let relevant_tools: BTreeSet<&str> = grant.tools.names().map_or_else(
+                        || {
+                            grant
+                                .overrides
+                                .keys()
+                                .chain(parent.overrides.keys())
+                                .map(String::as_str)
+                                .collect()
+                        },
+                        |names| names.iter().map(String::as_str).collect(),
+                    );
+                    relevant_tools.into_iter().all(|tool| {
+                        let child_policy =
+                            grant.overrides.get(tool).copied().unwrap_or(grant.policy);
+                        let parent_policy =
+                            parent.overrides.get(tool).copied().unwrap_or(parent.policy);
+                        child_policy >= parent_policy
+                    })
                 })
             })
             && self.limits.is_no_greater_than(&other.limits)
@@ -466,31 +479,39 @@ pub fn intersect_scope(
             });
         }
         let mut overrides = BTreeMap::new();
-        if let Some(selected) = names.names() {
-            for tool in selected {
-                let requested_policy = request_grant
-                    .overrides
-                    .get(tool)
-                    .copied()
-                    .unwrap_or(request_grant.policy);
-                let lead_policy = lead_grant
-                    .overrides
-                    .get(tool)
-                    .copied()
-                    .unwrap_or(lead_grant.policy);
-                let effective = requested_policy.max(lead_policy).max(base);
-                if effective != base {
-                    overrides.insert(tool.clone(), effective);
-                }
-                if effective > requested_policy {
-                    result.narrowed.push(NarrowedItem {
-                        dimension: NarrowedDimension::Policy,
-                        item: format!("{}/{}", request_grant.server, tool),
-                        reason: NarrowedReason::PolicyTightened,
-                    });
-                }
+        let override_names: BTreeSet<String> = match names.names() {
+            Some(selected) => selected.clone(),
+            None => request_grant
+                .overrides
+                .keys()
+                .chain(lead_grant.overrides.keys())
+                .cloned()
+                .collect(),
+        };
+        for tool in &override_names {
+            let requested_policy = request_grant
+                .overrides
+                .get(tool)
+                .copied()
+                .unwrap_or(request_grant.policy);
+            let lead_policy = lead_grant
+                .overrides
+                .get(tool)
+                .copied()
+                .unwrap_or(lead_grant.policy);
+            let effective = requested_policy.max(lead_policy).max(base);
+            if effective != base {
+                overrides.insert(tool.clone(), effective);
             }
-        } else if request_grant.policy < base {
+            if effective > requested_policy {
+                result.narrowed.push(NarrowedItem {
+                    dimension: NarrowedDimension::Policy,
+                    item: format!("{}/{}", request_grant.server, tool),
+                    reason: NarrowedReason::PolicyTightened,
+                });
+            }
+        }
+        if names.names().is_none() && request_grant.policy < base {
             result.narrowed.push(NarrowedItem {
                 dimension: NarrowedDimension::Policy,
                 item: format!("{}/*", request_grant.server),
@@ -503,6 +524,10 @@ pub fn intersect_scope(
             policy: base,
             overrides,
         });
+    }
+
+    if result.derived_from != DerivedFrom::Config {
+        result.delegation = None;
     }
 
     result.limits = result.limits.min(&lead.limits);
@@ -538,7 +563,42 @@ pub fn intersect_scope(
 }
 
 fn canonicalize(path: &Path) -> Result<PathBuf, ScopeError> {
-    std::fs::canonicalize(path).map_err(|_| ScopeError::InvalidPath(path.to_owned()))
+    if let Ok(canonical) = std::fs::canonicalize(path) {
+        return Ok(canonical);
+    }
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|_| ScopeError::InvalidPath(path.to_owned()))?
+            .join(path)
+    };
+    let normalized = normalize_path(&absolute);
+    let mut ancestor = normalized.as_path();
+    let mut missing = Vec::new();
+    loop {
+        match std::fs::canonicalize(ancestor) {
+            Ok(mut resolved) => {
+                for component in missing.into_iter().rev() {
+                    resolved.push(component);
+                }
+                return Ok(normalize_path(&resolved));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if std::fs::symlink_metadata(ancestor).is_ok() {
+                    return Err(ScopeError::InvalidPath(path.to_owned()));
+                }
+            }
+            Err(_) => return Err(ScopeError::InvalidPath(path.to_owned())),
+        }
+        let name = ancestor
+            .file_name()
+            .ok_or_else(|| ScopeError::InvalidPath(path.to_owned()))?;
+        missing.push(name.to_os_string());
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| ScopeError::InvalidPath(path.to_owned()))?;
+    }
 }
 
 fn path_overlaps(left: &Path, right: &Path) -> bool {

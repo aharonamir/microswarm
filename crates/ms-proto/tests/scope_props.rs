@@ -1,6 +1,7 @@
-use ms_proto::{Permission, Scope, ScopeCeiling, intersect_scope};
+use ms_proto::{DelegationScope, Permission, Scope, ScopeCeiling, ToolNames, intersect_scope};
 use proptest::prelude::*;
 use serde_json::json;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn scope_with_policy(policy: Permission, mount_mode: &str, credentials: Vec<String>) -> Scope {
     serde_json::from_value(json!({
@@ -40,6 +41,96 @@ proptest! {
         prop_assert!(result.tools[0].policy >= lead.tools[0].policy);
         prop_assert!(!result.credentials.contains(&"other".to_string()));
     }
+}
+
+proptest! {
+    #[test]
+    fn wildcard_intersection_preserves_strictest_effective_policy(
+        lead_base in 0u8..3,
+        request_base in 0u8..3,
+        lead_shell in 0u8..3,
+        request_shell in 0u8..3,
+        lead_write in 0u8..3,
+        request_write in 0u8..3,
+        lead_wildcard in any::<bool>(),
+        request_wildcard in any::<bool>(),
+    ) {
+        let permissions = [Permission::Allow, Permission::Ask, Permission::Deny];
+        let mut lead = scope_with_policy(permissions[lead_base as usize], "rw", vec![]);
+        let mut request = scope_with_policy(permissions[request_base as usize], "rw", vec![]);
+        let selected = ToolNames::Selected(BTreeSet::from(["shell.run".into(), "fs.write".into(), "fs.read".into()]));
+        lead.tools[0].tools = if lead_wildcard { ToolNames::all() } else { selected.clone() };
+        request.tools[0].tools = if request_wildcard { ToolNames::all() } else { selected };
+        lead.tools[0].overrides = BTreeMap::from([
+            ("shell.run".into(), permissions[lead_shell as usize]),
+            ("fs.write".into(), permissions[lead_write as usize]),
+        ]);
+        request.tools[0].overrides = BTreeMap::from([
+            ("shell.run".into(), permissions[request_shell as usize]),
+            ("fs.write".into(), permissions[request_write as usize]),
+        ]);
+        let result = intersect_scope(&request, &lead, &ScopeCeiling::default()).unwrap();
+        let grant = &result.tools[0];
+        for (tool, request_policy, lead_policy) in [
+            ("shell.run", permissions[request_shell as usize], permissions[lead_shell as usize]),
+            ("fs.write", permissions[request_write as usize], permissions[lead_write as usize]),
+            ("fs.read", permissions[request_base as usize], permissions[lead_base as usize]),
+        ] {
+            let effective = grant.overrides.get(tool).copied().unwrap_or(grant.policy);
+            prop_assert!(effective >= request_policy.max(lead_policy), "{tool}: {effective:?} < max({request_policy:?}, {lead_policy:?})");
+        }
+    }
+
+    #[test]
+    fn wildcard_subset_checks_effective_policy_for_named_tools(
+        parent_shell in 0u8..3,
+        child_shell in 0u8..3,
+    ) {
+        let permissions = [Permission::Allow, Permission::Ask, Permission::Deny];
+        let mut parent = scope_with_policy(Permission::Allow, "rw", vec![]);
+        let mut child = parent.clone();
+        parent.tools[0].tools = ToolNames::all();
+        child.tools[0].tools = ToolNames::all();
+        parent.tools[0].overrides.insert("shell.run".into(), permissions[parent_shell as usize]);
+        child.tools[0].overrides.insert("shell.run".into(), permissions[child_shell as usize]);
+        prop_assert_eq!(child.is_subset_of(&parent), permissions[child_shell as usize] >= permissions[parent_shell as usize]);
+    }
+}
+
+#[test]
+fn missing_ceiling_path_does_not_fail_scope_intersection() {
+    let root = std::env::temp_dir().join(format!("ms-missing-scope-{}", std::process::id()));
+    let missing = root.join("not-created").join("workspace");
+    let mut lead = scope_with_policy(Permission::Allow, "rw", vec![]);
+    lead.mounts[0].host_path = root.clone();
+    let mut request = scope_with_policy(Permission::Allow, "rw", vec![]);
+    request.mounts[0].host_path = missing.clone();
+    request.mounts[0].container_path = "/work/not-created/workspace".into();
+    let ceiling = ScopeCeiling {
+        paths: vec![root.join("blocked-not-created")],
+        ..Default::default()
+    };
+    let result = intersect_scope(&request, &lead, &ceiling).unwrap();
+    assert_eq!(result.mounts.len(), 1);
+    assert_eq!(result.mounts[0].host_path, missing);
+}
+
+#[test]
+fn intersection_never_copies_lead_delegation_to_member_scope() {
+    let mut lead = scope_with_policy(Permission::Allow, "rw", vec![]);
+    lead.delegation = Some(DelegationScope {
+        enabled: true,
+        max_members: 8,
+    });
+    let mut request = lead.clone();
+    request.derived_from = ms_proto::DerivedFrom::Delegation;
+    request.delegation = Some(DelegationScope {
+        enabled: true,
+        max_members: 8,
+    });
+    let result = intersect_scope(&request, &lead, &ScopeCeiling::default()).unwrap();
+    assert!(result.delegation.is_none());
+    assert!(result.derived_from != ms_proto::DerivedFrom::Config);
 }
 
 #[test]
