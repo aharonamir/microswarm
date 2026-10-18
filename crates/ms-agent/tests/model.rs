@@ -1,4 +1,8 @@
 use ms_agent::model::{ModelClient, ModelProvider};
+use ms_agent::{agent_loop::TurnProcessor, boot::AgentContext};
+use ms_proto::{InboundKind, InboundMessage, Scope};
+use ms_store::{SessionStore, open_session_dir};
+use serde_json::json;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::thread;
@@ -85,4 +89,184 @@ fn anthropic_request_uses_provider_endpoint_and_parses_text_content() {
         "/v1/messages",
         r#"{"content":[{"type":"text","text":"fixture reply"}]}"#,
     );
+}
+
+#[test]
+fn each_turn_returns_only_the_two_new_history_entries() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for _ in 0..4 {
+            let (stream, _) = listener.accept().unwrap();
+            let mut request = BufReader::new(stream);
+            let mut line = String::new();
+            request.read_line(&mut line).unwrap();
+            let mut content_length = 0;
+            loop {
+                line.clear();
+                request.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    content_length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            let mut body = vec![0; content_length];
+            request.read_exact(&mut body).unwrap();
+            let stream = request.get_mut();
+            let response = r#"{"choices":[{"message":{"content":"reply"}}]}"#;
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response.len(), response).unwrap();
+            stream.flush().unwrap();
+        }
+    });
+
+    let dir = std::env::temp_dir().join(format!("ms-history-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let supervisor_store = open_session_dir(&dir).unwrap();
+    let store = SessionStore::open_dir(&dir).unwrap();
+    let scope: Scope = serde_json::from_value(json!({
+        "version": 1, "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV", "derived_from": "config",
+        "source_ref": "config", "mounts": [], "credentials": [], "tools": [],
+        "delegation": null,
+        "limits": {"memory_mb":128,"pids":32,"tmp_mb":64,"max_turns":8,"max_tokens":4096},
+        "narrowed": [], "hash": "placeholder"
+    }))
+    .unwrap();
+    let mut context = AgentContext {
+        session_id: scope.session_id.clone(),
+        root_session_id: scope.session_id.clone(),
+        kind: "lead".into(),
+        role: "lead".into(),
+        proxy_url: Some(format!("http://{address}/v1")),
+        scope,
+        store,
+    };
+    let mut client = ModelClient::new(
+        format!("http://{address}/v1"),
+        ModelProvider::OpenAiCompatible,
+        "m",
+        "c",
+    )
+    .unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut history = Vec::new();
+    for turn in 0..4 {
+        let output = runtime
+            .block_on(client.process(
+                &context,
+                InboundMessage {
+                    id: Some(turn + 1),
+                    kind: InboundKind::UserMessage,
+                    body: json!({"text": format!("message {turn}")}),
+                    created_at: None,
+                },
+                history.clone(),
+            ))
+            .unwrap();
+        assert_eq!(
+            output.history.len(),
+            2,
+            "turn {turn} should return only user + assistant additions"
+        );
+        context
+            .store
+            .commit_turn(turn + 1, &output.outbound, &output.history)
+            .unwrap();
+        history.extend(output.history);
+    }
+    server.join().unwrap();
+    assert_eq!(history.len(), 8);
+    assert_eq!(
+        context.store.history().unwrap().len(),
+        8,
+        "four turns must persist exactly two new rows each"
+    );
+    drop(context);
+    drop(supervisor_store);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn model_http_401_and_403_are_configuration_failures() {
+    for (status, reason) in [(401, "Unauthorized"), (403, "Forbidden")] {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut request = BufReader::new(stream);
+            let mut line = String::new();
+            request.read_line(&mut line).unwrap();
+            loop {
+                line.clear();
+                request.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            let stream = request.get_mut();
+            write!(
+                stream,
+                "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            stream.flush().unwrap();
+        });
+        let dir =
+            std::env::temp_dir().join(format!("ms-auth-status-{}-{status}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let supervisor_store = open_session_dir(&dir).unwrap();
+        let store = SessionStore::open_dir(&dir).unwrap();
+        let scope: Scope = serde_json::from_value(json!({
+            "version":1,"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","derived_from":"config",
+            "source_ref":"test","mounts":[],"credentials":[],"tools":[],"delegation":null,
+            "limits":{"memory_mb":128,"pids":32,"tmp_mb":64,"max_turns":8,"max_tokens":4096},
+            "narrowed":[],"hash":"placeholder"
+        }))
+        .unwrap();
+        let context = AgentContext {
+            session_id: scope.session_id.clone(),
+            root_session_id: scope.session_id.clone(),
+            kind: "lead".into(),
+            role: "lead".into(),
+            proxy_url: None,
+            scope,
+            store,
+        };
+        let mut client = ModelClient::new(
+            format!("http://{address}/v1"),
+            ModelProvider::OpenAiCompatible,
+            "m",
+            "c",
+        )
+        .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let error = runtime
+            .block_on(client.process(
+                &context,
+                InboundMessage {
+                    id: Some(1),
+                    kind: InboundKind::UserMessage,
+                    body: json!({"text":"hello"}),
+                    created_at: None,
+                },
+                vec![],
+            ))
+            .unwrap_err();
+        assert_eq!(error.exit_code(), 78, "HTTP {status} must map to EX_CONFIG");
+        server.join().unwrap();
+        drop(context);
+        drop(supervisor_store);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

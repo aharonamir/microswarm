@@ -1,4 +1,4 @@
-use crate::agent_loop::{TurnOutput, TurnProcessor};
+use crate::agent_loop::{TurnError, TurnOutput, TurnProcessor};
 use crate::boot::AgentContext;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Bytes;
@@ -61,6 +61,12 @@ impl fmt::Display for ModelError {
 }
 
 impl Error for ModelError {}
+
+impl ModelError {
+    fn is_configuration_failure(&self) -> bool {
+        self.0.contains("HTTP 401") || self.0.contains("HTTP 403")
+    }
+}
 
 impl ModelClient {
     pub fn new(
@@ -199,32 +205,38 @@ impl TurnProcessor for ModelClient {
         &'a mut self,
         _context: &'a AgentContext,
         message: InboundMessage,
-        mut history: Vec<HistoryEntry>,
-    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, String>> + 'a>> {
+        history: Vec<HistoryEntry>,
+    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>> {
         Box::pin(async move {
             if message.kind != InboundKind::UserMessage {
-                return Err(format!(
+                return Err(TurnError::Transient(format!(
                     "unsupported inbound message kind: {:?}",
                     message.kind
-                ));
+                )));
             }
             let user_text = message
                 .body
                 .get("text")
                 .and_then(Value::as_str)
-                .ok_or_else(|| "user message is missing text".to_owned())?;
-            let reply = self
-                .complete(&history, user_text)
-                .await
-                .map_err(|error| error.to_string())?;
-            history.push(HistoryEntry {
-                role: "user".to_owned(),
-                content: json!(user_text),
-            });
-            history.push(HistoryEntry {
-                role: "assistant".to_owned(),
-                content: json!(reply),
-            });
+                .ok_or_else(|| TurnError::Transient("user message is missing text".to_owned()))?;
+            let reply = self.complete(&history, user_text).await.map_err(|error| {
+                let message = error.to_string();
+                if error.is_configuration_failure() {
+                    TurnError::Config(message)
+                } else {
+                    TurnError::Transient(message)
+                }
+            })?;
+            let new_history = vec![
+                HistoryEntry {
+                    role: "user".to_owned(),
+                    content: json!(user_text),
+                },
+                HistoryEntry {
+                    role: "assistant".to_owned(),
+                    content: json!(reply),
+                },
+            ];
             Ok(TurnOutput {
                 outbound: vec![OutboundMessage {
                     id: None,
@@ -233,7 +245,7 @@ impl TurnProcessor for ModelClient {
                     in_reply_to: message.id,
                     created_at: None,
                 }],
-                history,
+                history: new_history,
             })
         })
     }
