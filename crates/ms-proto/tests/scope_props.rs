@@ -163,3 +163,34 @@ fn symlink_mount_canonicalization_cannot_escape_lead_path() {
     let _ = std::fs::remove_dir_all(root);
     let _ = std::fs::remove_dir_all(outside);
 }
+
+proptest! {
+    #[test]
+    fn delegation_never_widens_across_any_derived_from(
+        derived in 0u8..3,
+        request_enabled in any::<bool>(),
+        lead_enabled in any::<bool>(),
+        request_max in 0u8..33,
+        lead_max in 0u8..33,
+    ) {
+        let mut lead = scope_with_policy(Permission::Allow, "rw", vec![]);
+        lead.delegation = Some(DelegationScope { enabled: lead_enabled, max_members: lead_max });
+        let mut request = scope_with_policy(Permission::Allow, "rw", vec![]);
+        request.derived_from = [
+            ms_proto::DerivedFrom::Config,
+            ms_proto::DerivedFrom::TeamSkill,
+            ms_proto::DerivedFrom::Delegation,
+        ][derived as usize];
+        request.delegation = Some(DelegationScope { enabled: request_enabled, max_members: request_max });
+        let result = intersect_scope(&request, &lead, &ScopeCeiling::default()).unwrap();
+        if request.derived_from == ms_proto::DerivedFrom::Config {
+            let expected = DelegationScope {
+                enabled: request_enabled && lead_enabled,
+                max_members: request_max.min(lead_max),
+            };
+            prop_assert_eq!(result.delegation, Some(expected));
+        } else {
+            prop_assert!(result.delegation.is_none());
+        }
+    }
+}

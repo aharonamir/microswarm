@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 60caf42c550283a3de83005c15266475ca2257813333b24f1cddee18f9a289fa # shrinks to parent_shell = 1, child_shell = 0
 cc 8674d5b93c52df7ac16ed89c010655979fa85e3320e17a380d053b7fcfe6e779 # shrinks to lead_base = 0, request_base = 0, lead_shell = 0, request_shell = 0, lead_write = 1, request_write = 0
+cc 8db5bc73973cc1264de18873fbedc0a1a37e88328979b010fc9bd45939574038 # shrinks to derived = 0, request_enabled = false, lead_enabled = false, request_max = 3, lead_max = 0

@@ -526,9 +526,17 @@ pub fn intersect_scope(
         });
     }
 
-    if result.derived_from != DerivedFrom::Config {
-        result.delegation = None;
-    }
+    result.delegation = if result.derived_from == DerivedFrom::Config {
+        match (&request.delegation, &lead.delegation) {
+            (Some(requested), Some(maximum)) => Some(DelegationScope {
+                enabled: requested.enabled && maximum.enabled,
+                max_members: requested.max_members.min(maximum.max_members),
+            }),
+            _ => None,
+        }
+    } else {
+        None
+    };
 
     result.limits = result.limits.min(&lead.limits);
     if let Some(maximum) = &ceiling.limits {
