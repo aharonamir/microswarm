@@ -1,5 +1,7 @@
 use crate::boot::AgentContext;
-use ms_proto::{AgentEvent, AgentEventType, InboundKind, InboundMessage, OutboundMessage};
+use ms_proto::{
+    AgentEvent, AgentEventType, ExitReason, InboundKind, InboundMessage, OutboundMessage, exit_code,
+};
 use ms_store::HistoryEntry;
 use serde_json::json;
 use std::future::Future;
@@ -29,7 +31,7 @@ pub enum TurnError {
 }
 
 impl TurnError {
-    pub const fn exit_code(&self) -> i32 {
+    pub fn exit_code(&self) -> i32 {
         match self {
             Self::Config(_) => 78,
             Self::Transient(_) => 75,
@@ -53,10 +55,12 @@ pub enum LoopError {
 }
 
 impl LoopError {
-    pub const fn exit_code(&self) -> i32 {
+    pub fn exit_code(&self) -> i32 {
         match self {
             Self::Turn(error) => error.exit_code(),
-            Self::Signal(_) | Self::Store(_) => 75,
+            Self::Signal(_) => exit_code(ExitReason::Safety),
+            Self::Store(error) if error.is_transient() => exit_code(ExitReason::Transient),
+            Self::Store(_) => exit_code(ExitReason::Safety),
         }
     }
 }

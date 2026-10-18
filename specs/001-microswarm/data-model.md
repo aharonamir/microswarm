@@ -17,14 +17,14 @@ $MS_HOME/
 ├── skills/<name>/SKILL.md        # skills, incl. team skills
 └── sessions/<session_id>/
     ├── control/                  # read-only container mount
-    │   ├── inbound.db            # writer: supervisor, reader: agent
+    │   ├── inbound.db            # writer: supervisor, reader: agent; persistent WAL/SHM
     │   └── scope.json            # supervisor-authored; immutable while running
     └── out/                      # read-write container mount
         ├── outbound.db           # writer: agent
         └── events.db              # writer: agent
 ```
 
-`session_id` is a ULID. Session directories are retained after teardown for `retention_days` (default 30).
+`session_id` is a ULID. Session directories are retained after teardown for `retention_days` (default 30). During session creation, the supervisor opens `control/inbound.db`, sets `SQLITE_FCNTL_PERSIST_WAL`, and creates its WAL/SHM sidecars before writing `control/scope.json` or creating the container. The supervisor retains the inbound writer through teardown.
 
 ---
 

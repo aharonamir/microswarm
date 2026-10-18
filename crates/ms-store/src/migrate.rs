@@ -39,6 +39,21 @@ impl std::fmt::Display for StoreError {
 
 impl std::error::Error for StoreError {}
 
+impl StoreError {
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Sqlite(rusqlite::Error::SqliteFailure(error, _))
+                if matches!(
+                    error.code,
+                    rusqlite::ffi::ErrorCode::DatabaseBusy
+                        | rusqlite::ffi::ErrorCode::DatabaseLocked
+                        | rusqlite::ffi::ErrorCode::CannotOpen
+                )
+        )
+    }
+}
+
 impl From<rusqlite::Error> for StoreError {
     fn from(value: rusqlite::Error) -> Self {
         Self::Sqlite(value)
@@ -84,13 +99,18 @@ pub fn open_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, St
     fs::create_dir_all(&control)?;
     fs::create_dir_all(&out)?;
     let (inbound_sql, outbound_sql, events_sql) = session_sections()?;
+    let inbound = open_database(
+        control.join("inbound.db"),
+        inbound_sql,
+        "NORMAL",
+        SESSION_SCHEMA_VERSION,
+    )?;
+    set_persist_wal(&inbound)?;
+    // Force SQLite to initialize the WAL and shared-memory sidecars while the
+    // supervisor has a writable connection, before scope persistence/container start.
+    inbound.execute_batch("BEGIN IMMEDIATE; COMMIT;")?;
     Ok(SessionConnections {
-        inbound: open_database(
-            control.join("inbound.db"),
-            inbound_sql,
-            "NORMAL",
-            SESSION_SCHEMA_VERSION,
-        )?,
+        inbound,
         outbound: open_database(
             out.join("outbound.db"),
             outbound_sql,
@@ -104,6 +124,27 @@ pub fn open_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, St
             SESSION_SCHEMA_VERSION,
         )?,
     })
+}
+
+fn set_persist_wal(connection: &Connection) -> Result<(), StoreError> {
+    let database = std::ffi::CString::new("main").expect("static database name has no NUL");
+    let mut persist: std::ffi::c_int = 1;
+    // SQLITE_FCNTL_PERSIST_WAL expects a pointer to an integer flag.
+    let result = unsafe {
+        rusqlite::ffi::sqlite3_file_control(
+            connection.handle(),
+            database.as_ptr(),
+            rusqlite::ffi::SQLITE_FCNTL_PERSIST_WAL,
+            (&mut persist as *mut std::ffi::c_int).cast(),
+        )
+    };
+    if result != rusqlite::ffi::SQLITE_OK {
+        return Err(StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(result),
+            None,
+        )));
+    }
+    Ok(())
 }
 
 /// Open the agent view: immutable control input plus writable output databases.

@@ -297,3 +297,65 @@ fn supervisor_store_persists_sessions_and_gapless_supervisor_events() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn inbound_wal_remains_readable_after_close_and_supervisor_restart() {
+    let dir = temp_dir("persist-inbound-wal");
+    {
+        let supervisor = open_session_dir(&dir).unwrap();
+        append_inbound(supervisor.inbound(), "before close");
+        assert!(dir.join("control/inbound.db-wal").exists());
+        assert!(dir.join("control/inbound.db-shm").exists());
+    }
+    assert!(
+        dir.join("control/inbound.db-wal").exists(),
+        "persistent WAL must survive the last writer closing"
+    );
+    assert!(
+        dir.join("control/inbound.db-shm").exists(),
+        "WAL shared-memory sidecar must be available to the read-only agent"
+    );
+    let agent = ms_store::open_agent_session_dir(&dir).unwrap();
+    assert_eq!(
+        agent
+            .inbound()
+            .query_row("SELECT count(*) FROM inbound", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    drop(agent);
+
+    let supervisor = open_session_dir(&dir).unwrap();
+    append_inbound(supervisor.inbound(), "after restart");
+    let agent = ms_store::open_agent_session_dir(&dir).unwrap();
+    assert_eq!(
+        agent
+            .inbound()
+            .query_row("SELECT count(*) FROM inbound", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+    drop(agent);
+    drop(supervisor);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn only_busy_locked_and_cantopen_storage_errors_are_transient() {
+    let busy = ms_store::StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+        None,
+    ));
+    let locked = ms_store::StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_LOCKED),
+        None,
+    ));
+    let cantopen = ms_store::StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CANTOPEN),
+        None,
+    ));
+    assert!(busy.is_transient());
+    assert!(locked.is_transient());
+    assert!(cantopen.is_transient());
+    assert!(!ms_store::StoreError::InvalidContract("test").is_transient());
+}

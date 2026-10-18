@@ -22,14 +22,15 @@ pub struct AgentContext {
 #[derive(Debug)]
 pub enum BootError {
     Config(String),
-    Storage(String),
+    Storage(ms_store::StoreError),
 }
 
 impl BootError {
-    pub const fn exit_code(&self) -> i32 {
+    pub fn exit_code(&self) -> i32 {
         match self {
             Self::Config(_) => exit_code(ExitReason::Config),
-            Self::Storage(_) => exit_code(ExitReason::Transient),
+            Self::Storage(error) if error.is_transient() => exit_code(ExitReason::Transient),
+            Self::Storage(_) => exit_code(ExitReason::Safety),
         }
     }
 }
@@ -37,12 +38,20 @@ impl BootError {
 impl fmt::Display for BootError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(message) | Self::Storage(message) => formatter.write_str(message),
+            Self::Config(message) => formatter.write_str(message),
+            Self::Storage(error) => write!(formatter, "storage failed: {error}"),
         }
     }
 }
 
-impl Error for BootError {}
+impl Error for BootError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Storage(error) => Some(error),
+            Self::Config(_) => None,
+        }
+    }
+}
 
 pub fn boot() -> Result<AgentContext, BootError> {
     let session_id = required_env("MS_SESSION_ID")?;
@@ -80,8 +89,7 @@ pub fn boot() -> Result<AgentContext, BootError> {
         return Err(BootError::Config("scope.json hash mismatch".to_owned()));
     }
 
-    let mut store = SessionStore::open_dir(&session_dir)
-        .map_err(|error| BootError::Storage(format!("cannot open session databases: {error}")))?;
+    let mut store = SessionStore::open_dir(&session_dir).map_err(BootError::Storage)?;
     store
         .append_agent_event(&AgentEvent {
             seq: 0,
@@ -94,7 +102,7 @@ pub fn boot() -> Result<AgentContext, BootError> {
             event_type: AgentEventType::Ready,
             data: json!({ "scope_hash": scope.hash }),
         })
-        .map_err(|error| BootError::Storage(format!("cannot emit agent.ready: {error}")))?;
+        .map_err(BootError::Storage)?;
 
     Ok(AgentContext {
         session_id,

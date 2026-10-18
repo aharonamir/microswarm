@@ -5,7 +5,7 @@ The agent core MUST end every process lifetime by writing an `agent.exit` event 
 | Reason | Exit code | Agent emits when | Supervisor action |
 |---|---|---|---|
 | `ok` | `0` | Received `control:shutdown`, flushed, exited cleanly | Mark `closed` |
-| `transient` | `75` (`EX_TEMPFAIL`) | Model/proxy unreachable after in-turn retries; SQLite busy beyond timeout; MCP server crashed and could not restart | Restart with backoff 1 s / 2 s / 4 s, max 3; then `failed` |
+| `transient` | `75` (`EX_TEMPFAIL`) | Model/proxy unreachable after in-turn retries; SQLite busy/locked beyond timeout or `SQLITE_CANTOPEN` for the read-only inbound database while its WAL sidecars cannot be opened; MCP server crashed and could not restart | Restart with backoff 1 s / 2 s / 4 s, max 3; then `failed` |
 | `safety` | `77` (`EX_NOPERM`) | Permission engine returned `deny` on an action the turn cannot proceed without; scope invariant violated at boot; `max_turns`/`max_tokens` exceeded | **Never restart.** Mark `failed`, `close_reason=safety` |
 | `config` | `78` (`EX_CONFIG`) | `control/scope.json` missing/invalid/hash mismatch; required MCP server not in scope; model not configured; model HTTP 401/403 | Never restart. Mark `failed`; notify operator |
 

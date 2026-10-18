@@ -97,3 +97,10 @@ fn unsupported_and_malformed_inbound_are_acknowledged_with_error_events() {
     drop(supervisor);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn non_transient_store_failures_do_not_use_transient_exit_code() {
+    let error =
+        ms_agent::agent_loop::LoopError::Store(ms_store::StoreError::InvalidContract("test"));
+    assert_eq!(error.exit_code(), 77);
+}
