@@ -112,6 +112,23 @@ fn agent_session_opens_control_database_read_only_and_writes_only_under_out() {
             .unwrap(),
         1
     );
+    // The agent's read-only view must continue to read the live WAL while the
+    // supervisor retains its writer connection for the entire session.
+    supervisor
+        .inbound()
+        .execute(
+            "INSERT INTO inbound(kind, body) VALUES ('approval_result', '{\"decision\":\"denied\"}')",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        agent
+            .inbound()
+            .query_row("SELECT count(*) FROM inbound", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
     assert!(agent.inbound().execute(
         "INSERT INTO inbound(kind, body) VALUES ('approval_result', '{\"decision\":\"approved\"}')",
         [],

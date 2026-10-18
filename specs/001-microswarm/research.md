@@ -113,6 +113,8 @@ The measurement starts the CLI operation with a monotonic timer; `start --attach
 
 **Decision:** the supervisor must keep its inbound writer connection open while the session runs, ensuring WAL shared-memory sidecars exist before container start; agent opens only the database read-only and does not change journal mode or initialize schema. A read-only bind mount is sufficient under this lifecycle. The runtime test must cover read access and failed writes through the actual read-only bind mount.
 
+**Lifecycle verification (2026-10-18):** `ms_store::SessionConnections` owns the supervisor's inbound `rusqlite::Connection`; its owner must remain in the live session record until teardown. The store regression test retains that owner while an agent read-only connection is open, appends a second inbound row through the writer, and verifies the agent sees it. The agent-side SQL insert of a forged `approval_result` still fails. This verifies the connection lifetime contract at the store boundary. The supervisor's session registry/runtime adapter are not implemented yet, so production ownership through container teardown remains to be wired by T036/T039.
+
 ---
 
 ## R-07 — Shell command evaluation

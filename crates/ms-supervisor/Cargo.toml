@@ -30,5 +30,9 @@ name = "us1-approval"
 path = "../../tests/integration/us1_approval.rs"
 
 [[test]]
+name = "mount-escape"
+path = "../../tests/adversarial/mount_escape.rs"
+
+[[test]]
 name = "foundational-config-i18n"
 path = "tests/foundational.rs"
