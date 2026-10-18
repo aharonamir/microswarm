@@ -131,9 +131,27 @@ pub fn evaluate_shell(command: &str) -> PermitDecision {
         let basename = program.rsplit('/').next().unwrap_or(program);
         matches!(
             basename,
-            "sh" | "bash" | "dash" | "zsh" | "ksh" | "fish" | "perl" | "ruby" | "node"
-                | "php" | "lua" | "env" | "eval" | "exec" | "xargs" | "nohup"
-                | "timeout" | "nice" | "sudo" | "su" | "doas" | "busybox"
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "ksh"
+                | "fish"
+                | "perl"
+                | "ruby"
+                | "node"
+                | "php"
+                | "lua"
+                | "env"
+                | "eval"
+                | "exec"
+                | "xargs"
+                | "nohup"
+                | "timeout"
+                | "nice"
+                | "sudo"
+                | "su"
+                | "doas"
+                | "busybox"
         ) || basename.starts_with("python")
     });
     if complex || risky_program {
