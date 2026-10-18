@@ -11,7 +11,7 @@
 
 - Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T024 and T027, plus agent tasks T028–T031. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
 - Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, target-aware dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,919 / 6,000; ms-supervisor + shared crates 1,679 / 6,000.
-- T022, T023 and T024 are red against the current CLI/agent stubs; keep them as acceptance gates until the US1 implementation lands. Review remediation in progress before resuming T025. T027 is green for the shell parsing branches. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- T022, T023 and T024 are red against the current CLI/agent stubs; keep them as acceptance gates until the US1 implementation lands. Review remediation in progress before resuming T025. T027 is green for the unparseable deny and conservative parseable ask branches; the simple-command allow boundary is covered. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
 - 2026-10-18 review remediation: R-13 confirmed read-only WAL reads require the live supervisor writer/sidecars; session databases now use `control/` (read-only to the agent) and `out/` (agent writable). Scope intersection/subset, member delegation clearing, history deltas, missing ceiling path handling, role-kind env, auth exit mapping, unknown inbound acknowledgement, and permit-token dispatch changes are implemented with targeted tests. Store-level lifecycle coverage confirms the retained writer serves new rows while the agent's read-only connection stays open. T025 now has a compileable ignored adversarial integration draft; container creation and the complete supervisor session-lifetime wiring remain pending T036/T039.
 
 ---
@@ -71,7 +71,7 @@
 - [x] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs` (red against CLI/supervisor stubs; checks marker absent before approval and present afterward)
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level; writes to `/session/control/` and forged `approval_result` rows fail — `tests/adversarial/mount_escape.rs` (compileable, ignored red draft; waits for T036/T039 container/session lifecycle)
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
-- [x] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (shell parsing branches green; full permission flow remains T032)
+- [x] T027 [P] [US1] Unit: permit engine defaults to ask for operators/interpreters with parsed structure; only simple commands allow; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (shell parsing branches green; full permission flow remains T032)
 
 ### Agent core
 

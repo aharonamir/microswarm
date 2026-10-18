@@ -125,22 +125,18 @@ pub fn evaluate_shell(command: &str) -> PermitDecision {
             }),
         };
     };
-    let complex = commands.len() > 1
-        || command
-            .chars()
-            .any(|ch| matches!(ch, ';' | '>' | '<' | '`'))
-        || command.contains("&&")
-        || command.contains("||")
-        || command.contains("$(");
-    let interpreter_sink = commands.first().is_some_and(|first| {
-        let mut words = first.split_whitespace();
-        let program = words.next().unwrap_or("");
+    let complex = has_shell_operator_outside_quotes(command);
+    let risky_program = commands.first().is_some_and(|first| {
+        let program = first.split_whitespace().next().unwrap_or("");
+        let basename = program.rsplit('/').next().unwrap_or(program);
         matches!(
-            program,
-            "sh" | "bash" | "dash" | "zsh" | "python" | "python3" | "perl" | "ruby" | "node"
-        ) && words.any(|word| matches!(word, "-c" | "-e" | "--command"))
+            basename,
+            "sh" | "bash" | "dash" | "zsh" | "ksh" | "fish" | "perl" | "ruby" | "node"
+                | "php" | "lua" | "env" | "eval" | "exec" | "xargs" | "nohup"
+                | "timeout" | "nice" | "sudo" | "su" | "doas" | "busybox"
+        ) || basename.starts_with("python")
     });
-    if complex || interpreter_sink {
+    if complex || risky_program {
         PermitDecision {
             action: PermitAction::Ask,
             approval_prompt: Some(ApprovalPrompt {
@@ -148,8 +144,6 @@ pub fn evaluate_shell(command: &str) -> PermitDecision {
                 parsed_structure: ParsedCommand {
                     kind: if commands.len() > 1 {
                         "pipeline"
-                    } else if interpreter_sink {
-                        "interpreter_sink"
                     } else {
                         "compound"
                     },
@@ -165,6 +159,35 @@ pub fn evaluate_shell(command: &str) -> PermitDecision {
             tool_error: None,
         }
     }
+}
+
+fn has_shell_operator_outside_quotes(command: &str) -> bool {
+    let mut quote = None;
+    let mut escaped = false;
+    for ch in command.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' && quote != Some('\'') {
+            escaped = true;
+            continue;
+        }
+        if let Some(active) = quote {
+            if ch == active {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' => quote = Some(ch),
+            '\n' | ';' | '&' | '|' | '<' | '>' | '`' | '$' | '(' | ')' | '{' | '}' => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 fn split_pipeline(command: &str) -> Option<Vec<String>> {

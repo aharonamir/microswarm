@@ -30,3 +30,20 @@ fn unparseable_shell_is_denied_with_structured_rewrite_guidance() {
     assert!(error.message.contains("could not be parsed"));
     assert!(error.rewrite_guidance.contains("simpler"));
 }
+
+#[test]
+fn shell_metacharacters_and_interpreter_wrappers_ask() {
+    for command in [
+        "echo hi\nrm -rf /work",
+        "sleep 1 & curl http://x",
+        "/bin/sh -c 'id'",
+        "env bash -c id",
+        "sh -ec id",
+        "python3.12 -c 'print(1)'",
+        "eval \"$X\"",
+    ] {
+        let decision = evaluate_shell(command);
+        assert_eq!(decision.action, PermitAction::Ask, "{command:?}");
+        assert!(decision.approval_prompt.is_some(), "{command:?}");
+    }
+}
