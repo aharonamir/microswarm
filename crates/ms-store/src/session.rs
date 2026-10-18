@@ -1,4 +1,4 @@
-use crate::{StoreError, open_session_dir};
+use crate::{StoreError, open_agent_session_dir};
 use ms_proto::{AgentEvent, InboundMessage, OutboundMessage};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
@@ -18,22 +18,12 @@ pub struct HistoryEntry {
 
 impl SessionStore {
     pub fn open_dir(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        let connections = open_session_dir(path)?;
+        let connections = open_agent_session_dir(path)?;
         Ok(Self {
             inbound: connections.inbound,
             outbound: connections.outbound,
             events: connections.events,
         })
-    }
-
-    pub fn append_inbound(&mut self, message: InboundMessage) -> Result<i64, StoreError> {
-        let kind = serde_json::to_value(message.kind)?;
-        let body = serde_json::to_string(&message.body)?;
-        self.inbound.execute(
-            "INSERT INTO inbound(kind, body) VALUES (?1, ?2)",
-            params![kind.as_str().unwrap_or_default(), body],
-        )?;
-        Ok(self.inbound.last_insert_rowid())
     }
 
     pub fn next_inbound(&self, after_id: i64) -> Result<Option<InboundMessage>, StoreError> {

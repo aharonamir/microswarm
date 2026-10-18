@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
 
+#[derive(Debug)]
 pub struct TurnOutput {
     pub outbound: Vec<OutboundMessage>,
     pub history: Vec<HistoryEntry>,
@@ -17,19 +18,45 @@ pub trait TurnProcessor {
         context: &'a AgentContext,
         message: InboundMessage,
         history: Vec<HistoryEntry>,
-    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, String>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>>;
+}
+
+#[derive(Debug)]
+pub enum TurnError {
+    Config(String),
+    Transient(String),
+}
+
+impl TurnError {
+    pub const fn exit_code(&self) -> i32 {
+        match self {
+            Self::Config(_) => 78,
+            Self::Transient(_) => 75,
+        }
+    }
+}
+
+impl std::fmt::Display for TurnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Config(message) | Self::Transient(message) => f.write_str(message),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum LoopError {
     Signal(std::io::Error),
     Store(ms_store::StoreError),
-    Turn(String),
+    Turn(TurnError),
 }
 
 impl LoopError {
     pub const fn exit_code(&self) -> i32 {
-        75
+        match self {
+            Self::Turn(error) => error.exit_code(),
+            Self::Signal(_) | Self::Store(_) => 75,
+        }
     }
 }
 
@@ -60,6 +87,13 @@ pub async fn run<P: TurnProcessor>(
             let inbound_id = message
                 .id
                 .expect("stored inbound messages always have an id");
+            if matches!(&message.kind, InboundKind::Unknown(_)) {
+                context
+                    .store
+                    .commit_turn(inbound_id, &[], &[])
+                    .map_err(LoopError::Store)?;
+                continue;
+            }
             if message.kind == InboundKind::Control
                 && message.body.get("op").and_then(|op| op.as_str()) == Some("shutdown")
             {

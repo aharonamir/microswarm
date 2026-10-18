@@ -97,11 +97,21 @@ The measurement starts the CLI operation with a monotonic timer; `start --attach
 
 ## R-06 — Credential injection
 
-**Decision:** supervisor runs one HTTP proxy listener per active session on the session's internal network. The agent sends model requests to `MS_PROXY_URL` and remote-MCP requests to `MS_PROXY_URL/mcp/<server-id>`, with an optional `X-MS-Credential: <name>` header containing a scoped name only. The proxy resolves MCP ids from host `tools.toml`, checks the name is in the session's `scope.json` credential set, strips the header, injects the secret, and forwards over TLS.
+**Decision:** supervisor runs one HTTP proxy listener per active session on the session's internal network. The agent sends model requests to `MS_PROXY_URL` and remote-MCP requests to `MS_PROXY_URL/mcp/<server-id>`, with an optional `X-MS-Credential: <name>` header containing a scoped name only. The proxy resolves MCP ids from host `tools.toml`, checks the name against the authoritative scope JSON and hash stored in `supervisor.db`, strips the header, injects the secret, and forwards over TLS. Every supervisor authorization decision uses that stored scope, never the agent-visible `control/scope.json` file.
 
 **Rationale:** credentials never enter the container (FR-033). Per-session listeners mean the proxy identifies the caller by which listener received the request — no token to steal.
 
 **Alternatives:** a shared proxy authenticating by bearer token — the token itself becomes a credential inside the container. External vault service — violates Principle I for v1.
+
+**Amendment (2026-10-18):** persist both `sessions.scope_hash` and `sessions.scope_json` in `supervisor.db`; proxy and supervisor decisions must read this authoritative copy. The container's read-only scope file is for agent boot validation only.
+
+## R-13 — Read-only session control mount with SQLite WAL
+
+**Question:** can the agent read `control/inbound.db` in WAL mode through a read-only bind mount?
+
+**Experiment (2026-10-18):** on Podman 5.7.0, mounted a temporary control directory with `:ro` into Alpine Linux and queried a SQLite database with the Alpine SQLite 3.53.4 client using `file:/control/inbound.db?mode=ro`. With a supervisor writer connection keeping the WAL sidecars present, SQLite reported `wal` and read the committed row (`1`); the query exited 0. With the database closed first (no `-wal`/`-shm` sidecars), the same read-only bind mount failed with SQLite error 14 (`unable to open database file`).
+
+**Decision:** the supervisor must keep its inbound writer connection open while the session runs, ensuring WAL shared-memory sidecars exist before container start; agent opens only the database read-only and does not change journal mode or initialize schema. A read-only bind mount is sufficient under this lifecycle. The runtime test must cover read access and failed writes through the actual read-only bind mount.
 
 ---
 

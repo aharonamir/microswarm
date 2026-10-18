@@ -18,6 +18,8 @@ pub struct SessionRecord {
     pub channel: Option<String>,
     pub channel_thread: Option<String>,
     pub status: String,
+    pub scope_hash: Option<String>,
+    pub scope: Option<Value>,
     pub created_at: String,
     pub last_active_at: String,
 }
@@ -71,11 +73,12 @@ impl SupervisorStore {
 
     pub fn insert_session(&mut self, session: &SessionRecord) -> Result<(), StoreError> {
         self.connection.execute(
-            "INSERT INTO sessions(id, root_id, parent_id, role, kind, channel, channel_thread, status, created_at, last_active_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO sessions(id, root_id, parent_id, role, kind, channel, channel_thread, status, scope_hash, scope_json, created_at, last_active_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 session.id, session.root_id, session.parent_id, session.role, session.kind,
-                session.channel, session.channel_thread, session.status, session.created_at,
+                session.channel, session.channel_thread, session.status, session.scope_hash,
+                session.scope.as_ref().map(serde_json::to_string).transpose()?, session.created_at,
                 session.last_active_at
             ],
         )?;

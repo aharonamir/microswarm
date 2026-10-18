@@ -12,6 +12,7 @@ static PROCESS_START: OnceLock<Instant> = OnceLock::new();
 pub struct AgentContext {
     pub session_id: String,
     pub root_session_id: String,
+    pub kind: String,
     pub role: String,
     pub proxy_url: Option<String>,
     pub scope: Scope,
@@ -45,11 +46,17 @@ impl Error for BootError {}
 
 pub fn boot() -> Result<AgentContext, BootError> {
     let session_id = required_env("MS_SESSION_ID")?;
-    let role = required_env("MS_ROLE")?;
-    if !matches!(role.as_str(), "lead" | "member") {
+    let kind = required_env("MS_KIND")?;
+    if !matches!(kind.as_str(), "lead" | "member") {
         return Err(BootError::Config(format!(
-            "unsupported agent role {role:?}"
+            "unsupported agent kind {kind:?}"
         )));
+    }
+    let role = required_env("MS_ROLE")?;
+    if role.trim().is_empty() {
+        return Err(BootError::Config(
+            "MS_ROLE must contain the event role name".to_owned(),
+        ));
     }
     let root_session_id =
         std::env::var("MS_ROOT_SESSION_ID").unwrap_or_else(|_| session_id.clone());
@@ -57,7 +64,7 @@ pub fn boot() -> Result<AgentContext, BootError> {
     let session_dir = std::env::var_os("MS_SESSION_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/session"));
-    let scope_path = session_dir.join("scope.json");
+    let scope_path = session_dir.join("control/scope.json");
     let scope_bytes = std::fs::read(&scope_path).map_err(|error| {
         BootError::Config(format!("cannot read {}: {error}", scope_path.display()))
     })?;
@@ -92,6 +99,7 @@ pub fn boot() -> Result<AgentContext, BootError> {
     Ok(AgentContext {
         session_id,
         root_session_id,
+        kind,
         role,
         proxy_url,
         scope,

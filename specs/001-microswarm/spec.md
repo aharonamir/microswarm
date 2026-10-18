@@ -15,7 +15,7 @@ An operator installs MicroSwarm on a host, connects one channel, and messages it
 
 **Why this priority:** this is the two-file contract end to end. Nothing else works without it, and on its own it is already a usable product — NanoClaw's baseline with a thinner runtime.
 
-**Independent test:** send a message on the CLI channel; verify a reply arrives, a container labelled with the session id ran, and the session directory contains `inbound.db`, `outbound.db` and `scope.json`.
+**Independent test:** send a message on the CLI channel; verify a reply arrives, a container labelled with the session id ran, and the session directory contains `control/inbound.db`, `control/scope.json`, `out/outbound.db` and `out/events.db`.
 
 **Acceptance scenarios:**
 
@@ -32,7 +32,7 @@ A user asks for something large. The lead decides to delegate, calls `spawn_memb
 
 **Why this priority:** per-member isolation is the product's differentiator. Without it MicroSwarm is NanoClaw.
 
-**Independent test:** with a team skill that declares a `researcher` role, ask a question that triggers delegation; verify two containers ran, the member's `scope.json` is a strict subset of the lead's, and after dismissal only the lead container remains.
+**Independent test:** with a team skill that declares a `researcher` role, ask a question that triggers delegation; verify two containers ran, the member's `control/scope.json` is a strict subset of the lead's, and after dismissal only the lead container remains.
 
 **Acceptance scenarios:**
 
@@ -112,10 +112,10 @@ An operator wants to know what happened in a session: which members ran, what ea
 - **A member tries to spawn a member.** Members cannot delegate in v1; `spawn_member` is not in a member's tool list, and a forged call is rejected by the supervisor.
 - **Scope intersection is empty.** The spawn still succeeds with an empty scope only if the request asked for nothing; otherwise it fails with reason `scope_empty` rather than producing a useless member.
 - **User never answers an `ask` gate.** The gate expires after the approval timeout and resolves as `deny`.
-- **Disk full while writing `scope.json`.** No container is started.
+- **Disk full while writing `control/scope.json`.** No container is started.
 - **Container runtime unavailable.** Spawns fail closed; the lead receives `member_failed` reason `spawn_error`.
-- **Two messages arrive for the same session concurrently.** They are appended to `inbound.db` in order; the core processes them sequentially.
-- **A member writes to `outbound.db` after dismissal began.** Writes during the grace window are delivered; the container is force-stopped after the window.
+- **Two messages arrive for the same session concurrently.** They are appended to `control/inbound.db` in order; the core processes them sequentially.
+- **A member writes to `out/outbound.db` after dismissal began.** Writes during the grace window are delivered; the container is force-stopped after the window.
 - **Clock skew.** Deadlines are computed and enforced only by the supervisor, persisted as start time plus duration; containers never compare clocks.
 
 ---
@@ -144,10 +144,10 @@ An operator wants to know what happened in a session: which members ran, what ea
 
 **Storage**
 
-- **FR-020:** Each session MUST have its own directory containing `inbound.db`, `outbound.db`, `events.db` and `scope.json`.
+- **FR-020:** Each session MUST have its own directory containing `control/inbound.db`, `control/scope.json`, `out/outbound.db` and `out/events.db`. `control/` MUST be bind-mounted read-only into the agent container; `out/` MUST be bind-mounted read-write.
 - **FR-021:** Each SQLite file MUST have exactly one writer: the supervisor writes `inbound.db`; the agent writes `outbound.db` and `events.db`.
 - **FR-022:** All SQLite files MUST use WAL mode.
-- **FR-023:** A container MUST be able to reach only its own session directory and the mounts its scope grants.
+- **FR-023:** A container MUST be able to reach only its own read-only `control/`, read-write `out/`, and the mounts its scope grants. It MUST NOT be able to modify the control database or scope file.
 
 **Supervisor**
 
@@ -169,7 +169,7 @@ An operator wants to know what happened in a session: which members ran, what ea
 - **FR-044:** A member's scope MUST start empty and be computed as `requested ∩ lead_scope ∩ system_ceiling`, independently for mounts, credentials and tools.
 - **FR-045:** Mount intersection MUST also intersect access mode: a member cannot get `rw` on a path the lead holds `ro`.
 - **FR-046:** Any part of a request removed by intersection MUST be recorded in a `scope.narrowed` event.
-- **FR-047:** `scope.json` MUST be written and fsynced before the container starts, and MUST NOT change while it runs.
+- **FR-047:** `control/scope.json` MUST be written and fsynced before the container starts, and MUST NOT change while it runs. The authoritative scope and hash MUST also be persisted in `supervisor.db`; supervisor and proxy decisions MUST use that stored copy.
 - **FR-048:** Members MUST NOT be able to spawn members in v1.
 - **FR-049:** Teams MAY be formed at runtime or declared by a team skill with a per-role scope manifest.
 

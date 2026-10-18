@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use rusqlite::OpenFlags;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -8,7 +9,8 @@ use std::{
 const SESSION_SCHEMA: &str = include_str!("../../../specs/001-microswarm/contracts/session-db.sql");
 const SUPERVISOR_SCHEMA: &str =
     include_str!("../../../specs/001-microswarm/contracts/supervisor-db.sql");
-const SCHEMA_VERSION: i64 = 1;
+const SESSION_SCHEMA_VERSION: i64 = 1;
+const SUPERVISOR_SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug)]
 pub enum StoreError {
@@ -77,20 +79,68 @@ impl SessionConnections {
 
 pub fn open_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, StoreError> {
     let path = path.as_ref();
-    fs::create_dir_all(path)?;
+    let control = path.join("control");
+    let out = path.join("out");
+    fs::create_dir_all(&control)?;
+    fs::create_dir_all(&out)?;
     let (inbound_sql, outbound_sql, events_sql) = session_sections()?;
     Ok(SessionConnections {
-        inbound: open_database(path.join("inbound.db"), inbound_sql, "NORMAL")?,
-        outbound: open_database(path.join("outbound.db"), outbound_sql, "NORMAL")?,
-        events: open_database(path.join("events.db"), events_sql, "NORMAL")?,
+        inbound: open_database(
+            control.join("inbound.db"),
+            inbound_sql,
+            "NORMAL",
+            SESSION_SCHEMA_VERSION,
+        )?,
+        outbound: open_database(
+            out.join("outbound.db"),
+            outbound_sql,
+            "NORMAL",
+            SESSION_SCHEMA_VERSION,
+        )?,
+        events: open_database(
+            out.join("events.db"),
+            events_sql,
+            "NORMAL",
+            SESSION_SCHEMA_VERSION,
+        )?,
+    })
+}
+
+/// Open the agent view: immutable control input plus writable output databases.
+/// The supervisor must retain its inbound writer connection for the session lifetime.
+pub fn open_agent_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, StoreError> {
+    let path = path.as_ref();
+    Ok(SessionConnections {
+        inbound: open_existing(
+            path.join("control/inbound.db"),
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?,
+        outbound: open_existing(
+            path.join("out/outbound.db"),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )?,
+        events: open_existing(
+            path.join("out/events.db"),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )?,
     })
 }
 
 pub fn open_supervisor_db(path: impl AsRef<Path>) -> Result<Connection, StoreError> {
-    open_database(path.as_ref().to_owned(), SUPERVISOR_SCHEMA, "FULL")
+    open_database(
+        path.as_ref().to_owned(),
+        SUPERVISOR_SCHEMA,
+        "FULL",
+        SUPERVISOR_SCHEMA_VERSION,
+    )
 }
 
-fn open_database(path: PathBuf, schema: &str, synchronous: &str) -> Result<Connection, StoreError> {
+fn open_database(
+    path: PathBuf,
+    schema: &str,
+    synchronous: &str,
+    schema_version: i64,
+) -> Result<Connection, StoreError> {
     if let Some(parent) = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -105,13 +155,22 @@ fn open_database(path: PathBuf, schema: &str, synchronous: &str) -> Result<Conne
 
     let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     match version {
-        SCHEMA_VERSION => {}
+        current if current == schema_version => {}
         0 => {
             connection.execute_batch(schema)?;
-            connection.execute_batch(&format!("PRAGMA user_version={SCHEMA_VERSION};"))?;
+            connection.execute_batch(&format!("PRAGMA user_version={schema_version};"))?;
+        }
+        1 if schema_version == SUPERVISOR_SCHEMA_VERSION => {
+            connection.execute_batch("ALTER TABLE sessions ADD COLUMN scope_json TEXT CHECK (scope_json IS NULL OR json_valid(scope_json)); PRAGMA user_version=2;")?;
         }
         other => return Err(StoreError::UnsupportedSchemaVersion(other)),
     }
+    Ok(connection)
+}
+
+fn open_existing(path: PathBuf, flags: OpenFlags) -> Result<Connection, StoreError> {
+    let connection = Connection::open_with_flags(path, flags)?;
+    connection.busy_timeout(Duration::from_secs(5))?;
     Ok(connection)
 }
 

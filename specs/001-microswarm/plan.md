@@ -4,9 +4,9 @@
 
 ## Summary
 
-Two Rust binaries and one MCP server. The **supervisor** (`microswarmd`) runs on the host: it owns channels, sessions, the container runtime, scope computation, the credential proxy and `supervisor.db`. The **agent core** (`microswarm-agent`) runs inside each container: it polls `inbound.db`, runs one turn against a model, dispatches tools over MCP, evaluates permissions, and writes `outbound.db` and `events.db`. First-party tools (fs, shell, web fetch) ship separately as **`microswarm-tools`**, an MCP server that runs inside the agent container.
+Two Rust binaries and one MCP server. The **supervisor** (`microswarmd`) runs on the host: it owns channels, sessions, the container runtime, scope computation, the credential proxy and `supervisor.db`. The **agent core** (`microswarm-agent`) runs inside each container: it polls `/session/control/inbound.db`, runs one turn against a model, dispatches tools over MCP, evaluates permissions, and writes `/session/out/outbound.db` and `/session/out/events.db`. First-party tools (fs, shell, web fetch) ship separately as **`microswarm-tools`**, an MCP server that runs inside the agent container.
 
-Delegation is four tools the core exposes to a lead. The core does not spawn anything: it writes a `delegation_request` to `outbound.db`, and the supervisor decides.
+Delegation is four tools the core exposes to a lead. The core does not spawn anything: it writes a `delegation_request` to `out/outbound.db`, and the supervisor decides.
 
 ## Technical context
 
@@ -34,9 +34,9 @@ Delegation is four tools the core exposes to a lead. The core does not spawn any
 | I | Audit budget | ✅ | Two binaries, budget tracked by CI (`tokei` gate) |
 | II | Isolation | ✅ | One agent per container; permission engine has no off switch |
 | III | Authority | ✅ | Core writes `delegation_request`; only supervisor talks to the runtime socket |
-| IV | Scope | ✅ | `scope.json` written + fsynced before `container create`; proptest on intersection |
+| IV | Scope | ✅ | `control/scope.json` written + fsynced before `container create`; proptest on intersection |
 | V | Boundaries | ✅ | Tools via MCP; first-party tools are a separate binary |
-| VI | Events | ✅ | `events.db` written by the actor that acted; supervisor events in `supervisor.db` |
+| VI | Events | ✅ | `out/events.db` written by the actor that acted; supervisor events in `supervisor.db` |
 | VII | Fail closed | ✅ | Unknown exit ⇒ `safety`; gates expire on restart; scope error ⇒ no spawn |
 | VIII | Dumb core | ✅ | No memory, evolution or evaluation in either binary |
 
@@ -82,7 +82,7 @@ crates/
 │       ├── mcp.rs                 # MCP client: stdio + HTTP
 │       ├── permit.rs              # allow/ask/deny engine
 │       ├── delegate.rs            # spawn/send/dismiss/list → delegation_request
-│       └── emit.rs                # events.db writer
+│       └── emit.rs                # out/events.db writer
 ├── ms-supervisor/                 # bin: microswarmd (host)
 │   └── src/
 │       ├── main.rs
@@ -93,7 +93,7 @@ crates/
 │       ├── router.rs              # channel → session resolution, inbound writes, outbound delivery
 │       ├── sessions.rs            # session registry + lifecycle state machine
 │       ├── runtime.rs             # container create/start/stop/watch via bollard
-│       ├── scope.rs               # intersection + ceiling + scope.json writer
+│       ├── scope.rs               # intersection + ceiling + control/scope.json writer
 │       ├── policy.rs              # spawn policy resolution
 │       ├── approvals.rs           # ask gates, expiry, re-issue
 │       ├── deadlines.rs           # delegation circuit breaker
@@ -123,13 +123,13 @@ images/
 ### Message flow (single agent)
 
 ```text
-channel ─▶ router ─▶ sessions/{id}/inbound.db ─▶ [agent container] ─▶ outbound.db ─▶ router ─▶ channel
+channel ─▶ router ─▶ sessions/{id}/control/inbound.db ─▶ [agent container] ─▶ out/outbound.db ─▶ router ─▶ channel
                                                       │
-                                                      ├─▶ events.db ─▶ supervisor event stream ─▶ host plane
+                                                      ├─▶ out/events.db ─▶ supervisor event stream ─▶ host plane
                                                       └─▶ HTTP via proxy (credentials injected) ─▶ model / remote MCP
 ```
 
-The agent is woken by the supervisor sending `SIGUSR1` after an inbound write, with a fallback poll every 500 ms. The supervisor tails `outbound.db` using SQLite's `data_version` pragma and a 100 ms poll — see research R-05.
+The agent is woken by the supervisor sending `SIGUSR1` after an inbound write, with a fallback poll every 500 ms. The supervisor tails `out/outbound.db` using SQLite's `data_version` pragma and a 100 ms poll — see research R-05.
 
 ### Delegation flow
 
@@ -141,7 +141,7 @@ supervisor:
   └─ policy.rs: resolve spawn policy for role → allow | ask | deny
        ask  → approvals.rs → prompt user → wait
        deny → write inbound to lead: delegation_result{denied}
-  └─ scope.rs: requested ∩ lead_scope ∩ ceiling → scope.json (fsync)
+  └─ scope.rs: requested ∩ lead_scope ∩ ceiling → supervisor.db scope + control/scope.json (fsync)
   └─ runtime.rs: create container (labels, mounts, net=proxy-only), start
   └─ deadlines.rs: record deadline in supervisor.db
   └─ write inbound to lead: delegation_result{member_id}
@@ -157,12 +157,14 @@ supervisor: graceful stop → session status=closed
 Every agent container is created with:
 
 - Read-only root filesystem from a `FROM scratch` image (agent + tools binaries + CA bundle).
-- `/session` bind-mounted rw from `sessions/{id}/` — the only always-present mount.
-- Additional mounts exactly as listed in `scope.json`, with their `ro` / `rw` mode.
+- `/session/control` bind-mounted read-only from `sessions/{id}/control/` (scope + inbound DB).
+- `/session/out` bind-mounted read-write from `sessions/{id}/out/` (agent outbound DB + events DB).
+- Additional mounts exactly as listed in the authoritative scope, with their `ro` / `rw` mode.
 - `/tmp` as a size-limited tmpfs.
 - Network: attached to a per-session internal network whose only reachable endpoint is that session's proxy listener. No route to other containers, the host, or the internet except via the proxy.
 - `--cap-drop=ALL`, `no-new-privileges`, non-root UID, seccomp default profile, pids limit, memory limit.
 - No environment variables carrying secrets. Runtime metadata may include `MS_SESSION_ID`, `MS_ROLE`, `MS_PROXY_URL`, `MS_MODEL_PROVIDER`, `MS_MODEL_NAME`, `MS_MODEL_CREDENTIAL` and `MS_MCP_SERVERS`; these are non-secret selectors/descriptors, with credential fields containing only scoped credential names. `MS_MCP_SERVERS` carries launch metadata for granted servers, never credential values.
+- `MS_KIND` is `lead` or `member`; `MS_ROLE` is the role name recorded as `agent_role` in events. The supervisor's authoritative scope and hash are persisted in `supervisor.db`; proxy and supervisor authorization decisions use that stored copy, never `control/scope.json`.
 
 ### Scope algebra
 
@@ -190,7 +192,7 @@ Computed per dimension, implemented in `ms-proto::scope` as pure functions so th
 4. Mark sessions active-in-db-but-no-container as `crashed` and apply the exit policy as `transient`.
 5. Mark all `pending` approvals `expired`; re-issue each as a new approval.
 6. Re-arm delegation deadlines from stored `started_at + timeout`.
-7. Resume tailing every adopted session's `outbound.db` and `events.db` from the stored cursors.
+7. Resume tailing every adopted session's `out/outbound.db` and `out/events.db` from the stored cursors.
 
 ## Phases
 

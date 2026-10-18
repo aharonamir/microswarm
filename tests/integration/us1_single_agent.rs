@@ -1,4 +1,5 @@
 #[path = "harness.rs"]
+#[allow(dead_code)]
 mod harness;
 
 use harness::IntegrationHarness;
@@ -25,7 +26,12 @@ fn cli_message_gets_reply_from_one_labeled_container() {
     );
     let session_dir = &sessions[0];
     let session_id = session_dir.file_name().unwrap().to_string_lossy();
-    for filename in ["events.db", "inbound.db", "outbound.db", "scope.json"] {
+    for filename in [
+        "control/inbound.db",
+        "control/scope.json",
+        "out/outbound.db",
+        "out/events.db",
+    ] {
         assert!(
             fs::metadata(session_dir.join(filename)).is_ok(),
             "missing {filename} in {}",

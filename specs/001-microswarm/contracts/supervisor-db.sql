@@ -1,5 +1,5 @@
 -- MicroSwarm supervisor.db  (writer: supervisor only)
--- PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA user_version=1;
+-- PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA user_version=2;
 -- synchronous=FULL here (vs NORMAL for session files): this file holds the state that has
 -- no other source of truth after a crash.
 
@@ -17,6 +17,7 @@ CREATE TABLE sessions (
   container_id    TEXT,
   restart_count   INTEGER NOT NULL DEFAULT 0,
   scope_hash      TEXT,
+  scope_json      TEXT CHECK (scope_json IS NULL OR json_valid(scope_json)),
   created_at      TEXT NOT NULL,
   last_active_at  TEXT NOT NULL,
   closed_at       TEXT,

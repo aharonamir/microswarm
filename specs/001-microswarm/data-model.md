@@ -16,10 +16,12 @@ $MS_HOME/
 │   └── ceiling.toml              # system ceiling (paths/creds never grantable)
 ├── skills/<name>/SKILL.md        # skills, incl. team skills
 └── sessions/<session_id>/
-    ├── inbound.db                # writer: supervisor
-    ├── outbound.db               # writer: agent
-    ├── events.db                 # writer: agent
-    └── scope.json                # writer: supervisor, before start; immutable after
+    ├── control/                  # read-only container mount
+    │   ├── inbound.db            # writer: supervisor, reader: agent
+    │   └── scope.json            # supervisor-authored; immutable while running
+    └── out/                      # read-write container mount
+        ├── outbound.db           # writer: agent
+        └── events.db              # writer: agent
 ```
 
 `session_id` is a ULID. Session directories are retained after teardown for `retention_days` (default 30).
@@ -59,7 +61,7 @@ pending ─▶ starting ─▶ ready ⇄ busy ─▶ stopping ─▶ closed     
    └─ scope/spawn error ─▶ failed ◀───┘ (safety / config / unknown / limit)
 ```
 
-- `pending` — row written, `scope.json` not yet fsynced.
+- `pending` — session row written; authoritative scope has not yet been stored and `control/scope.json` has not yet been fsynced.
 - `starting` — container created; waiting for `agent.ready`.
 - `ready` / `busy` — idle vs. processing a turn (from agent events).
 - `stopping` — graceful stop signalled; grace window running.
@@ -68,7 +70,7 @@ pending ─▶ starting ─▶ ready ⇄ busy ─▶ stopping ─▶ closed     
 
 ### Scope
 
-Serialized to `scope.json` (schema: [`contracts/scope.schema.json`](./contracts/scope.schema.json)).
+Serialized to `control/scope.json` (schema: [`contracts/scope.schema.json`](./contracts/scope.schema.json)); its authoritative copy and hash are stored in `supervisor.db` with the session. The mounted JSON is a read-only agent input, never the supervisor's source of truth.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -125,7 +127,7 @@ requested ─▶ awaiting_approval ─▶ spawning ─▶ active ⇄ waiting_rep
 | `created_at`, `resolved_at` | timestamp | |
 | `reissued_as` | ULID? | Set when expired on restart and re-issued |
 
-### Message (`inbound.db`, `outbound.db`)
+### Message (`control/inbound.db`, `out/outbound.db`)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -134,13 +136,15 @@ requested ─▶ awaiting_approval ─▶ spawning ─▶ active ⇄ waiting_rep
 | `body` | JSON | Kind-specific |
 | `created_at` | timestamp | |
 
-**Acknowledgement:** there is no `acked_at` column, because the agent may not write `inbound.db` (single writer). Instead the agent records the last processed inbound id in `outbound.db.cursor` within the same transaction as the reply. A message is acknowledged when `outbound.cursor.last_inbound_id >= message.id`. On restart the agent resumes from that cursor.
+**Acknowledgement:** there is no `acked_at` column, because the agent may not write `control/inbound.db` (single writer). Instead the agent records the last processed inbound id in `out/outbound.db.cursor` within the same transaction as the reply. A message is acknowledged when `outbound.cursor.last_inbound_id >= message.id`. On restart the agent resumes from that cursor.
+
+Inbound rows with a kind unknown to this agent version remain recorded in `control/inbound.db`; the agent skips processing and advances the output cursor so an unrecognized row cannot crash or permanently block the session.
 
 **Inbound kinds:** `user_message`, `approval_result`, `delegation_result`, `member_reply`, `member_failed`, `task` (members), `control` (`shutdown`).
 
 **Outbound kinds:** `reply`, `approval_request`, `delegation_request`, `send_to_member`, `dismiss`.
 
-### Event (`events.db`, `supervisor.db.supervisor_events`)
+### Event (`out/events.db`, `supervisor.db.supervisor_events`)
 
 Schema: [`contracts/events.schema.json`](./contracts/events.schema.json).
 

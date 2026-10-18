@@ -1,6 +1,5 @@
 use ms_proto::{
-    AgentEvent, AgentEventType, InboundKind, InboundMessage, OutboundKind, OutboundMessage,
-    SupervisorEvent, SupervisorEventType,
+    AgentEvent, AgentEventType, OutboundKind, OutboundMessage, SupervisorEvent, SupervisorEventType,
 };
 use ms_store::{
     HistoryEntry, SessionRecord, SessionStore, SupervisorStore, open_session_dir,
@@ -31,6 +30,16 @@ fn agent_event() -> AgentEvent {
     }
 }
 
+fn append_inbound(connection: &Connection, text: &str) -> i64 {
+    connection
+        .execute(
+            "INSERT INTO inbound(kind, body) VALUES ('user_message', ?1)",
+            [json!({"text": text}).to_string()],
+        )
+        .unwrap();
+    connection.last_insert_rowid()
+}
+
 #[test]
 fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
     let dir = temp_dir("open");
@@ -48,9 +57,32 @@ fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        1
+        2
     );
     drop(db);
+
+    let old_path = dir.join("old-supervisor.db");
+    let old = Connection::open(&old_path).unwrap();
+    old.execute_batch(
+        "CREATE TABLE sessions(id TEXT PRIMARY KEY, scope_hash TEXT); PRAGMA user_version=1;",
+    )
+    .unwrap();
+    drop(old);
+    let migrated = open_supervisor_db(&old_path).unwrap();
+    assert_eq!(
+        migrated
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+    let has_scope_json: bool = migrated
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('sessions') WHERE name='scope_json')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(has_scope_json);
 
     let bad_path = dir.join("bad.db");
     let bad = Connection::open(&bad_path).unwrap();
@@ -61,17 +93,72 @@ fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
 }
 
 #[test]
+fn agent_session_opens_control_database_read_only_and_writes_only_under_out() {
+    let dir = temp_dir("split-session");
+    let supervisor = open_session_dir(&dir).unwrap();
+    supervisor
+        .inbound()
+        .execute(
+            "INSERT INTO inbound(kind, body) VALUES ('user_message', '{\"text\":\"hello\"}')",
+            [],
+        )
+        .unwrap();
+    let agent = ms_store::open_agent_session_dir(&dir).unwrap();
+    assert_eq!(
+        agent
+            .inbound()
+            .query_row("SELECT count(*) FROM inbound", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(agent.inbound().execute(
+        "INSERT INTO inbound(kind, body) VALUES ('approval_result', '{\"decision\":\"approved\"}')",
+        [],
+    ).is_err(), "read-only agent connection must reject forged control rows");
+    assert!(dir.join("control/inbound.db").exists());
+    assert!(dir.join("out/outbound.db").exists());
+    assert!(dir.join("out/events.db").exists());
+    drop(agent);
+    drop(supervisor);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn unknown_inbound_kind_is_read_and_can_be_acknowledged() {
+    let dir = temp_dir("unknown-inbound");
+    let supervisor = open_session_dir(&dir).unwrap();
+    supervisor
+        .inbound()
+        .execute_batch("PRAGMA ignore_check_constraints=ON;")
+        .unwrap();
+    supervisor
+        .inbound()
+        .execute(
+            "INSERT INTO inbound(kind, body) VALUES ('future_kind', '{\"value\":1}')",
+            [],
+        )
+        .unwrap();
+    let id = supervisor.inbound().last_insert_rowid();
+    let mut agent = SessionStore::open_dir(&dir).unwrap();
+    let message = agent.next_inbound(0).unwrap().unwrap();
+    assert_eq!(
+        message.kind,
+        ms_proto::InboundKind::Unknown("future_kind".into())
+    );
+    agent.commit_turn(id, &[], &[]).unwrap();
+    assert_eq!(agent.cursor().unwrap(), id);
+    drop(agent);
+    drop(supervisor);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn session_store_commits_outbound_and_cursor_together_and_appends_gapless_events() {
     let dir = temp_dir("session");
+    let supervisor = open_session_dir(&dir).unwrap();
     let mut store = SessionStore::open_dir(&dir).unwrap();
-    let inbound_id = store
-        .append_inbound(InboundMessage {
-            id: None,
-            kind: InboundKind::UserMessage,
-            body: json!({"text":"hello"}),
-            created_at: None,
-        })
-        .unwrap();
+    let inbound_id = append_inbound(supervisor.inbound(), "hello");
 
     store
         .commit_turn(
@@ -92,8 +179,9 @@ fn session_store_commits_outbound_and_cursor_together_and_appends_gapless_events
     store.append_agent_event(&agent_event()).unwrap();
     store.append_agent_event(&agent_event()).unwrap();
     drop(store);
+    drop(supervisor);
 
-    let outbound = Connection::open(dir.join("outbound.db")).unwrap();
+    let outbound = Connection::open(dir.join("out/outbound.db")).unwrap();
     let last_inbound: i64 = outbound
         .query_row(
             "SELECT last_inbound_id FROM cursor WHERE singleton=1",
@@ -106,7 +194,7 @@ fn session_store_commits_outbound_and_cursor_together_and_appends_gapless_events
         .unwrap();
     assert_eq!(last_inbound, inbound_id);
     assert_eq!(outbound_count, 1);
-    let events = Connection::open(dir.join("events.db")).unwrap();
+    let events = Connection::open(dir.join("out/events.db")).unwrap();
     let seqs = events
         .prepare("SELECT seq FROM events ORDER BY seq")
         .unwrap()
@@ -121,23 +209,10 @@ fn session_store_commits_outbound_and_cursor_together_and_appends_gapless_events
 #[test]
 fn session_store_reads_the_next_unprocessed_inbound_in_id_order() {
     let dir = temp_dir("inbound-cursor");
-    let mut store = SessionStore::open_dir(&dir).unwrap();
-    let first_id = store
-        .append_inbound(InboundMessage {
-            id: None,
-            kind: InboundKind::UserMessage,
-            body: json!({"text":"first"}),
-            created_at: None,
-        })
-        .unwrap();
-    let second_id = store
-        .append_inbound(InboundMessage {
-            id: None,
-            kind: InboundKind::UserMessage,
-            body: json!({"text":"second"}),
-            created_at: None,
-        })
-        .unwrap();
+    let supervisor = open_session_dir(&dir).unwrap();
+    let store = SessionStore::open_dir(&dir).unwrap();
+    let first_id = append_inbound(supervisor.inbound(), "first");
+    let second_id = append_inbound(supervisor.inbound(), "second");
 
     assert_eq!(store.next_inbound(0).unwrap().unwrap().id, Some(first_id));
     assert_eq!(
@@ -145,6 +220,8 @@ fn session_store_reads_the_next_unprocessed_inbound_in_id_order() {
         Some(second_id)
     );
     assert!(store.next_inbound(second_id).unwrap().is_none());
+    drop(store);
+    drop(supervisor);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -162,10 +239,25 @@ fn supervisor_store_persists_sessions_and_gapless_supervisor_events() {
             channel: Some("cli".into()),
             channel_thread: Some("main".into()),
             status: "pending".into(),
+            scope_hash: Some("sha256:authoritative".into()),
+            scope: Some(json!({"credentials":["model-key"],"hash":"sha256:authoritative"})),
             created_at: "now".into(),
             last_active_at: "now".into(),
         })
         .unwrap();
+    let db = open_supervisor_db(dir.join("supervisor.db")).unwrap();
+    let (scope_hash, scope_json): (String, String) = db
+        .query_row(
+            "SELECT scope_hash, scope_json FROM sessions WHERE id=?1",
+            ["01ARZ3NDEKTSV4RRFFQ69G5FAV"],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(scope_hash, "sha256:authoritative");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&scope_json).unwrap()["credentials"][0],
+        "model-key"
+    );
     let event = SupervisorEvent {
         seq: 0,
         ts: "2026-10-07T00:00:00Z".into(),

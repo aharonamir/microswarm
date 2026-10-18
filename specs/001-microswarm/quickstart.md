@@ -36,8 +36,8 @@ Verify:
 ```console
 $ microswarm sessions
 01JB… lead  ready  cli  containers: 1
-$ ls ~/.microswarm/sessions/01JB…/
-events.db  inbound.db  outbound.db  scope.json
+$ find ~/.microswarm/sessions/01JB…/ -maxdepth 2 -type f
+control/inbound.db  control/scope.json  out/events.db  out/outbound.db
 $ podman ps --filter label=ms.session=01JB… --format '{{.Names}}'
 ms-01jb…
 ```
@@ -74,7 +74,7 @@ $ microswarm trace 01JB…
 01JB… lead  ready
 ├─ 01JC… researcher  closed(dismissed)  scope: 1 mount(ro) · 3 tools · 1 cred
 └─ 01JD… tester      closed(dismissed)  scope: 2 mounts · 2 tools · 0 creds
-$ jq '.mounts, .narrowed' ~/.microswarm/sessions/01JD…/scope.json
+$ jq '.mounts, .narrowed' ~/.microswarm/sessions/01JD…/control/scope.json
 $ podman ps --filter label=ms.root=01JB… --format '{{.Labels}}' | wc -l
 1          # only the lead remains
 ```

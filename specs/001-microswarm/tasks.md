@@ -11,7 +11,8 @@
 
 - Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T024 and T027, plus agent tasks T028–T031. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
 - Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, target-aware dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,919 / 6,000; ms-supervisor + shared crates 1,679 / 6,000.
-- T022–T024 and T027 are red against the current CLI/agent stubs; keep them as acceptance gates until the US1 implementation lands. Next add adversarial tests T025–T026 before their matching isolation implementation. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- T022, T023 and T024 are red against the current CLI/agent stubs; keep them as acceptance gates until the US1 implementation lands. Review remediation in progress before resuming T025. T027 is green for the shell parsing branches. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
+- 2026-10-18 review remediation: R-13 confirmed read-only WAL reads require the live supervisor writer/sidecars; session databases now use `control/` (read-only to the agent) and `out/` (agent writable). Scope intersection/subset, member delegation clearing, history deltas, missing ceiling path handling, role-kind env, auth exit mapping, unknown inbound acknowledgement, and permit-token dispatch changes are implemented with targeted tests. Next is T025, after this review checkpoint.
 
 ---
 
@@ -65,16 +66,16 @@
 
 ### Tests first
 
-- [x] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs`
-- [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file
+- [x] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs` (red against current CLI/supervisor stubs)
+- [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file (red against current CLI/supervisor stubs)
 - [x] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs` (red against CLI/supervisor stubs; checks marker absent before approval and present afterward)
-- [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level — `tests/adversarial/mount_escape.rs`
+- [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level; writes to `/session/control/` and forged `approval_result` rows fail — `tests/adversarial/mount_escape.rs`
 - [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
-- [x] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (red until the permit engine lands)
+- [x] T027 [P] [US1] Unit: permit engine decisions incl. parseable complex shell ⇒ ask with parsed structure in approval prompt; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (shell parsing branches green; full permission flow remains T032)
 
 ### Agent core
 
-- [x] T028 [US1] Boot: read env, validate `scope.json` hash ⇒ `config` exit on mismatch; open dbs; emit `agent.ready` — `crates/ms-agent/src/main.rs`
+- [x] T028 [US1] Boot: read env, validate `control/scope.json` hash ⇒ `config` exit on mismatch; open read-only control and writable output DBs; emit `agent.ready` — `crates/ms-agent/src/main.rs`
 - [x] T029 [US1] Loop: wake on `SIGUSR1` or 500 ms poll; read past cursor; one turn; write outbound + cursor atomically — `crates/ms-agent/src/loop.rs`
 - [x] T030 [P] [US1] Model client via `MS_PROXY_URL`, OpenAI- and Anthropic-compatible, credential by name header — `crates/ms-agent/src/model.rs`
 - [x] T031 [P] [US1] MCP client adapter: launch stdio servers listed in scope, connect HTTP servers via proxy, list + call tools filtered by scope — `crates/ms-agent/src/mcp.rs`; fake stdio MCP integration tests green; runtime descriptor contract documented as `MS_MCP_SERVERS`; host `tools.toml` accepts only scoped credential names.
@@ -87,7 +88,7 @@
 
 - [ ] T036 [US1] Runtime adapter: create (labels, mounts from scope, read-only root, tmpfs, cap-drop, no-new-privileges, limits, per-session internal network), start, stop with grace, kill, signal — `crates/ms-supervisor/src/runtime.rs`
 - [ ] T037 [US1] Runtime events watcher: push exits to sessions (no polling) — `crates/ms-supervisor/src/runtime.rs`
-- [ ] T038 [US1] Lead scope from config ∩ ceiling ⇒ `scope.json` written + fsynced before create — `crates/ms-supervisor/src/scope.rs`
+- [ ] T038 [US1] Lead scope from config ∩ ceiling ⇒ authoritative scope/hash persisted in `supervisor.db`; `control/scope.json` written + fsynced before create — `crates/ms-supervisor/src/scope.rs`
 - [ ] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
 - [ ] T041 [US1] Per-session credential proxy: listener on session network, credential-name allowlist from scope, inject, forward over rustls; `proxy.*` events — `crates/ms-supervisor/src/proxy.rs`
@@ -123,7 +124,7 @@
 - [ ] T056 [US2] Delegation tools in core, lead-only, validated against `delegation-tools.json`; write outbound rows; block turn on result — `crates/ms-agent/src/delegate.rs`
 - [ ] T057 [US2] Team-skill install/parse/register; hash recorded; role instructions path — `crates/ms-supervisor/src/skills.rs`
 - [ ] T058 [US2] Spawn policy resolution: stricter of skill and `policy.toml`; `adhoc` default — `crates/ms-supervisor/src/policy.rs`
-- [ ] T059 [US2] Member scope: lead-path → host-path translation; `request ∩ template ∩ lead ∩ ceiling`; reject `scope_empty`; write `scope.json` — `crates/ms-supervisor/src/scope.rs`
+- [ ] T059 [US2] Member scope: lead-path → host-path translation; `request ∩ template ∩ lead ∩ ceiling`; reject `scope_empty`; persist authoritative scope; write `control/scope.json` — `crates/ms-supervisor/src/scope.rs`
 - [ ] T060 [US2] Delegation orchestration: requested → awaiting_approval → spawning → active; member limit; `delegation_result` to lead; `task` to member — `crates/ms-supervisor/src/delegation.rs`
 - [ ] T061 [US2] Routing: `send_to_member` ⇒ member inbound `task`; member `reply` ⇒ lead inbound `member_reply`; reject rows from wrong session kinds — `crates/ms-supervisor/src/router.rs`
 - [ ] T062 [US2] Dismissal: `control:shutdown`, grace window, force stop, `close_reason=dismissed`; not policy-gated — `crates/ms-supervisor/src/delegation.rs`

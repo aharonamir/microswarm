@@ -1,9 +1,11 @@
 -- MicroSwarm per-session databases.
+-- Paths: control/inbound.db (supervisor writer; agent read-only mount),
+-- out/outbound.db and out/events.db (agent writers; supervisor readers).
 -- Each statement block belongs to exactly one file, and each file has exactly one writer.
 -- All files: PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;
 -- Schema version is tracked with PRAGMA user_version = 1.
 
--- ───────────────────────── inbound.db  (writer: supervisor · reader: agent)
+-- ───────────────────────── control/inbound.db  (writer: supervisor · read-only agent mount)
 CREATE TABLE inbound (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   kind        TEXT    NOT NULL CHECK (kind IN (
@@ -13,7 +15,7 @@ CREATE TABLE inbound (
   created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- ───────────────────────── outbound.db  (writer: agent · reader: supervisor)
+-- ───────────────────────── out/outbound.db  (writer: agent · reader: supervisor)
 CREATE TABLE outbound (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   kind        TEXT    NOT NULL CHECK (kind IN (
@@ -40,7 +42,7 @@ CREATE TABLE history (
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- ───────────────────────── events.db  (writer: agent · reader: supervisor, host plane)
+-- ───────────────────────── out/events.db  (writer: agent · reader: supervisor, host plane)
 CREATE TABLE events (
   seq              INTEGER PRIMARY KEY,      -- strictly increasing, no gaps
   ts               TEXT    NOT NULL,
