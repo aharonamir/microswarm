@@ -71,7 +71,7 @@
 - [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file (red against current CLI/supervisor stubs)
 - [x] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs` (red against CLI/supervisor stubs; checks marker absent before approval and present afterward)
 - [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level; writes to `/session/control/inbound.db`, `scope.json`, `-wal`, and `-shm` fail at the OS level; shell.run/fs.write cannot forge approval rows — `tests/adversarial/mount_escape.rs` (compileable, ignored red draft; waits for T036/T039 container/session lifecycle)
-- [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
+- [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs` (compileable, ignored red draft; depends on T035/T036/T039/T041)
 - [x] T027 [P] [US1] Unit: permit engine defaults to ask for operators/interpreters with parsed structure; only simple commands allow; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (shell parsing branches green; full permission flow remains T032)
 
 ### Agent core

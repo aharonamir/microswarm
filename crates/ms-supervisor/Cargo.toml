@@ -36,3 +36,7 @@ path = "../../tests/adversarial/mount_escape.rs"
 [[test]]
 name = "foundational-config-i18n"
 path = "tests/foundational.rs"
+
+[[test]]
+name = "no-secrets"
+path = "../../tests/adversarial/no_secrets.rs"
