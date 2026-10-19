@@ -1,6 +1,6 @@
 use ms_proto::{ApprovalBinding, InboundKind};
 use ms_store::{SessionRecord, SupervisorStore, open_session_dir};
-use ms_supervisor::approvals::{request_tool_approval, resolve_by_code};
+use ms_supervisor::approvals::{expire_due, request_tool_approval, resolve_by_code};
 use serde_json::json;
 use std::{
     fs,
@@ -39,7 +39,7 @@ fn record() -> SessionRecord {
 }
 
 #[test]
-#[ignore = "red: T042 — approval persistence, resolution, and inbound delivery are not implemented"]
+#[ignore = "red: T042 — expired approval timeout is not automatically denied"]
 fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
     let dir = temp_dir();
     let mut store = SupervisorStore::open(dir.join("supervisor.db")).unwrap();
@@ -81,6 +81,31 @@ fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
     assert_eq!(body["decision"], "approved");
     assert_eq!(body["binding"], serde_json::to_value(&binding).unwrap());
     assert!(resolve_by_code(&mut store, &session, &approval.code, true).is_err());
+    let expired = request_tool_approval(
+        &mut store,
+        &session_record.id,
+        &session_record.root_id,
+        &binding,
+        &args,
+        Duration::ZERO,
+    )
+    .unwrap();
+    assert_eq!(
+        expire_due(&mut store, &session_record.id, &session).unwrap(),
+        1
+    );
+    let (kind, body): (String, String) = session
+        .inbound()
+        .query_row(
+            "SELECT kind, body FROM inbound ORDER BY id DESC LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(kind, "approval_result");
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(body["approval_id"], expired.id);
+    assert_eq!(body["decision"], "timed_out");
     drop(session);
     drop(store);
     fs::remove_dir_all(dir).unwrap();
