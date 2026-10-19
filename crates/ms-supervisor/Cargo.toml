@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 ms-proto = { path = "../ms-proto" }
 bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
+futures-util = "0.3.34"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "1.1.6"
@@ -46,3 +47,7 @@ path = "../../tests/adversarial/no_secrets.rs"
 [[test]]
 name = "runtime-profile"
 path = "tests/runtime_profile.rs"
+
+[[test]]
+name = "runtime-events"
+path = "tests/runtime_events.rs"

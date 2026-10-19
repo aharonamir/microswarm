@@ -224,3 +224,14 @@ impl ContainerRuntime {
             .map_err(|error| format!("cannot signal agent container: {error}"))
     }
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContainerExitEvent {
+    pub container_id: String,
+    pub session_id: String,
+    pub exit_code: Option<i32>,
+}
+
+pub fn exit_event_from(_event: &models::EventMessage) -> Option<ContainerExitEvent> {
+    todo!("T037: map managed container die events to session exits")
+}
