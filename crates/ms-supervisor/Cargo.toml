@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 ms-proto = { path = "../ms-proto" }
+bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
 serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "1.1.6"
 
 [lib]

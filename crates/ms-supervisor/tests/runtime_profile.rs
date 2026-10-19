@@ -8,14 +8,14 @@ use std::{
 
 static NEXT_TEMP: AtomicUsize = AtomicUsize::new(0);
 
-fn scope() -> Scope {
+fn scope(work_path: &std::path::Path) -> Scope {
     Scope {
         version: 1,
         session_id: "01J00000000000000000000000".into(),
         derived_from: DerivedFrom::Config,
         source_ref: "test".into(),
         mounts: vec![Mount {
-            host_path: PathBuf::from("/tmp/project"),
+            host_path: work_path.to_path_buf(),
             container_path: PathBuf::from("/work"),
             mode: MountMode::ReadWrite,
         }],
@@ -35,7 +35,6 @@ fn scope() -> Scope {
 }
 
 #[test]
-#[ignore = "red: T036 — secure container runtime profile is not implemented"]
 fn runtime_profile_enforces_mount_and_process_boundaries() {
     let session_dir = std::env::temp_dir().join(format!(
         "ms-runtime-profile-{}-{}",
@@ -43,8 +42,12 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
         NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
     ));
     fs::create_dir_all(&session_dir).unwrap();
+    fs::create_dir_all(session_dir.join("control")).unwrap();
+    fs::create_dir_all(session_dir.join("out")).unwrap();
+    let work_path = session_dir.join("work");
+    fs::create_dir_all(&work_path).unwrap();
     let profile = ContainerProfile::for_session(
-        &scope(),
+        &scope(&work_path),
         "microswarm-agent:dev",
         &session_dir,
         "ms-net-session",
@@ -75,5 +78,25 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
             .iter()
             .any(|mount| { mount.target == "/work" && !mount.read_only })
     );
+    let config = profile.container_config(&["MS_KIND=lead".into()]);
+    let host = config.host_config.unwrap();
+    assert_eq!(
+        config.labels.unwrap()["ms.session"],
+        scope(&work_path).session_id
+    );
+    assert_eq!(config.user.as_deref(), Some("65532:65532"));
+    assert_eq!(host.readonly_rootfs, Some(true));
+    assert_eq!(host.security_opt.unwrap(), ["no-new-privileges:true"]);
+    assert_eq!(host.cap_drop.unwrap(), ["ALL"]);
+    assert_eq!(host.memory, Some(384 * 1024 * 1024));
+    assert_eq!(host.pids_limit, Some(64));
+    assert_eq!(host.network_mode.as_deref(), Some("ms-net-session"));
+    let mounts = host.mounts.unwrap();
+    assert!(mounts.iter().any(|mount| {
+        mount.target.as_deref() == Some("/session/control") && mount.read_only == Some(true)
+    }));
+    assert!(mounts.iter().any(|mount| {
+        mount.target.as_deref() == Some("/session/out") && mount.read_only == Some(false)
+    }));
     fs::remove_dir_all(session_dir).unwrap();
 }

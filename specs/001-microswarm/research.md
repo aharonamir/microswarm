@@ -62,13 +62,15 @@ With release `lto = "fat"`, `codegen-units = 1`, and `strip = true`, the baselin
 
 **Alternatives:** shelling out to `docker` CLI — slower, harder to parse, no event stream. containerd gRPC directly — lower level, more code. Firecracker microVMs — stronger isolation, much higher cold start; reconsider for a hardened tier later.
 
+**T036 implementation evidence (2026-10-19):** `cargo info bollard@0.21.1` reports 0.21.1 as the current release. The supervisor pins Bollard 0.21.1 with its `pipe` feature for Unix sockets; `cargo tree --locked -p ms-supervisor -e normal` resolves Tokio 1.53.3 as its only async runtime, and this feature set adds no TLS implementation. `podman info --format '{{.Host.RemoteSocket.Path}}'` returned `/run/user/1000/podman/podman.sock` for the current user. `crates/ms-supervisor/src/runtime.rs` builds internal networks and configures managed/session labels, read-only root, `/session/control` read-only and `/session/out` writable mounts, scoped mounts, no-new-privileges, dropped capabilities, tmpfs, and scope resource limits.
+
 ---
 
 ## R-04 — Cold start budget
 
-**Decision:** `FROM scratch` image with static musl binaries; image pre-pulled at install; containers created with `--network` pre-made per session; no shell, no init system. Agent opens SQLite and emits `agent.ready` before any model call.
+**Decision:** `FROM scratch` image with static musl agent/tools binaries and a static BusyBox shell plus required applet links; image pre-pulled at install; containers created with `--network` pre-made per session; no init system. Agent opens SQLite and emits `agent.ready` before any model call.
 
-**Rationale:** SC-001 counts spawn request → `agent.ready`. The dominant costs are runtime create/start and network attach, not the Rust process. Per-session network creation is done in parallel with `scope.json` write.
+**Rationale:** SC-001 counts spawn request → `agent.ready`. The dominant costs are runtime create/start and network attach, not the Rust process. Per-session network creation is done in parallel with `scope.json` write. The static shell is needed by the specified `shell.run` MCP tool; permission policy remains `ask` by default and the runtime/container is the security boundary (R-07).
 
 **Measurements (2026-10-15):** 20 sequential samples per runtime on the reference x86_64 host. Docker 29.1.3 (rootful) and Podman 5.7.0 (`podman info` reports `rootless=true`) used the same cached image, `alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11`, an internal network per sample, and `/bin/sh -c 'printf READY'`. Timings include CLI process overhead; p95 is nearest-rank over 20 samples (the maximum).
 
