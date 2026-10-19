@@ -1,4 +1,5 @@
 use bollard::{Docker, models};
+use futures_util::{StreamExt, stream::Stream};
 use ms_proto::{MountMode, Scope};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -223,6 +224,37 @@ impl ContainerRuntime {
             .await
             .map_err(|error| format!("cannot signal agent container: {error}"))
     }
+
+    pub async fn watch_exits<F, Fut>(&self, mut handle_exit: F) -> Result<(), String>
+    where
+        F: FnMut(ContainerExitEvent) -> Fut,
+        Fut: std::future::Future<Output = Result<(), String>>,
+    {
+        let mut events = Box::pin(self.exit_events());
+        while let Some(event) = events.next().await {
+            handle_exit(event?).await?;
+        }
+        Ok(())
+    }
+
+    fn exit_events(&self) -> impl Stream<Item = Result<ContainerExitEvent, String>> + '_ {
+        let filters = HashMap::from([
+            ("type", vec!["container"]),
+            ("label", vec!["ms.managed=true"]),
+        ]);
+        self.docker
+            .events(Some(
+                bollard::query_parameters::EventsOptionsBuilder::default()
+                    .filters(&filters)
+                    .build(),
+            ))
+            .filter_map(|result| async move {
+                match result {
+                    Ok(event) => exit_event_from(&event).map(Ok),
+                    Err(error) => Some(Err(format!("runtime event stream failed: {error}"))),
+                }
+            })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -232,6 +264,25 @@ pub struct ContainerExitEvent {
     pub exit_code: Option<i32>,
 }
 
-pub fn exit_event_from(_event: &models::EventMessage) -> Option<ContainerExitEvent> {
-    todo!("T037: map managed container die events to session exits")
+pub fn exit_event_from(event: &models::EventMessage) -> Option<ContainerExitEvent> {
+    if event.typ != Some(models::EventMessageTypeEnum::CONTAINER)
+        || event.action.as_deref() != Some("die")
+    {
+        return None;
+    }
+    let actor = event.actor.as_ref()?;
+    let attributes = actor.attributes.as_ref()?;
+    if attributes.get("ms.managed").map(String::as_str) != Some("true") {
+        return None;
+    }
+    let container_id = actor.id.as_ref()?.clone();
+    let session_id = attributes.get("ms.session")?.clone();
+    let exit_code = attributes
+        .get("exitCode")
+        .and_then(|value| value.parse::<i32>().ok());
+    Some(ContainerExitEvent {
+        container_id,
+        session_id,
+        exit_code,
+    })
 }

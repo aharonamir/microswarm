@@ -19,7 +19,6 @@ fn event(action: &str) -> EventMessage {
 }
 
 #[test]
-#[ignore = "red: T037 — runtime event stream is not connected to session exits"]
 fn watcher_maps_only_managed_container_exit_events() {
     let exit = exit_event_from(&event("die")).expect("managed die event is forwarded");
     assert_eq!(exit.container_id, "container-123");

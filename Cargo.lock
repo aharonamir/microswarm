@@ -1195,6 +1195,7 @@ name = "ms-supervisor"
 version = "0.1.0"
 dependencies = [
  "bollard",
+ "futures-util",
  "ms-proto",
  "serde",
  "tokio",

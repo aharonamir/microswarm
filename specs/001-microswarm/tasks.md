@@ -88,7 +88,7 @@
 ### Supervisor
 
 - [x] T036 [US1] Runtime adapter: create (labels, mounts from scope, read-only root, tmpfs, cap-drop, no-new-privileges, limits, per-session internal network), start, stop with grace, kill, signal — `crates/ms-supervisor/src/runtime.rs`
-- [ ] T037 [US1] Runtime events watcher: push exits to sessions (no polling) — `crates/ms-supervisor/src/runtime.rs`
+- [x] T037 [US1] Runtime events watcher: push exits to sessions (no polling) — `crates/ms-supervisor/src/runtime.rs`
 - [ ] T038 [US1] Lead scope from config ∩ ceiling ⇒ authoritative scope/hash persisted in `supervisor.db`; `control/scope.json` written + fsynced before create — `crates/ms-supervisor/src/scope.rs`
 - [ ] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
