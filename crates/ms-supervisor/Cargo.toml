@@ -40,3 +40,7 @@ path = "tests/foundational.rs"
 [[test]]
 name = "no-secrets"
 path = "../../tests/adversarial/no_secrets.rs"
+
+[[test]]
+name = "runtime-profile"
+path = "tests/runtime_profile.rs"
