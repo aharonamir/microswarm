@@ -1,6 +1,6 @@
 use ms_proto::{ApprovalBinding, InboundKind};
 use ms_store::{SessionRecord, SupervisorStore, open_session_dir};
-use ms_supervisor::approvals::{expire_due, request_tool_approval, resolve_by_code};
+use ms_supervisor::approvals::{expire_due, render_prompt, request_tool_approval, resolve_by_code};
 use serde_json::json;
 use std::{
     fs,
@@ -39,7 +39,6 @@ fn record() -> SessionRecord {
 }
 
 #[test]
-#[ignore = "red: T042 — expired approval timeout is not automatically denied"]
 fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
     let dir = temp_dir();
     let mut store = SupervisorStore::open(dir.join("supervisor.db")).unwrap();
@@ -58,6 +57,22 @@ fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
     )
     .unwrap();
     assert_eq!(approval.code.len(), 4);
+    let english = render_prompt(
+        ms_supervisor::config::Language::En,
+        &approval.code,
+        "microswarm-tools",
+        "shell.run",
+        &args,
+    );
+    let chinese = render_prompt(
+        ms_supervisor::config::Language::Zh,
+        &approval.code,
+        "microswarm-tools",
+        "shell.run",
+        &args,
+    );
+    assert!(english.contains(&approval.code));
+    assert!(chinese.contains(&approval.code));
     assert_eq!(
         approval.payload["binding"],
         serde_json::to_value(&binding).unwrap()

@@ -175,6 +175,97 @@ impl SupervisorStore {
         Ok(())
     }
 
+    pub fn pending_approval(&self, code: &str) -> Result<Option<ApprovalRecord>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT id, code, root_session_id, requesting_session_id, kind, payload, status, expires_at, created_at FROM approvals WHERE code=?1 AND status='pending'",
+                [code],
+                |row| {
+                    let payload: String = row.get(5)?;
+                    Ok((
+                        row.get::<_, String>(0)?, row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?, row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?, payload, row.get::<_, String>(6)?,
+                        row.get::<_, String>(7)?, row.get::<_, String>(8)?,
+                    ))
+                },
+            )
+            .optional()?
+            .map(|(id, code, root_session_id, requesting_session_id, kind, payload, status, expires_at, created_at)| {
+                Ok(ApprovalRecord {
+                    id, code, root_session_id, requesting_session_id, kind,
+                    payload: serde_json::from_str(&payload)?, status, expires_at, created_at,
+                })
+            })
+            .transpose()
+    }
+
+    pub fn expired_pending_approvals(
+        &self,
+        requesting_session_id: &str,
+        now: &str,
+    ) -> Result<Vec<ApprovalRecord>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, code, root_session_id, requesting_session_id, kind, payload, status, expires_at, created_at FROM approvals WHERE requesting_session_id=?1 AND status='pending' AND expires_at<=?2 ORDER BY created_at",
+        )?;
+        let rows = statement.query_map([requesting_session_id, now], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+            ))
+        })?;
+        let mut approvals = Vec::new();
+        for row in rows {
+            let (
+                id,
+                code,
+                root_session_id,
+                requesting_session_id,
+                kind,
+                payload,
+                status,
+                expires_at,
+                created_at,
+            ) = row?;
+            approvals.push(ApprovalRecord {
+                id,
+                code,
+                root_session_id,
+                requesting_session_id,
+                kind,
+                payload: serde_json::from_str(&payload)?,
+                status,
+                expires_at,
+                created_at,
+            });
+        }
+        Ok(approvals)
+    }
+
+    pub fn resolve_approval(
+        &mut self,
+        id: &str,
+        status: &str,
+        resolved_at: &str,
+    ) -> Result<bool, StoreError> {
+        if !matches!(status, "approved" | "denied" | "timed_out" | "expired") {
+            return Err(StoreError::InvalidContract(
+                "invalid approval resolution status",
+            ));
+        }
+        Ok(self.connection.execute(
+            "UPDATE approvals SET status=?2, resolved_at=?3 WHERE id=?1 AND status='pending'",
+            params![id, status, resolved_at],
+        )? == 1)
+    }
+
     pub fn upsert_team_role(&mut self, role: &TeamRoleRecord) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO team_roles(skill, skill_version, skill_hash, role, spawn_policy, scope, instructions)

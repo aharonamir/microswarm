@@ -75,11 +75,25 @@ pub fn resolve_by_code(
 }
 
 pub fn expire_due(
-    _store: &mut SupervisorStore,
-    _session_id: &str,
-    _session: &SessionConnections,
+    store: &mut SupervisorStore,
+    session_id: &str,
+    session: &SessionConnections,
 ) -> Result<usize, StoreError> {
-    todo!("T042: automatically deny and acknowledge expired approvals")
+    let now = utc_timestamp();
+    let expired = store.expired_pending_approvals(session_id, &now)?;
+    let mut count = 0;
+    for approval in expired {
+        if store.resolve_approval(&approval.id, "timed_out", &now)? {
+            let body = json!({
+                "approval_id": approval.id,
+                "decision": "timed_out",
+                "binding": approval.payload.get("binding").cloned().unwrap_or(Value::Null),
+            });
+            session.append_inbound(&InboundKind::ApprovalResult, &body)?;
+            count += 1;
+        }
+    }
+    Ok(count)
 }
 
 pub fn render_prompt(
