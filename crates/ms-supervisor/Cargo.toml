@@ -57,3 +57,7 @@ path = "tests/runtime_events.rs"
 [[test]]
 name = "scope-install"
 path = "tests/scope_install.rs"
+
+[[test]]
+name = "session-lifecycle"
+path = "tests/session_lifecycle.rs"
