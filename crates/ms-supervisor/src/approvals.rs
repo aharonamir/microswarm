@@ -7,6 +7,7 @@ pub fn request_tool_approval(
     _requesting_session_id: &str,
     _root_session_id: &str,
     _binding: &ApprovalBinding,
+    _arguments: &serde_json::Value,
     _timeout: Duration,
 ) -> Result<ApprovalRecord, StoreError> {
     todo!("T042: persist a short-code approval bound to one exact call")

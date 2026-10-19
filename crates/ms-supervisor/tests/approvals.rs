@@ -53,6 +53,7 @@ fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
         &session_record.id,
         &session_record.root_id,
         &binding,
+        &args,
         Duration::from_secs(600),
     )
     .unwrap();
@@ -61,6 +62,7 @@ fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
         approval.payload["binding"],
         serde_json::to_value(&binding).unwrap()
     );
+    assert_eq!(approval.payload["arguments"], args);
     resolve_by_code(&mut store, &session, &approval.code, true).unwrap();
     let (kind, body): (String, String) = session
         .inbound()
