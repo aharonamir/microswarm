@@ -61,3 +61,7 @@ path = "tests/scope_install.rs"
 [[test]]
 name = "session-lifecycle"
 path = "tests/session_lifecycle.rs"
+
+[[test]]
+name = "router"
+path = "tests/router.rs"
