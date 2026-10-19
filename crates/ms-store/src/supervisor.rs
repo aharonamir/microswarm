@@ -64,6 +64,17 @@ pub struct TeamRoleRecord {
     pub instructions: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct SessionLifecycleUpdate {
+    pub session_id: String,
+    pub status: String,
+    pub container_id: Option<String>,
+    pub restart_count: u8,
+    pub last_active_at: String,
+    pub closed_at: Option<String>,
+    pub close_reason: Option<String>,
+}
+
 impl SupervisorStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         Ok(Self {
@@ -203,5 +214,29 @@ impl SupervisorStore {
 
     pub fn connection(&self) -> &Connection {
         &self.connection
+    }
+
+    pub fn update_session_lifecycle(
+        &mut self,
+        update: &SessionLifecycleUpdate,
+    ) -> Result<(), StoreError> {
+        let changed = self.connection.execute(
+            "UPDATE sessions SET status=?2, container_id=COALESCE(?3,container_id), restart_count=?4,
+             last_active_at=?5, closed_at=COALESCE(?6,closed_at), close_reason=COALESCE(?7,close_reason)
+             WHERE id=?1",
+            params![
+                update.session_id,
+                update.status,
+                update.container_id,
+                i64::from(update.restart_count),
+                update.last_active_at,
+                update.closed_at,
+                update.close_reason
+            ],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::InvalidContract("session lifecycle row missing"));
+        }
+        Ok(())
     }
 }

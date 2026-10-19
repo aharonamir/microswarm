@@ -90,7 +90,7 @@
 - [x] T036 [US1] Runtime adapter: create (labels, mounts from scope, read-only root, tmpfs, cap-drop, no-new-privileges, limits, per-session internal network), start, stop with grace, kill, signal — `crates/ms-supervisor/src/runtime.rs`
 - [x] T037 [US1] Runtime events watcher: push exits to sessions (no polling) — `crates/ms-supervisor/src/runtime.rs`
 - [x] T038 [US1] Lead scope from config ∩ ceiling ⇒ authoritative scope/hash persisted in `supervisor.db`; `control/scope.json` written + fsynced before create — `crates/ms-supervisor/src/scope.rs`
-- [ ] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
+- [x] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
 - [ ] T041 [US1] Per-session credential proxy: listener on session network, credential-name allowlist from scope, inject, forward over rustls; `proxy.*` events — `crates/ms-supervisor/src/proxy.rs`
 - [ ] T042 [US1] Approvals: create with short code, render on channel (en/zh), resolve on `/approve`/`/deny`, timeout ⇒ deny, write `approval_result`; authorize only the exact (server, tool, argument hash) that was approved — `crates/ms-supervisor/src/approvals.rs`

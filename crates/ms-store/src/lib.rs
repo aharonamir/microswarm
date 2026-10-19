@@ -7,5 +7,6 @@ pub use migrate::{
 };
 pub use session::{HistoryEntry, SessionStore};
 pub use supervisor::{
-    ApprovalRecord, DelegationRecord, SessionRecord, SupervisorStore, TeamRoleRecord,
+    ApprovalRecord, DelegationRecord, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
+    TeamRoleRecord,
 };
