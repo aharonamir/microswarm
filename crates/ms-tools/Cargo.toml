@@ -8,3 +8,10 @@ license.workspace = true
 [[bin]]
 name = "microswarm-tools"
 path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[test]]
+name = "fs-tools"
+path = "tests/fs_tools.rs"
