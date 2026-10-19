@@ -44,3 +44,7 @@ path = "tests/approval_binding.rs"
 [[test]]
 name = "emitter"
 path = "tests/emitter.rs"
+
+[[test]]
+name = "exit"
+path = "tests/exit.rs"
