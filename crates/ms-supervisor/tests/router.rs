@@ -1,6 +1,8 @@
 use ms_proto::{InboundKind, OutboundKind};
 use ms_store::{SessionRecord, SupervisorStore, open_agent_session_dir, open_session_dir};
-use ms_supervisor::router::{append_inbound, outbound_after, resolve_or_create};
+use ms_supervisor::router::{
+    append_inbound, outbound_after, outbound_data_version, resolve_or_create,
+};
 use serde_json::json;
 use std::{
     fs,
@@ -39,7 +41,6 @@ fn record(id: &str) -> SessionRecord {
 }
 
 #[test]
-#[ignore = "red: T040 — channel routing and SQLite message delivery are not implemented"]
 fn router_reuses_channel_thread_appends_inbound_and_tails_new_replies() {
     let home = temp_dir();
     let mut store = SupervisorStore::open(home.join("supervisor.db")).unwrap();
@@ -63,10 +64,15 @@ fn router_reuses_channel_thread_appends_inbound_and_tails_new_replies() {
     .unwrap();
     assert_eq!(inbound_id, 1);
     let agent_session = open_agent_session_dir(&session_dir).unwrap();
+    let version_before = outbound_data_version(&supervisor_session).unwrap();
     agent_session.outbound().execute(
         "INSERT INTO outbound(kind, body, in_reply_to) VALUES ('reply', '{\"text\":\"hello back\"}', ?1)",
         [inbound_id],
     ).unwrap();
+    assert_ne!(
+        outbound_data_version(&supervisor_session).unwrap(),
+        version_before
+    );
     let replies = outbound_after(&supervisor_session, 0).unwrap();
     assert_eq!(replies.len(), 1);
     assert_eq!(replies[0].kind, OutboundKind::Reply);

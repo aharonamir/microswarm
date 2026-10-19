@@ -1,29 +1,50 @@
+use crate::runtime::ContainerRuntime;
 use ms_proto::{InboundKind, OutboundMessage};
 use ms_store::{SessionConnections, SessionRecord, StoreError, SupervisorStore};
 
 pub fn resolve_or_create<F>(
-    _store: &mut SupervisorStore,
-    _channel: &str,
-    _thread: &str,
-    _create: F,
+    store: &mut SupervisorStore,
+    channel: &str,
+    thread: &str,
+    create: F,
 ) -> Result<String, StoreError>
 where
     F: FnOnce() -> SessionRecord,
 {
-    todo!("T040: resolve an active lead by channel thread or create one")
+    if let Some(id) = store.active_lead_for_thread(channel, thread)? {
+        return Ok(id);
+    }
+    let mut session = create();
+    if session.kind != "lead" {
+        return Err(StoreError::InvalidContract(
+            "channel router can create only lead sessions",
+        ));
+    }
+    session.channel = Some(channel.to_owned());
+    session.channel_thread = Some(thread.to_owned());
+    store.insert_session(&session)?;
+    Ok(session.id)
 }
 
 pub fn append_inbound(
-    _session: &SessionConnections,
-    _kind: InboundKind,
-    _body: serde_json::Value,
+    session: &SessionConnections,
+    kind: InboundKind,
+    body: serde_json::Value,
 ) -> Result<i64, StoreError> {
-    todo!("T040: append a channel message to the supervisor-owned inbound database")
+    session.append_inbound(&kind, &body)
 }
 
 pub fn outbound_after(
-    _session: &SessionConnections,
-    _after_id: i64,
+    session: &SessionConnections,
+    after_id: i64,
 ) -> Result<Vec<OutboundMessage>, StoreError> {
-    todo!("T040: tail outbound rows after the stored cursor")
+    session.outbound_after(after_id)
+}
+
+pub fn outbound_data_version(session: &SessionConnections) -> Result<i64, StoreError> {
+    session.outbound_data_version()
+}
+
+pub async fn signal_agent(runtime: &ContainerRuntime, container_id: &str) -> Result<(), String> {
+    runtime.signal(container_id, "SIGUSR1").await
 }

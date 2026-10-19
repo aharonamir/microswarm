@@ -96,6 +96,21 @@ impl SupervisorStore {
         Ok(())
     }
 
+    pub fn active_lead_for_thread(
+        &self,
+        channel: &str,
+        thread: &str,
+    ) -> Result<Option<String>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT id FROM sessions WHERE kind='lead' AND channel=?1 AND channel_thread=?2 AND status NOT IN ('closed','failed') ORDER BY created_at DESC LIMIT 1",
+                [channel, thread],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
     pub fn insert_delegation(&mut self, delegation: &DelegationRecord) -> Result<(), StoreError> {
         let timeout_s =
             i64::try_from(delegation.timeout_s).map_err(|_| StoreError::IntegerOutOfRange)?;

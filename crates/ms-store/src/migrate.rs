@@ -1,5 +1,7 @@
+use ms_proto::{InboundKind, OutboundMessage};
 use rusqlite::Connection;
 use rusqlite::OpenFlags;
+use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -89,6 +91,51 @@ impl SessionConnections {
 
     pub fn events(&self) -> &Connection {
         &self.events
+    }
+
+    pub fn append_inbound(&self, kind: &InboundKind, body: &Value) -> Result<i64, StoreError> {
+        let kind = serde_json::to_value(kind)?;
+        let kind = kind
+            .as_str()
+            .ok_or(StoreError::InvalidContract("inbound kind is not a string"))?;
+        self.inbound.execute(
+            "INSERT INTO inbound(kind, body) VALUES (?1, ?2)",
+            rusqlite::params![kind, serde_json::to_string(body)?],
+        )?;
+        Ok(self.inbound.last_insert_rowid())
+    }
+
+    pub fn outbound_after(&self, after_id: i64) -> Result<Vec<OutboundMessage>, StoreError> {
+        let mut statement = self.outbound.prepare(
+            "SELECT id, kind, body, in_reply_to, created_at FROM outbound WHERE id>?1 ORDER BY id",
+        )?;
+        let rows = statement.query_map([after_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?;
+        let mut messages = Vec::new();
+        for row in rows {
+            let (id, kind, body, in_reply_to, created_at) = row?;
+            messages.push(OutboundMessage {
+                id: Some(id),
+                kind: serde_json::from_str(&format!("\"{kind}\""))?,
+                body: serde_json::from_str(&body)?,
+                in_reply_to,
+                created_at: Some(created_at),
+            });
+        }
+        Ok(messages)
+    }
+
+    pub fn outbound_data_version(&self) -> Result<i64, StoreError> {
+        self.outbound
+            .query_row("PRAGMA data_version", [], |row| row.get(0))
+            .map_err(StoreError::from)
     }
 }
 
