@@ -1166,6 +1166,10 @@ version = "0.1.0"
 [[package]]
 name = "ms-channels"
 version = "0.1.0"
+dependencies = [
+ "ms-proto",
+ "serde_json",
+]
 
 [[package]]
 name = "ms-cli"
