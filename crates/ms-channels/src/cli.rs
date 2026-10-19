@@ -1,4 +1,4 @@
-use ms_proto::{InboundMessage, OutboundMessage};
+use ms_proto::{InboundKind, InboundMessage, OutboundKind, OutboundMessage};
 use std::io::{self, BufRead, Write};
 
 pub struct CliChannel<R, W> {
@@ -12,11 +12,38 @@ impl<R: BufRead, W: Write> CliChannel<R, W> {
     }
 
     pub fn receive(&mut self) -> io::Result<Option<InboundMessage>> {
-        todo!("T043: read and validate a CLI channel message")
+        let mut line = String::new();
+        let read = self.input.read_line(&mut line)?;
+        if read == 0 {
+            return Ok(None);
+        }
+        while matches!(line.chars().last(), Some('\n' | '\r')) {
+            line.pop();
+        }
+        Ok(Some(InboundMessage {
+            id: None,
+            kind: InboundKind::UserMessage,
+            body: serde_json::json!({ "text": line }),
+            created_at: None,
+        }))
     }
 
-    pub fn deliver(&mut self, _message: &OutboundMessage) -> io::Result<()> {
-        todo!("T043: render an outbound CLI channel message")
+    pub fn deliver(&mut self, message: &OutboundMessage) -> io::Result<()> {
+        let text = match message.kind {
+            OutboundKind::Reply => message
+                .body
+                .get("text")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "reply has no text"))?,
+            OutboundKind::ApprovalRequest => message
+                .body
+                .get("prompt")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("An action needs approval."),
+            _ => return Ok(()),
+        };
+        writeln!(self.output, "{text}")?;
+        self.output.flush()
     }
 
     pub fn into_output(self) -> W {

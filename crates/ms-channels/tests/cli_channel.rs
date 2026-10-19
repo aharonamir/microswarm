@@ -4,7 +4,6 @@ use serde_json::json;
 use std::io::Cursor;
 
 #[test]
-#[ignore = "red: T043 — CLI channel input and output are not implemented"]
 fn cli_channel_reads_messages_and_delivers_replies_and_approval_prompts() {
     let mut channel = CliChannel::new(Cursor::new("hello from terminal\n"), Vec::new());
     let message = channel.receive().unwrap().unwrap();
