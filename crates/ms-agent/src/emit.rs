@@ -3,22 +3,34 @@ use ms_store::{SessionStore, StoreError};
 use serde_json::Value;
 
 pub fn build_event(
-    _session_id: &str,
-    _root_session_id: &str,
-    _role: &str,
-    _event_type: AgentEventType,
-    _data: Value,
+    session_id: &str,
+    root_session_id: &str,
+    role: &str,
+    event_type: AgentEventType,
+    data: Value,
 ) -> AgentEvent {
-    todo!("T033: construct and persist schema events")
+    AgentEvent {
+        seq: 0,
+        ts: crate::boot::utc_timestamp(),
+        ts_mono: crate::boot::monotonic_nanos(),
+        session_id: session_id.to_owned(),
+        root_session_id: root_session_id.to_owned(),
+        agent_role: role.to_owned(),
+        source: Default::default(),
+        event_type,
+        data,
+    }
 }
 
 pub fn emit(
-    _store: &mut SessionStore,
-    _session_id: &str,
-    _root_session_id: &str,
-    _role: &str,
-    _event_type: AgentEventType,
-    _data: Value,
+    store: &mut SessionStore,
+    session_id: &str,
+    root_session_id: &str,
+    role: &str,
+    event_type: AgentEventType,
+    data: Value,
 ) -> Result<(i64, AgentEvent), StoreError> {
-    todo!("T033: append event and return its assigned sequence")
+    let mut event = build_event(session_id, root_session_id, role, event_type, data);
+    event.seq = store.append_agent_event(&event)?;
+    Ok((event.seq, event))
 }

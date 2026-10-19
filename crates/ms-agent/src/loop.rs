@@ -1,6 +1,6 @@
 use crate::boot::AgentContext;
 use ms_proto::{
-    AgentEvent, AgentEventType, ExitReason, InboundKind, InboundMessage, OutboundMessage, exit_code,
+    AgentEventType, ExitReason, InboundKind, InboundMessage, OutboundMessage, exit_code,
 };
 use ms_store::HistoryEntry;
 use serde_json::json;
@@ -105,17 +105,15 @@ pub async fn run<P: TurnProcessor>(
                 )),
             };
             if let Some(reason) = invalid_reason {
-                context.store.append_agent_event(&AgentEvent {
-                    seq: 0,
-                    ts: crate::boot::utc_timestamp(),
-                    ts_mono: crate::boot::monotonic_nanos(),
-                    session_id: context.session_id.clone(),
-                    root_session_id: context.root_session_id.clone(),
-                    agent_role: context.role.clone(),
-                    source: Default::default(),
-                    event_type: AgentEventType::InboundError,
-                    data: json!({ "inbound_id": inbound_id, "kind": message.kind, "error": reason }),
-                }).map_err(LoopError::Store)?;
+                crate::emit::emit(
+                    &mut context.store,
+                    &context.session_id,
+                    &context.root_session_id,
+                    &context.role,
+                    AgentEventType::InboundError,
+                    json!({ "inbound_id": inbound_id, "kind": message.kind, "error": reason }),
+                )
+                .map_err(LoopError::Store)?;
                 context
                     .store
                     .commit_turn(inbound_id, &[], &[])
@@ -132,17 +130,14 @@ pub async fn run<P: TurnProcessor>(
                 return Ok(());
             }
             if message.kind == InboundKind::Control {
-                context.store.append_agent_event(&AgentEvent {
-                    seq: 0,
-                    ts: crate::boot::utc_timestamp(),
-                    ts_mono: crate::boot::monotonic_nanos(),
-                    session_id: context.session_id.clone(),
-                    root_session_id: context.root_session_id.clone(),
-                    agent_role: context.role.clone(),
-                    source: Default::default(),
-                    event_type: AgentEventType::InboundError,
-                    data: json!({ "inbound_id": inbound_id, "kind": "control", "error": "unsupported or malformed control message" }),
-                }).map_err(LoopError::Store)?;
+                crate::emit::emit(
+                    &mut context.store,
+                    &context.session_id,
+                    &context.root_session_id,
+                    &context.role,
+                    AgentEventType::InboundError,
+                    json!({ "inbound_id": inbound_id, "kind": "control", "error": "unsupported or malformed control message" }),
+                ).map_err(LoopError::Store)?;
                 context
                     .store
                     .commit_turn(inbound_id, &[], &[])

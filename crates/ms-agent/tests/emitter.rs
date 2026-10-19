@@ -5,7 +5,6 @@ use serde_json::json;
 use std::fs;
 
 #[test]
-#[ignore = "red: T033 — the shared event emitter is not implemented"]
 fn emitter_builds_schema_events_with_session_identity_and_payload() {
     let dir = std::env::temp_dir().join(format!("ms-emitter-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

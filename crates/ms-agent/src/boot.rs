@@ -1,4 +1,4 @@
-use ms_proto::{AgentEvent, AgentEventType, ExitReason, Scope, exit_code};
+use ms_proto::{AgentEventType, ExitReason, Scope, exit_code};
 use ms_store::SessionStore;
 use serde_json::json;
 use std::error::Error;
@@ -90,19 +90,15 @@ pub fn boot() -> Result<AgentContext, BootError> {
     }
 
     let mut store = SessionStore::open_dir(&session_dir).map_err(BootError::Storage)?;
-    store
-        .append_agent_event(&AgentEvent {
-            seq: 0,
-            ts: utc_timestamp(),
-            ts_mono: monotonic_nanos(),
-            session_id: session_id.clone(),
-            root_session_id: root_session_id.clone(),
-            agent_role: role.clone(),
-            source: Default::default(),
-            event_type: AgentEventType::Ready,
-            data: json!({ "scope_hash": scope.hash }),
-        })
-        .map_err(BootError::Storage)?;
+    crate::emit::emit(
+        &mut store,
+        &session_id,
+        &root_session_id,
+        &role,
+        AgentEventType::Ready,
+        json!({ "scope_hash": scope.hash }),
+    )
+    .map_err(BootError::Storage)?;
 
     Ok(AgentContext {
         session_id,
