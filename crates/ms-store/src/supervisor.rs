@@ -111,6 +111,27 @@ impl SupervisorStore {
             .map_err(StoreError::from)
     }
 
+    pub fn session_scope(&self, session_id: &str) -> Result<Option<(String, Value)>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT scope_hash, scope_json FROM sessions WHERE id=?1",
+                [session_id],
+                |row| {
+                    let hash: Option<String> = row.get(0)?;
+                    let scope: Option<String> = row.get(1)?;
+                    Ok((hash, scope))
+                },
+            )
+            .optional()?
+            .map(|(hash, scope)| match (hash, scope) {
+                (Some(hash), Some(scope)) => Ok((hash, serde_json::from_str(&scope)?)),
+                _ => Err(StoreError::InvalidContract(
+                    "session is missing authoritative scope or hash",
+                )),
+            })
+            .transpose()
+    }
+
     pub fn insert_delegation(&mut self, delegation: &DelegationRecord) -> Result<(), StoreError> {
         let timeout_s =
             i64::try_from(delegation.timeout_s).map_err(|_| StoreError::IntegerOutOfRange)?;

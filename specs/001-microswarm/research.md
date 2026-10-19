@@ -107,6 +107,8 @@ The measurement starts the CLI operation with a monotonic timer; `start --attach
 
 **Amendment (2026-10-18):** persist both `sessions.scope_hash` and `sessions.scope_json` in `supervisor.db`; proxy and supervisor decisions must read this authoritative copy. The container's read-only scope file is for agent boot validation only.
 
+**T041 implementation evidence (2026-10-19):** `ms-supervisor::proxy::SessionProxy::from_store` reads only `sessions.scope_hash` and `sessions.scope_json`, deserializes the scope, and verifies session id plus canonical hash before serving. The per-session listener accepts HTTP from the isolated session network, routes `/fetch`, `/mcp/<server>`, and model paths, rejects ungranted MCP servers and credential names, strips `X-MS-Credential`, resolves the name through a host-side `CredentialProvider`, and forwards to HTTP/HTTPS using `hyper-rustls 0.27.10` over `rustls 0.23.46` (no other TLS stack). `cargo tree --locked -p ms-supervisor -e normal` resolves Hyper 1.12.0, hyper-util 0.1.21, one Tokio runtime, and rustls as the only TLS implementation. `cargo test -p ms-supervisor --test proxy` passes both authoritative-scope/allowlist and real local-listener fetch-forward tests. Credential material is supplied by the host provider and is not part of the request selector or test fixtures.
+
 ## R-13 — Read-only session control mount with SQLite WAL
 
 **Question:** can the agent read `control/inbound.db` in WAL mode through a read-only bind mount?
