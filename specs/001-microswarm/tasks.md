@@ -82,7 +82,7 @@
 - [x] T031 [P] [US1] MCP client adapter: launch stdio servers listed in scope, connect HTTP servers via proxy, list + call tools filtered by scope — `crates/ms-agent/src/mcp.rs`; fake stdio MCP integration tests green; runtime descriptor contract documented as `MS_MCP_SERVERS`; host `tools.toml` accepts only scoped credential names.
 - [ ] T032 [US1] Permission engine: per-tool policy from scope + defaults; shell lexer per R-07; `ask` ⇒ outbound `approval_request` and suspend turn until `approval_result`; approval tokens must bind exact server, tool, and argument hash — `crates/ms-agent/src/permit.rs`
 - [x] T033 [P] [US1] Event emitter: every agent event type in the schema — `crates/ms-agent/src/emit.rs`
-- [ ] T034 [US1] Exit mapping to contract codes; final `agent.exit` event — `crates/ms-agent/src/main.rs`
+- [x] T034 [US1] Exit mapping to contract codes; final `agent.exit` event — `crates/ms-agent/src/main.rs`
 - [ ] T035 [P] [US1] First-party MCP server: `fs.read/list/write`, `shell.run`, `web.fetch` (via proxy) — `crates/ms-tools/src/`
 
 ### Supervisor
