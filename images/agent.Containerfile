@@ -11,6 +11,7 @@ RUN apt-get update \
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
+COPY specs ./specs
 RUN cargo build --locked --release --target x86_64-unknown-linux-musl \
     -p ms-agent -p ms-tools
 
