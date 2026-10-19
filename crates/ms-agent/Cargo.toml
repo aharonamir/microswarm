@@ -36,3 +36,7 @@ path = "tests/mcp.rs"
 [[test]]
 name = "permit-policy"
 path = "tests/permit.rs"
+
+[[test]]
+name = "approval-binding"
+path = "tests/approval_binding.rs"

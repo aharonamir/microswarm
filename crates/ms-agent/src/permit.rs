@@ -36,6 +36,7 @@ pub struct PermitDecision {
 }
 
 /// Opaque authority token. Its fields and constructor are private to this module.
+#[derive(Debug)]
 pub struct PermittedToolCall {
     server: String,
     tool: String,
@@ -59,6 +60,7 @@ pub enum PermitError {
     NotGranted,
     Denied,
     ApprovalRequired,
+    ApprovalMismatch,
     UnparseableShell(ToolError),
 }
 
@@ -68,9 +70,33 @@ impl std::fmt::Display for PermitError {
             Self::NotGranted => f.write_str("tool is outside the session scope"),
             Self::Denied => f.write_str("tool policy denies this call"),
             Self::ApprovalRequired => f.write_str("tool call requires approval"),
+            Self::ApprovalMismatch => f.write_str("approval does not match this tool call"),
             Self::UnparseableShell(error) => write!(f, "{}: {}", error.code, error.message),
         }
     }
+}
+
+/// Exact identity of an MCP call that has been approved by the supervisor.
+pub struct ApprovalBinding;
+
+impl ApprovalBinding {
+    pub fn for_call(
+        _server: &str,
+        _tool: &str,
+        _arguments: Option<&JsonObject>,
+    ) -> Result<Self, serde_json::Error> {
+        todo!("T032: hash the exact tool call")
+    }
+}
+
+pub fn authorize_approved_tool(
+    _scope: &Scope,
+    _server: &str,
+    _tool: &str,
+    _arguments: Option<JsonObject>,
+    _approved: &ApprovalBinding,
+) -> Result<PermittedToolCall, PermitError> {
+    todo!("T032: compare the approval binding and issue a permit")
 }
 
 impl std::error::Error for PermitError {}
