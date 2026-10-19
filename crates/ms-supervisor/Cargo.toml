@@ -74,3 +74,7 @@ path = "tests/router.rs"
 [[test]]
 name = "proxy"
 path = "tests/proxy.rs"
+
+[[test]]
+name = "approvals"
+path = "tests/approvals.rs"
