@@ -1197,7 +1197,9 @@ dependencies = [
  "bollard",
  "futures-util",
  "ms-proto",
+ "ms-store",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
 ]
