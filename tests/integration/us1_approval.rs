@@ -29,7 +29,7 @@ fn ask_policy_waits_for_approval_before_running_tool() {
 
     let sessions = harness.session_dirs().expect("list session directories");
     assert_eq!(sessions.len(), 1);
-    let marker = sessions[0].join("approval-marker");
+    let marker = harness.home.join("work/approval-marker");
     assert!(
         !marker.exists(),
         "tool must remain suspended before approval"

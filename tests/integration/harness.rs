@@ -61,6 +61,7 @@ impl IntegrationHarness {
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
+        fs::create_dir_all(home.join("work"))?;
         let model = FakeModelServer::start_with_approval_tool(approval_tool)?;
         let runtime = detect_runtime()?;
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
@@ -288,13 +289,15 @@ model = "fake-model"
 credential = "fixture-model-key"
 
 [lead.scope]
+mounts = [{{ host = {:?}, path = "/work", mode = "rw" }}]
 credentials = ["fixture-model-key"]
 tools = {scope_tools}
 
 [[channels]]
 kind = "cli"
 "#,
-        model.base_url()
+        model.base_url(),
+        home.join("work").display().to_string()
     );
     let dir = home.join("config");
     fs::write(dir.join("microswarm.toml"), config)?;

@@ -8,7 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 const RESPONSE: &str = r#"{"id":"chatcmpl-fixture","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"fixture reply"},"finish_reason":"stop"}]}"#;
-const TOOL_RESPONSE: &str = r#"{"id":"chatcmpl-tool","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"fixture-call","type":"function","function":{"name":"first-party/fs.write","arguments":"{\"path\":\"/session/approval-marker\",\"content\":\"approved\"}"}}]},"finish_reason":"tool_calls"}]}"#;
+const TOOL_RESPONSE: &str = r#"{"id":"chatcmpl-tool","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"fixture-call","type":"function","function":{"name":"first-party/fs.write","arguments":"{\"path\":\"/work/approval-marker\",\"content\":\"approved\"}"}}]},"finish_reason":"tool_calls"}]}"#;
 
 pub struct FakeModelServer {
     address: SocketAddr,
