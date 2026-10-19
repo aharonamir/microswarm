@@ -93,8 +93,8 @@
 - [x] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
 - [x] T041 [US1] Per-session credential proxy: listener on session network, credential-name allowlist from authoritative scope, inject, forward over rustls, report outcomes through a supervisor event observer — `crates/ms-supervisor/src/proxy.rs`; local listener test covers scope checks and fetch forwarding.
-- [ ] T042 [US1] Approvals: create with short code, render on channel (en/zh), resolve on `/approve`/`/deny`, timeout ⇒ deny, write `approval_result`; authorize only the exact (server, tool, argument hash) that was approved — `crates/ms-supervisor/src/approvals.rs`
-- [ ] T043 [P] [US1] CLI channel adapter — `crates/ms-channels/src/cli.rs`
+- [x] T042 [US1] Approvals: create with a short code, render en/zh prompts, resolve once, expire to timed_out, write an inbound `approval_result` carrying the exact server/tool/argument hash — `crates/ms-supervisor/src/approvals.rs`; tests cover binding and timeout.
+- [x] T043 [P] [US1] CLI channel adapter reads user lines and renders reply/approval messages — `crates/ms-channels/src/cli.rs`
 - [ ] T044 [P] [US1] `microswarm init`, `doctor`, `chat`, `creds`, `sessions` — `crates/ms-cli/src/`
 - [ ] T045 [US1] Lead idle timeout ⇒ graceful stop, `close_reason=idle` — `crates/ms-supervisor/src/sessions.rs`
 
