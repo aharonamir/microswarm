@@ -1,45 +1,43 @@
-use ms_agent::permit::{ApprovalBinding, PermitError, authorize_approved_tool};
-use ms_proto::{Permission, Scope, ToolGrant, ToolNames};
+use ms_agent::permit::{PermitError, authorize_approved_tool};
+use ms_proto::{ApprovalBinding, Permission, Scope, ToolGrant, ToolNames};
 use serde_json::json;
 use std::collections::BTreeSet;
 
 fn ask_scope() -> Scope {
     let mut scope: Scope = serde_json::from_value(json!({
-        "session_id":"session-1", "parent_session_id":null,
+        "version":1, "session_id":"session-1", "derived_from":"config",
         "source_ref":"test", "mounts":[], "credentials":[], "delegation":null,
-        "tools":[{"server":"weather","tools":["forecast"],"policy":"ask","overrides":{}}],
-        "limits":{"max_turns":1,"max_tokens":10,"max_runtime_s":1,"max_members":0},
+        "tools":[
+          {"server":"weather","tools":["forecast","other"],"policy":"ask","overrides":{}},
+          {"server":"other","tools":["forecast"],"policy":"ask","overrides":{}}
+        ],
+        "limits":{"memory_mb":128,"pids":32,"tmp_mb":64,"max_turns":1,"max_tokens":10},
+        "narrowed":[],
         "hash":""
-    })).unwrap();
+    }))
+    .unwrap();
     scope.update_hash();
     scope
 }
 
 #[test]
-#[ignore = "red: T032 — approval results are not yet bound to an exact MCP call"]
 fn approval_authorizes_only_the_exact_server_tool_and_argument_hash() {
     let scope = ask_scope();
     let arguments = json!({"city":"Jerusalem"}).as_object().cloned();
-    let approved = ApprovalBinding::for_call("weather", "forecast", arguments.as_ref())
-        .expect("serializable arguments produce a binding");
+    let approval_args = json!({"city":"Jerusalem"});
+    let approved = ApprovalBinding::for_call("weather", "forecast", Some(&approval_args));
 
-    let call = authorize_approved_tool(
-        &scope,
-        "weather",
-        "forecast",
-        arguments.clone(),
-        &approved,
-    );
+    let call = authorize_approved_tool(&scope, "weather", "forecast", arguments.clone(), &approved);
     assert!(call.is_ok());
     assert_eq!(
         authorize_approved_tool(&scope, "other", "forecast", arguments.clone(), &approved)
             .unwrap_err(),
-        PermitError::NotGranted
+        PermitError::ApprovalMismatch
     );
     assert_eq!(
         authorize_approved_tool(&scope, "weather", "other", arguments.clone(), &approved)
             .unwrap_err(),
-        PermitError::NotGranted
+        PermitError::ApprovalMismatch
     );
     assert_eq!(
         authorize_approved_tool(

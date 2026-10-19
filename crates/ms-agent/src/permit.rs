@@ -1,4 +1,4 @@
-use ms_proto::{Permission, Scope};
+use ms_proto::{ApprovalBinding, Permission, Scope};
 use rmcp::model::JsonObject;
 use serde_json::Value;
 
@@ -76,27 +76,43 @@ impl std::fmt::Display for PermitError {
     }
 }
 
-/// Exact identity of an MCP call that has been approved by the supervisor.
-pub struct ApprovalBinding;
-
-impl ApprovalBinding {
-    pub fn for_call(
-        _server: &str,
-        _tool: &str,
-        _arguments: Option<&JsonObject>,
-    ) -> Result<Self, serde_json::Error> {
-        todo!("T032: hash the exact tool call")
-    }
-}
-
 pub fn authorize_approved_tool(
-    _scope: &Scope,
-    _server: &str,
-    _tool: &str,
-    _arguments: Option<JsonObject>,
-    _approved: &ApprovalBinding,
+    scope: &Scope,
+    server: &str,
+    tool: &str,
+    arguments: Option<JsonObject>,
+    approved: &ApprovalBinding,
 ) -> Result<PermittedToolCall, PermitError> {
-    todo!("T032: compare the approval binding and issue a permit")
+    let grant = scope
+        .tools
+        .iter()
+        .find(|grant| grant.server == server && grant.tools.contains(tool))
+        .ok_or(PermitError::NotGranted)?;
+    let policy = grant.overrides.get(tool).copied().unwrap_or(grant.policy);
+    match policy {
+        Permission::Deny => return Err(PermitError::Denied),
+        Permission::Allow => return authorize_tool(scope, server, tool, arguments),
+        Permission::Ask => {}
+    }
+    let arguments_value = arguments.clone().map(Value::Object);
+    if !approved.matches_call(server, tool, arguments_value.as_ref()) {
+        return Err(PermitError::ApprovalMismatch);
+    }
+    if tool == "shell.run" {
+        let command = arguments
+            .as_ref()
+            .and_then(|args| args.get("command"))
+            .and_then(Value::as_str)
+            .ok_or(PermitError::Denied)?;
+        if evaluate_shell(command).action == PermitAction::Deny {
+            return Err(PermitError::Denied);
+        }
+    }
+    Ok(PermittedToolCall {
+        server: server.into(),
+        tool: tool.into(),
+        arguments,
+    })
 }
 
 impl std::error::Error for PermitError {}
