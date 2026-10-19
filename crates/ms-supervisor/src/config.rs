@@ -78,6 +78,16 @@ pub struct LimitsConfig {
     pub approval_timeout_s: u64,
     #[serde(default = "default_restart_max")]
     pub restart_max: u8,
+    #[serde(default = "default_scope_memory_mb")]
+    pub memory_mb: u32,
+    #[serde(default = "default_scope_pids")]
+    pub pids: u32,
+    #[serde(default = "default_scope_tmp_mb")]
+    pub tmp_mb: u32,
+    #[serde(default = "default_scope_max_turns")]
+    pub max_turns: u32,
+    #[serde(default = "default_scope_max_tokens")]
+    pub max_tokens: u64,
 }
 
 impl Default for LimitsConfig {
@@ -90,6 +100,11 @@ impl Default for LimitsConfig {
             grace_ms: default_grace(),
             approval_timeout_s: default_approval_timeout(),
             restart_max: default_restart_max(),
+            memory_mb: default_scope_memory_mb(),
+            pids: default_scope_pids(),
+            tmp_mb: default_scope_tmp_mb(),
+            max_turns: default_scope_max_turns(),
+            max_tokens: default_scope_max_tokens(),
         }
     }
 }
@@ -114,6 +129,21 @@ const fn default_approval_timeout() -> u64 {
 }
 const fn default_restart_max() -> u8 {
     3
+}
+const fn default_scope_memory_mb() -> u32 {
+    256
+}
+const fn default_scope_pids() -> u32 {
+    64
+}
+const fn default_scope_tmp_mb() -> u32 {
+    128
+}
+const fn default_scope_max_turns() -> u32 {
+    30
+}
+const fn default_scope_max_tokens() -> u64 {
+    65_536
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -324,6 +354,15 @@ impl ConfigSet {
         if app.limits.max_members_per_lead > 32 {
             return Err(ConfigError(
                 "max_members_per_lead exceeds the schema maximum of 32".into(),
+            ));
+        }
+        if app.limits.memory_mb < 32
+            || app.limits.pids < 8
+            || app.limits.max_turns == 0
+            || app.limits.max_tokens == 0
+        {
+            return Err(ConfigError(
+                "scope memory/pids/max_turns/max_tokens limits are below schema minimums".into(),
             ));
         }
         if !app.runtime.socket.starts_with("unix://") || app.runtime.image.trim().is_empty() {

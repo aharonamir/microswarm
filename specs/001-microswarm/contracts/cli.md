@@ -61,6 +61,11 @@ lead_idle_s        = 86400
 grace_ms           = 5000
 approval_timeout_s = 600
 restart_max        = 3
+memory_mb          = 256
+pids               = 64
+tmp_mb             = 128
+max_turns           = 30
+max_tokens          = 65536
 
 [model]
 provider   = "openai-compatible"  # or "anthropic"

@@ -24,7 +24,6 @@ fn temp_dir() -> PathBuf {
 }
 
 #[test]
-#[ignore = "red: T038 — lead scope generation and authoritative persistence are not implemented"]
 fn lead_scope_is_ceiling_intersected_and_persisted_before_session_start() {
     let home = temp_dir();
     let config_dir = home.join("config");
@@ -80,7 +79,7 @@ tools = ["microswarm-tools/fs.write"]
         kind: "lead".into(),
         channel: Some("cli".into()),
         channel_thread: Some("thread-1".into()),
-        status: "requested".into(),
+        status: "pending".into(),
         scope_hash: None,
         scope: None,
         created_at: "2026-10-19T00:00:00Z".into(),
