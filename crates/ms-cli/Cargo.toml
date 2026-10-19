@@ -8,3 +8,7 @@ license.workspace = true
 [[bin]]
 name = "microswarm"
 path = "src/main.rs"
+
+[[test]]
+name = "commands"
+path = "tests/commands.rs"
