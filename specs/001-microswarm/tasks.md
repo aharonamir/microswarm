@@ -150,18 +150,18 @@
 
 ### Tests first
 
-- [ ] T067 [P] [US3] Integration: transient exit ⇒ restart with backoff, unacked message reprocessed once, max 3 — `tests/integration/us3_transient.rs`
-- [ ] T068 [P] [US3] Integration: safety exit, unknown code, and non-OOM signal ⇒ no restart; lead gets `member_failed{safety}` — `tests/integration/us3_safety.rs`
-- [ ] T069 [P] [US3] Integration: deadline exceeded ⇒ `member_failed{timeout}`, member torn down — `tests/integration/us3_timeout.rs`
-- [ ] T070 [P] [US3] Integration: runtime unavailable at spawn ⇒ `member_failed{spawn_error}` / `denied{spawn_error}` — `tests/integration/us3_spawn_error.rs`
-- [ ] T071 [P] [US3] Integration: lead exhausts retries ⇒ bilingual notice on channel — `tests/integration/us3_lead_notice.rs`
+- [x] T067 [P] [US3] Integration: transient exit ⇒ restart with backoff, unacked message reprocessed once, max 3 — `tests/integration/us3_transient.rs`
+- [x] T068 [P] [US3] Integration: safety exit, unknown code, and non-OOM signal ⇒ no restart; lead gets `member_failed{safety}` — `tests/integration/us3_safety.rs`
+- [x] T069 [P] [US3] Integration: deadline exceeded ⇒ `member_failed{timeout}`, member torn down — `tests/integration/us3_timeout.rs`
+- [x] T070 [P] [US3] Integration: runtime unavailable at spawn ⇒ `member_failed{spawn_error}` / `denied{spawn_error}` — `tests/integration/us3_spawn_error.rs`
+- [x] T071 [P] [US3] Integration: lead exhausts retries ⇒ bilingual notice on channel — `tests/integration/us3_lead_notice.rs`
 
 ### Implementation
 
-- [ ] T072 [US3] Exit classifier per `agent-exit-codes.md` incl. stricter-wins cross-check with last `agent.exit` — `crates/ms-supervisor/src/exit.rs`
-- [ ] T073 [US3] Restart policy with backoff and `restart_count` — `crates/ms-supervisor/src/sessions.rs`
-- [ ] T074 [US3] Delegation circuit breaker: arm on `waiting_reply`, persist `deadline_at`, fire ⇒ synthesize `member_failed`, tear down — `crates/ms-supervisor/src/deadlines.rs`
-- [ ] T075 [US3] Terminal-failure notices for leads (en/zh) — `crates/ms-supervisor/src/router.rs`
+- [x] T072 [US3] Exit classifier per `agent-exit-codes.md` incl. stricter-wins cross-check with last `agent.exit` — `crates/ms-runtime/src/lifecycle.rs`, used by supervisor
+- [x] T073 [US3] Restart policy with backoff and `restart_count` — `crates/ms-supervisor/src/exit_watcher.rs`, state in `crates/ms-runtime/src/lifecycle.rs`
+- [x] T074 [US3] Delegation circuit breaker: arm on `waiting_reply`, persist `deadline_at`, fire ⇒ synthesize `member_failed`, tear down — `crates/ms-supervisor/src/deadlines.rs`
+- [x] T075 [US3] Terminal-failure notices for leads (en/zh) — `crates/ms-supervisor/src/service.rs`
 
 **Checkpoint:** quickstart §3 passes. **v0.2 shippable** (US1–US3).
 

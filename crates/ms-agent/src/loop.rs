@@ -50,6 +50,7 @@ impl std::fmt::Display for TurnError {
 #[derive(Debug)]
 pub enum LoopError {
     Signal(std::io::Error),
+    Terminated,
     Store(ms_store::StoreError),
     Turn(TurnError),
 }
@@ -58,6 +59,7 @@ impl LoopError {
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::Turn(error) => error.exit_code(),
+            Self::Terminated => exit_code(ExitReason::Safety),
             Self::Signal(_) => exit_code(ExitReason::Safety),
             Self::Store(error) if error.is_transient() => exit_code(ExitReason::Transient),
             Self::Store(_) => exit_code(ExitReason::Safety),
@@ -69,6 +71,7 @@ impl std::fmt::Display for LoopError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Signal(error) => write!(formatter, "cannot subscribe to SIGUSR1: {error}"),
+            Self::Terminated => formatter.write_str("agent received SIGTERM"),
             Self::Store(error) => write!(formatter, "session store failed: {error}"),
             Self::Turn(error) => write!(formatter, "turn failed: {error}"),
         }
@@ -82,6 +85,7 @@ pub async fn run<P: TurnProcessor>(
     mut processor: P,
 ) -> Result<(), LoopError> {
     let mut wake = signal(SignalKind::user_defined1()).map_err(LoopError::Signal)?;
+    let mut terminate = signal(SignalKind::terminate()).map_err(LoopError::Signal)?;
     loop {
         let cursor = context.store.cursor().map_err(LoopError::Store)?;
         if let Some(message) = context
@@ -163,10 +167,10 @@ pub async fn run<P: TurnProcessor>(
             }
 
             let history = context.store.history().map_err(LoopError::Store)?;
-            let output = processor
-                .process(&mut context, message, history)
-                .await
-                .map_err(LoopError::Turn)?;
+            let output = tokio::select! {
+                result = processor.process(&mut context, message, history) => result.map_err(LoopError::Turn)?,
+                _ = terminate.recv() => return Err(LoopError::Terminated),
+            };
             context
                 .store
                 .commit_turn(inbound_id, &output.outbound, &output.history)
@@ -176,6 +180,7 @@ pub async fn run<P: TurnProcessor>(
 
         tokio::select! {
             _ = wake.recv() => {},
+            _ = terminate.recv() => return Err(LoopError::Terminated),
             _ = tokio::time::sleep(Duration::from_millis(500)) => {},
         }
     }

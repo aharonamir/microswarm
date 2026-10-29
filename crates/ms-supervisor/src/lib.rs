@@ -5,6 +5,8 @@ pub mod policy;
 pub mod proxy;
 pub mod router;
 pub use ms_runtime as runtime;
+pub mod deadlines;
+pub mod exit_watcher;
 pub mod scope;
 pub mod service;
 pub mod sessions;

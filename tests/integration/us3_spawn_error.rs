@@ -5,7 +5,6 @@ use serde_json::Value;
 use std::time::Duration;
 
 #[test]
-#[ignore = "red: T070 — runtime spawn errors must be routed as member failures"]
 fn unavailable_runtime_records_spawn_error_for_the_lead() {
     let Some(harness) = support::start_with_skill() else {
         return;
@@ -31,7 +30,11 @@ fn unavailable_runtime_records_spawn_error_for_the_lead() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("delegation denied"));
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("delegation denied"),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
     let lead = support::lead_id(&harness.home);
     let failure: Value = support::wait_for_inbound(
         &harness.home,

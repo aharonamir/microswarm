@@ -4,7 +4,6 @@ mod support;
 use std::time::{Duration, Instant};
 
 #[test]
-#[ignore = "red: T067 — transient failures must restart and replay unacknowledged work"]
 fn transient_model_failure_restarts_and_reprocesses_one_unacknowledged_message() {
     let Some(harness) = support::start() else {
         return;
@@ -39,7 +38,6 @@ fn transient_model_failure_restarts_and_reprocesses_one_unacknowledged_message()
 }
 
 #[test]
-#[ignore = "red: T067 — transient restart attempts must stop after three retries"]
 fn transient_restart_limit_is_three() {
     let Some(harness) = support::start() else {
         return;

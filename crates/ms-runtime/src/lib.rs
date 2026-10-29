@@ -8,6 +8,8 @@ use std::{
     time::Duration,
 };
 
+pub mod lifecycle;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MountSpec {
     pub source: String,
@@ -151,6 +153,7 @@ impl ContainerProfile {
     }
 }
 
+#[derive(Clone)]
 pub struct ContainerRuntime {
     docker: Docker,
     rootless: bool,
@@ -259,6 +262,18 @@ impl ContainerRuntime {
         Ok(inspected
             .state
             .and_then(|state| state.running)
+            .unwrap_or(false))
+    }
+
+    pub async fn oom_killed(&self, container_id: &str) -> Result<bool, String> {
+        let inspected = self
+            .docker
+            .inspect_container(container_id, None)
+            .await
+            .map_err(|error| format!("cannot inspect agent exit state: {error}"))?;
+        Ok(inspected
+            .state
+            .and_then(|state| state.oom_killed)
             .unwrap_or(false))
     }
 

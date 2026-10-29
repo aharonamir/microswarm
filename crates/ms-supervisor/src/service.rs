@@ -12,6 +12,7 @@ use ms_store::{
     DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
     open_session_dir,
 };
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use std::{
     fs::{self, OpenOptions},
@@ -40,6 +41,8 @@ pub async fn serve(home: impl AsRef<Path>) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let idle_home = home.clone();
     tokio::spawn(async move { idle_session_watcher(idle_home).await });
+    let exit_home = home.clone();
+    tokio::spawn(async move { crate::exit_watcher::watch(exit_home).await });
     loop {
         let (stream, _) = listener.accept().await.map_err(|error| error.to_string())?;
         let home = home.clone();
@@ -84,6 +87,9 @@ async fn idle_session_watcher(home: PathBuf) {
         }
         if let Err(error) = close_idle_members(&home).await {
             eprintln!("member idle watcher failed: {error}");
+        }
+        if let Err(error) = crate::deadlines::process_due(&home).await {
+            eprintln!("delegation deadline watcher failed: {error}");
         }
     }
 }
@@ -369,6 +375,40 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
     runtime.signal(&container_id, "SIGUSR1").await?;
     let deadline = Instant::now() + Duration::from_secs(90);
     loop {
+        let (status, close_reason, restart_count): (String, Option<String>, u8) = store
+            .connection()
+            .query_row(
+                "SELECT status,close_reason,restart_count FROM sessions WHERE id=?1",
+                [&session_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|error| error.to_string())?;
+        if status == "failed" {
+            let exit_data: Option<String> = store.connection().query_row(
+                "SELECT data FROM supervisor_events WHERE session_id=?1 AND type='container.exited' ORDER BY seq DESC LIMIT 1",[&session_id],|row|row.get(0)
+            ).optional().map_err(|error|error.to_string())?;
+            let exit_reason = exit_data
+                .and_then(|data| serde_json::from_str::<Value>(&data).ok())
+                .and_then(|data| {
+                    data.get("reason")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                });
+            let key = match (
+                close_reason.as_deref(),
+                exit_reason.as_deref(),
+                restart_count,
+            ) {
+                (Some("safety"), _, _) => crate::i18n::MessageKey::SessionFailed,
+                (_, Some("config"), _) => crate::i18n::MessageKey::ConfigInvalid,
+                (_, _, count) if count > 0 => crate::i18n::MessageKey::RetryExhausted,
+                _ => crate::i18n::MessageKey::SessionFailed,
+            };
+            let notice = crate::i18n::translate(config.microswarm.home.lang, key);
+            return Ok(
+                json!({"session_id":session_id,"text":format!("{notice} (session {session_id})")}),
+            );
+        }
         for message in session
             .outbound_after(last_id)
             .map_err(|error| error.to_string())?
@@ -895,7 +935,16 @@ async fn handle_delegation_request(
             store
                 .update_delegation_status(&delegation_id, "failed", None, None, &utc_now())
                 .map_err(|store_error| store_error.to_string())?;
+            store
+                .connection()
+                .execute(
+                    "UPDATE delegations SET failure_reason='spawn_error' WHERE id=?1",
+                    [&delegation_id],
+                )
+                .map_err(|store_error| store_error.to_string())?;
+            store.connection().execute("UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2 WHERE id=?1 AND status IN ('pending','starting')", rusqlite::params![member_id,utc_now()]).map_err(|store_error|store_error.to_string())?;
             open_session_dir(lead_session_dir).map_err(|store_error| store_error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|store_error| store_error.to_string())?;
+            open_session_dir(lead_session_dir).map_err(|store_error|store_error.to_string())?.append_inbound(&InboundKind::MemberFailed,&json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"spawn_error"})).map_err(|store_error|store_error.to_string())?;
         }
     }
     Ok(startup.prompt)
@@ -966,7 +1015,7 @@ fn reject_delegation(
     Ok(None)
 }
 
-fn emit_supervisor_event(
+pub(crate) fn emit_supervisor_event(
     store: &mut SupervisorStore,
     session_id: &str,
     root_session_id: &str,
@@ -1266,6 +1315,10 @@ async fn handle_send_to_member(
         )
         .map_err(|error| error.to_string())?;
     store.connection().execute(
+        "UPDATE delegations SET status='waiting_reply',waiting_since=strftime('%Y-%m-%dT%H:%M:%fZ','now'),deadline_at=strftime('%Y-%m-%dT%H:%M:%fZ','now','+' || ?2 || ' seconds'),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?1 AND status IN ('active','spawning')",
+        rusqlite::params![delegation_id,i64::try_from(timeout_s).map_err(|error|error.to_string())?],
+    ).map_err(|error|error.to_string())?;
+    store.connection().execute(
         "UPDATE sessions SET status='busy',last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
         [member_id,utc_now().as_str()],
     ).map_err(|error|error.to_string())?;
@@ -1275,16 +1328,21 @@ async fn handle_send_to_member(
     let mut after_id = cursor;
     loop {
         if Instant::now() >= deadline {
-            graceful_stop_session(home, config, member_id, &container_id).await?;
             let now = utc_now();
-            store.connection().execute(
-                "UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status IN ('busy','ready')",
-                [member_id, now.as_str()],
-            ).map_err(|error| error.to_string())?;
-            store.connection().execute(
-                "UPDATE delegations SET status='failed',waiting_since=NULL,updated_at=?2 WHERE id=?1",
+            let claimed=store.connection().execute(
+                "UPDATE delegations SET status='failed',failure_reason='timeout',updated_at=?2 WHERE id=?1 AND status='waiting_reply'",
                 [&delegation_id, now.as_str()],
             ).map_err(|error| error.to_string())?;
+            if claimed == 1 {
+                store.connection().execute(
+                    "UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status IN ('busy','ready')",
+                    [member_id, now.as_str()],
+                ).map_err(|error| error.to_string())?;
+                graceful_stop_session(home, config, member_id, &container_id).await?;
+            }
+            if claimed == 0 {
+                return Ok(None);
+            }
             open_session_dir(lead_session_dir)
                 .map_err(|error| error.to_string())?
                 .append_inbound(
@@ -1356,7 +1414,7 @@ async fn handle_send_to_member(
                 )
                 .map_err(|error| error.to_string())?;
             store.connection().execute(
-                "UPDATE delegations SET status='active',waiting_since=NULL,updated_at=?2 WHERE id=?1",
+                "UPDATE delegations SET status='active',waiting_since=NULL,deadline_at=NULL,updated_at=?2 WHERE id=?1",
                 [&delegation_id,utc_now().as_str()],
             ).map_err(|error|error.to_string())?;
             store.connection().execute(
@@ -1382,6 +1440,17 @@ async fn handle_send_to_member(
             )
             .map_err(|error| error.to_string())?;
         if matches!(status.as_str(), "crashed" | "closed" | "failed") {
+            let failure_reason: Option<String> = store
+                .connection()
+                .query_row(
+                    "SELECT failure_reason FROM delegations WHERE id=?1",
+                    [&delegation_id],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string())?;
+            if failure_reason.as_deref() == Some("timeout") {
+                return Ok(None);
+            }
             open_session_dir(lead_session_dir)
                 .map_err(|error| error.to_string())?
                 .append_inbound(
@@ -1563,7 +1632,7 @@ fn new_id() -> Result<String, String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn utc_now() -> String {
+pub(crate) fn utc_now() -> String {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
@@ -1882,7 +1951,7 @@ async fn route_waiting_member_replies(
                 &json!({"member_id":member_id,"delegation_id":delegation_id,"text":text}),
             )
             .map_err(|e| e.to_string())?;
-        store.connection().execute("UPDATE delegations SET status='active',waiting_since=NULL,updated_at=?2 WHERE id=?1 AND status='waiting_reply'",[&delegation_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
+        store.connection().execute("UPDATE delegations SET status='active',waiting_since=NULL,deadline_at=NULL,updated_at=?2 WHERE id=?1 AND status='waiting_reply'",[&delegation_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
         emit_supervisor_event(
             store,
             &member_id,
@@ -1904,7 +1973,7 @@ async fn route_waiting_member_replies(
     Ok(())
 }
 
-fn config_dir(home: &Path) -> PathBuf {
+pub(crate) fn config_dir(home: &Path) -> PathBuf {
     let nested = home.join("config");
     if nested.join("microswarm.toml").is_file() {
         nested

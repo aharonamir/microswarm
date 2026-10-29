@@ -1,134 +1,35 @@
 use ms_proto::ExitReason;
+pub use ms_runtime::lifecycle::{
+    SessionEvent, SessionStatus, classify_exit, classify_exit_with_agent_reason,
+};
 use ms_store::{SessionLifecycleUpdate, StoreError, SupervisorStore};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SessionStatus {
-    Pending,
-    Starting,
-    Ready,
-    Busy,
-    Stopping,
-    Crashed,
-    Closed,
-    Failed,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SessionEvent {
-    Start,
-    AgentReady,
-    TurnStarted,
-    TurnFinished,
-    Shutdown,
-    Restart,
-    ContainerExited { code: i32, oom_killed: bool },
-    ContainerExit { reason: ExitReason },
-}
-
-pub struct SessionLifecycle {
-    status: SessionStatus,
-    restart_count: u8,
-    restart_limit: u8,
-    failure_reason: Option<ExitReason>,
-}
+pub struct SessionLifecycle(ms_runtime::lifecycle::SessionLifecycle);
 
 impl SessionLifecycle {
     pub fn new(restart_limit: u8) -> Self {
-        Self {
-            status: SessionStatus::Pending,
-            restart_count: 0,
-            restart_limit,
-            failure_reason: None,
-        }
+        Self(ms_runtime::lifecycle::SessionLifecycle::new(restart_limit))
     }
 
     pub fn restore(status: &str, restart_count: u8, restart_limit: u8) -> Result<Self, String> {
-        let status = SessionStatus::parse(status)
-            .ok_or_else(|| format!("unknown persisted session status {status:?}"))?;
-        Ok(Self {
-            status,
-            restart_count,
-            restart_limit,
-            failure_reason: None,
-        })
+        ms_runtime::lifecycle::SessionLifecycle::restore(status, restart_count, restart_limit)
+            .map(Self)
     }
 
     pub fn status(&self) -> SessionStatus {
-        self.status
+        self.0.status()
     }
 
     pub fn restart_count(&self) -> u8 {
-        self.restart_count
+        self.0.restart_count()
     }
 
     pub fn failure_reason(&self) -> Option<ExitReason> {
-        self.failure_reason
+        self.0.failure_reason()
     }
 
     pub fn apply(&mut self, event: SessionEvent) -> Result<SessionStatus, String> {
-        let next = match event {
-            SessionEvent::Start if self.status == SessionStatus::Pending => SessionStatus::Starting,
-            SessionEvent::AgentReady if self.status == SessionStatus::Starting => {
-                SessionStatus::Ready
-            }
-            SessionEvent::TurnStarted if self.status == SessionStatus::Ready => SessionStatus::Busy,
-            SessionEvent::TurnFinished if self.status == SessionStatus::Busy => {
-                SessionStatus::Ready
-            }
-            SessionEvent::Shutdown if self.status == SessionStatus::Pending => {
-                SessionStatus::Closed
-            }
-            SessionEvent::Shutdown
-                if matches!(
-                    self.status,
-                    SessionStatus::Starting | SessionStatus::Ready | SessionStatus::Busy
-                ) =>
-            {
-                SessionStatus::Stopping
-            }
-            SessionEvent::Restart if self.status == SessionStatus::Crashed => {
-                SessionStatus::Starting
-            }
-            SessionEvent::ContainerExited { code: 0, .. }
-                if !matches!(self.status, SessionStatus::Closed | SessionStatus::Failed) =>
-            {
-                SessionStatus::Closed
-            }
-            SessionEvent::ContainerExited { code, oom_killed }
-                if !matches!(self.status, SessionStatus::Closed | SessionStatus::Failed) =>
-            {
-                let reason = classify_exit(code, oom_killed);
-                self.failure_reason = Some(reason);
-                if reason == ExitReason::Transient && self.restart_count < self.restart_limit {
-                    self.restart_count += 1;
-                    SessionStatus::Crashed
-                } else {
-                    SessionStatus::Failed
-                }
-            }
-            SessionEvent::ContainerExit { reason }
-                if !matches!(self.status, SessionStatus::Closed | SessionStatus::Failed) =>
-            {
-                self.failure_reason = (reason != ExitReason::Ok).then_some(reason);
-                if reason == ExitReason::Ok {
-                    SessionStatus::Closed
-                } else if reason == ExitReason::Transient && self.restart_count < self.restart_limit
-                {
-                    self.restart_count += 1;
-                    SessionStatus::Crashed
-                } else {
-                    SessionStatus::Failed
-                }
-            }
-            _ => {
-                return Err(format!(
-                    "invalid session transition: {:?} + {:?}",
-                    self.status, event
-                ));
-            }
-        };
-        self.status = next;
-        Ok(next)
+        self.0.apply(event)
     }
 
     pub fn persist(
@@ -138,9 +39,9 @@ impl SessionLifecycle {
         container_id: Option<&str>,
         timestamp: &str,
     ) -> Result<(), StoreError> {
-        let status = self.status.as_str();
-        let terminal = matches!(self.status, SessionStatus::Closed | SessionStatus::Failed);
-        let close_reason = match (self.status, self.failure_reason) {
+        let status = self.status();
+        let terminal = matches!(status, SessionStatus::Closed | SessionStatus::Failed);
+        let close_reason = match (status, self.failure_reason()) {
             (SessionStatus::Closed, _) => Some("session_end"),
             (SessionStatus::Failed, Some(ExitReason::Safety)) => Some("safety"),
             (SessionStatus::Failed, _) => Some("failed"),
@@ -148,84 +49,12 @@ impl SessionLifecycle {
         };
         store.update_session_lifecycle(&SessionLifecycleUpdate {
             session_id: session_id.to_owned(),
-            status: status.to_owned(),
+            status: status.as_str().to_owned(),
             container_id: container_id.map(str::to_owned),
-            restart_count: self.restart_count,
+            restart_count: self.restart_count(),
             last_active_at: timestamp.to_owned(),
             closed_at: terminal.then(|| timestamp.to_owned()),
             close_reason: close_reason.map(str::to_owned),
         })
-    }
-}
-
-impl SessionStatus {
-    fn parse(value: &str) -> Option<Self> {
-        Some(match value {
-            "pending" => Self::Pending,
-            "starting" => Self::Starting,
-            "ready" => Self::Ready,
-            "busy" => Self::Busy,
-            "stopping" => Self::Stopping,
-            "crashed" => Self::Crashed,
-            "closed" => Self::Closed,
-            "failed" => Self::Failed,
-            _ => return None,
-        })
-    }
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Starting => "starting",
-            Self::Ready => "ready",
-            Self::Busy => "busy",
-            Self::Stopping => "stopping",
-            Self::Crashed => "crashed",
-            Self::Closed => "closed",
-            Self::Failed => "failed",
-        }
-    }
-}
-
-pub const fn classify_exit(code: i32, oom_killed: bool) -> ExitReason {
-    match code {
-        0 => ExitReason::Ok,
-        75 => ExitReason::Transient,
-        137 if oom_killed => ExitReason::Transient,
-        78 => ExitReason::Config,
-        77 => ExitReason::Safety,
-        _ => ExitReason::Safety,
-    }
-}
-
-pub fn classify_exit_with_agent_reason(
-    code: i32,
-    oom_killed: bool,
-    agent_reason: Option<&str>,
-) -> ExitReason {
-    let runtime_reason = classify_exit(code, oom_killed);
-    let Some(agent_reason) = agent_reason else {
-        return runtime_reason;
-    };
-    let agent_reason = match agent_reason {
-        "ok" => ExitReason::Ok,
-        "transient" => ExitReason::Transient,
-        "config" => ExitReason::Config,
-        "safety" => ExitReason::Safety,
-        _ => ExitReason::Safety,
-    };
-    if exit_reason_rank(agent_reason) > exit_reason_rank(runtime_reason) {
-        agent_reason
-    } else {
-        runtime_reason
-    }
-}
-
-const fn exit_reason_rank(reason: ExitReason) -> u8 {
-    match reason {
-        ExitReason::Ok => 0,
-        ExitReason::Transient => 1,
-        ExitReason::Config => 2,
-        ExitReason::Safety => 3,
     }
 }

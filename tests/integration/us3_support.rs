@@ -79,9 +79,10 @@ pub fn wait_for_status(home: &Path, id: &str, expected: &str, timeout: Duration)
         if session_state(home, id).0 == expected {
             return;
         }
+        let current = session_state(home, id).0;
         assert!(
             Instant::now() < deadline,
-            "session {id} did not reach {expected}"
+            "session {id} remained {current}, expected {expected}"
         );
         thread::sleep(Duration::from_millis(50));
     }

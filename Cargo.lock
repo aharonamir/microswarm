@@ -1285,6 +1285,7 @@ dependencies = [
  "ms-proto",
  "ms-runtime",
  "ms-store",
+ "rusqlite",
  "rustls",
  "serde",
  "serde-saphyr",

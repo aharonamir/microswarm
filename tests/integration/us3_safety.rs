@@ -6,7 +6,6 @@ use ms_supervisor::sessions::classify_exit;
 use std::{process::Command, time::Duration};
 
 #[test]
-#[ignore = "red: T068 — safety failures and non-OOM signals must never restart"]
 fn non_oom_signal_fails_member_safely_and_notifies_its_lead() {
     assert_eq!(classify_exit(77, false), ExitReason::Safety);
     assert_eq!(classify_exit(42, false), ExitReason::Safety);
@@ -34,6 +33,10 @@ fn non_oom_signal_fails_member_safely_and_notifies_its_lead() {
         .output()
         .unwrap();
     assert!(output.status.success());
+    assert!(
+        !harness.container_running(&container).unwrap(),
+        "SIGTERM did not stop member container"
+    );
     let failure = support::wait_for_inbound(
         &harness.home,
         &member.1,
