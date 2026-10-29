@@ -16,49 +16,51 @@ fn member_network_is_internal_and_credentials_are_limited_to_its_scope() {
         ),
     )
     .unwrap();
-    harness.chat(None, &["spawn researcher"]).unwrap();
+    harness.chat(None, &["spawn researcher twice"]).unwrap();
     let members = support::members(&harness);
-    assert_eq!(members.len(), 1);
+    assert_eq!(members.len(), 2);
     let lead_id = members[0].2.as_deref().unwrap();
-    let scope: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(
-            harness
-                .home
-                .join("sessions")
-                .join(&members[0].0)
-                .join("control/scope.json"),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let credentials = scope["credentials"].as_array().unwrap();
-    assert!(credentials.iter().any(|name| name == "fixture-model-key"));
-    assert!(credentials.iter().all(|name| name != "lead-only-secret"));
-    let network = format!("ms-net-{}", members[0].0);
     let runtime = match harness.runtime {
         support::harness::Runtime::Docker => "docker",
         support::harness::Runtime::Podman => "podman",
     };
-    let output = std::process::Command::new(runtime)
-        .args([
-            "network",
-            "inspect",
-            &network,
-            "--format",
-            "{{.Internal}} {{len .Containers}}",
-        ])
-        .output()
+    let mut member_networks = Vec::new();
+    for member in &members {
+        let scope: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                harness
+                    .home
+                    .join("sessions")
+                    .join(&member.0)
+                    .join("control/scope.json"),
+            )
+            .unwrap(),
+        )
         .unwrap();
-    assert!(output.status.success());
-    let details = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        details.starts_with("true"),
-        "member network must block direct egress: {details}"
-    );
-    assert!(
-        details.contains("1"),
-        "member must be alone on its network: {details}"
-    );
+        let credentials = scope["credentials"].as_array().unwrap();
+        assert!(credentials.iter().any(|name| name == "fixture-model-key"));
+        assert!(credentials.iter().all(|name| name != "lead-only-secret"));
+        let network = format!("ms-net-{}", member.0);
+        let output = std::process::Command::new(runtime)
+            .args([
+                "network",
+                "inspect",
+                &network,
+                "--format",
+                "{{.Internal}} {{len .Containers}}",
+            ])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let details = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(
+            details.trim(),
+            "true 1",
+            "member network is not isolated: {details}"
+        );
+        member_networks.push(network);
+    }
+    assert_ne!(member_networks[0], member_networks[1]);
 
     let lead_network = format!("ms-net-{lead_id}");
     let lead_output = std::process::Command::new(runtime)
