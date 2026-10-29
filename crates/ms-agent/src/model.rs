@@ -270,11 +270,20 @@ impl ModelClient {
         }
     }
 
-    async fn available_tools(&mut self) -> Result<Vec<Value>, String> {
-        let tools = match &mut self.mcp {
+    async fn available_tools(
+        &mut self,
+        kind: &str,
+        delegation_enabled: bool,
+    ) -> Result<Vec<Value>, String> {
+        let mut tools = match &mut self.mcp {
             Some(mcp) => mcp.model_tools().await.map_err(|error| error.to_string()),
             None => Ok(Vec::new()),
         }?;
+        tools.extend(crate::delegate::tool_definitions(
+            kind,
+            delegation_enabled,
+            self.provider == ModelProvider::Anthropic,
+        ));
         if self.provider == ModelProvider::Anthropic {
             Ok(tools
                 .into_iter()
@@ -294,19 +303,63 @@ impl ModelClient {
 
     async fn call_tool(
         &mut self,
-        scope: &ms_proto::Scope,
+        context: &mut AgentContext,
         server: &str,
         tool: &str,
         arguments: Value,
         approved: Option<&ApprovalBinding>,
+        in_reply_to: Option<i64>,
     ) -> Result<Value, String> {
         let args = arguments
             .as_object()
             .cloned()
             .ok_or_else(|| "model tool arguments must be a JSON object".to_owned())?;
+        if server == "microswarm-core" {
+            if context.kind != "lead"
+                || !context
+                    .scope
+                    .delegation
+                    .as_ref()
+                    .is_some_and(|delegation| delegation.enabled)
+            {
+                return Err("delegation tools are unavailable to this session".into());
+            }
+            let mut permission_scope = context.scope.clone();
+            permission_scope.tools.push(ms_proto::ToolGrant {
+                server: "microswarm-core".into(),
+                tools: ms_proto::ToolNames::Selected([tool.to_owned()].into_iter().collect()),
+                policy: ms_proto::Permission::Allow,
+                overrides: Default::default(),
+            });
+            authorize_tool(&permission_scope, server, tool, Some(args))
+                .map_err(|error| error.to_string())?;
+            let message = crate::delegate::prepare_outbound(tool, arguments, in_reply_to)?;
+            crate::delegate::write_outbound(&mut context.store, &message)?;
+            let (event_type, data) = crate::delegate::event_for(&message);
+            crate::emit::emit(
+                &mut context.store,
+                &context.session_id,
+                &context.root_session_id,
+                &context.role,
+                event_type,
+                data,
+            )
+            .map_err(|error| error.to_string())?;
+            let expected = crate::delegate::expected_result_kind(tool)?;
+            let result = crate::delegate::wait_for_result(
+                &mut context.store,
+                in_reply_to.unwrap_or(0),
+                expected,
+                std::time::Duration::from_secs(300),
+            )
+            .await?;
+            return Ok(result.body);
+        }
         let permit = match approved {
-            Some(binding) => authorize_approved_tool(scope, server, tool, Some(args), binding),
-            None => authorize_tool(scope, server, tool, Some(args)),
+            Some(binding) => {
+                authorize_approved_tool(&context.scope, server, tool, Some(args), binding)
+            }
+            None => authorize_tool(&context.scope, server, tool, Some(args)),
         };
         let permit = permit.map_err(|error| error.to_string())?;
         let mcp = self
@@ -369,7 +422,7 @@ fn model_tool_call(
 impl TurnProcessor for ModelClient {
     fn process<'a>(
         &'a mut self,
-        context: &'a AgentContext,
+        context: &'a mut AgentContext,
         message: InboundMessage,
         history: Vec<HistoryEntry>,
     ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>> {
@@ -399,7 +452,7 @@ impl TurnProcessor for ModelClient {
 impl ModelClient {
     async fn run_turn(
         &mut self,
-        context: &AgentContext,
+        context: &mut AgentContext,
         original_history: Vec<HistoryEntry>,
         user_text: &str,
         in_reply_to: Option<i64>,
@@ -415,7 +468,17 @@ impl ModelClient {
             delta.push(user_pending.clone().expect("user entry exists"));
         }
         for _ in 0..8 {
-            let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+            let tools = self
+                .available_tools(
+                    &context.kind,
+                    context
+                        .scope
+                        .delegation
+                        .as_ref()
+                        .is_some_and(|delegation| delegation.enabled),
+                )
+                .await
+                .map_err(TurnError::Transient)?;
             let request_text = if delta.len() == 1 && include_user {
                 user_text
             } else {
@@ -448,7 +511,14 @@ impl ModelClient {
                 delta.push(assistant);
                 let binding = ApprovalBinding::for_call(&server, &tool, Some(&arguments));
                 match self
-                    .call_tool(&context.scope, &server, &tool, arguments.clone(), None)
+                    .call_tool(
+                        context,
+                        &server,
+                        &tool,
+                        arguments.clone(),
+                        None,
+                        in_reply_to,
+                    )
                     .await
                 {
                     Ok(result) => {
@@ -498,7 +568,7 @@ impl ModelClient {
 
     async fn resume_approved(
         &mut self,
-        context: &AgentContext,
+        context: &mut AgentContext,
         history: Vec<HistoryEntry>,
         result: &Value,
         in_reply_to: Option<i64>,
@@ -554,7 +624,17 @@ impl ModelClient {
             let mut conversation = history;
             conversation.push(result_entry.clone());
             let mut delta = vec![result_entry];
-            let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+            let tools = self
+                .available_tools(
+                    &context.kind,
+                    context
+                        .scope
+                        .delegation
+                        .as_ref()
+                        .is_some_and(|delegation| delegation.enabled),
+                )
+                .await
+                .map_err(TurnError::Transient)?;
             let response = self
                 .complete_raw(&conversation, "", &tools)
                 .await
@@ -568,18 +648,29 @@ impl ModelClient {
         }
         let result = self
             .call_tool(
-                &context.scope,
+                context,
                 server,
                 tool,
                 arguments,
                 Some(&approved_binding),
+                in_reply_to,
             )
             .await
             .map_err(TurnError::Config)?;
         let result_entry = tool_result_history(self.provider, call_id, result);
         let mut conversation = history;
         conversation.push(result_entry.clone());
-        let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+        let tools = self
+            .available_tools(
+                &context.kind,
+                context
+                    .scope
+                    .delegation
+                    .as_ref()
+                    .is_some_and(|delegation| delegation.enabled),
+            )
+            .await
+            .map_err(TurnError::Transient)?;
         let response = self
             .complete_raw(&conversation, "", &tools)
             .await

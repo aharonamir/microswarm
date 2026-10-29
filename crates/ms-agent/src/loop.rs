@@ -18,7 +18,7 @@ pub struct TurnOutput {
 pub trait TurnProcessor {
     fn process<'a>(
         &'a mut self,
-        context: &'a AgentContext,
+        context: &'a mut AgentContext,
         message: InboundMessage,
         history: Vec<HistoryEntry>,
     ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>>;
@@ -161,7 +161,7 @@ pub async fn run<P: TurnProcessor>(
 
             let history = context.store.history().map_err(LoopError::Store)?;
             let output = processor
-                .process(&context, message, history)
+                .process(&mut context, message, history)
                 .await
                 .map_err(LoopError::Turn)?;
             context

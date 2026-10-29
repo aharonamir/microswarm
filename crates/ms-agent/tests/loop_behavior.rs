@@ -11,7 +11,7 @@ struct MustNotProcess;
 impl TurnProcessor for MustNotProcess {
     fn process<'a>(
         &'a mut self,
-        _: &'a AgentContext,
+        _: &'a mut AgentContext,
         _: InboundMessage,
         _: Vec<ms_store::HistoryEntry>,
     ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>> {

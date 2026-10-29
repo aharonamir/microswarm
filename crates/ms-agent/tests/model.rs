@@ -160,7 +160,7 @@ fn each_turn_returns_only_the_two_new_history_entries() {
     for turn in 0..4 {
         let output = runtime
             .block_on(client.process(
-                &context,
+                &mut context,
                 InboundMessage {
                     id: Some(turn + 1),
                     kind: InboundKind::UserMessage,
@@ -235,7 +235,7 @@ fn model_http_client_errors_are_configuration_failures() {
             "narrowed":[],"hash":"placeholder"
         }))
         .unwrap();
-        let context = AgentContext {
+        let mut context = AgentContext {
             session_id: scope.session_id.clone(),
             root_session_id: scope.session_id.clone(),
             kind: "lead".into(),
@@ -257,7 +257,7 @@ fn model_http_client_errors_are_configuration_failures() {
             .unwrap();
         let error = runtime
             .block_on(client.process(
-                &context,
+                &mut context,
                 InboundMessage {
                     id: Some(1),
                     kind: InboundKind::UserMessage,
@@ -308,7 +308,7 @@ fn model_error_body_cannot_fake_auth_status() {
         "narrowed":[],"hash":"placeholder"
     }))
     .unwrap();
-    let context = AgentContext {
+    let mut context = AgentContext {
         session_id: scope.session_id.clone(),
         root_session_id: scope.session_id.clone(),
         kind: "lead".into(),
@@ -330,7 +330,7 @@ fn model_error_body_cannot_fake_auth_status() {
         .unwrap();
     let error = runtime
         .block_on(client.process(
-            &context,
+            &mut context,
             InboundMessage {
                 id: Some(1),
                 kind: InboundKind::UserMessage,

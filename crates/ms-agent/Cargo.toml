@@ -48,3 +48,7 @@ path = "tests/emitter.rs"
 [[test]]
 name = "exit"
 path = "tests/exit.rs"
+
+[[test]]
+name = "delegation-tools"
+path = "tests/delegation.rs"

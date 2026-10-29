@@ -1,6 +1,7 @@
 #[path = "loop.rs"]
 pub mod agent_loop;
 pub mod boot;
+pub mod delegate;
 pub mod emit;
 pub mod exit;
 pub mod mcp;

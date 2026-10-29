@@ -78,6 +78,27 @@ impl SessionStore {
         Ok(())
     }
 
+    pub fn append_outbound(&mut self, message: &OutboundMessage) -> Result<i64, StoreError> {
+        let kind = serde_json::to_value(&message.kind)?;
+        self.outbound.execute(
+            "INSERT INTO outbound(kind, body, in_reply_to) VALUES (?1, ?2, ?3)",
+            params![
+                kind.as_str().unwrap_or_default(),
+                serde_json::to_string(&message.body)?,
+                message.in_reply_to
+            ],
+        )?;
+        Ok(self.outbound.last_insert_rowid())
+    }
+
+    pub fn acknowledge_inbound(&mut self, inbound_id: i64) -> Result<(), StoreError> {
+        self.outbound.execute(
+            "UPDATE cursor SET last_inbound_id=MAX(last_inbound_id, ?1) WHERE singleton=1",
+            [inbound_id],
+        )?;
+        Ok(())
+    }
+
     pub fn append_agent_event(&mut self, event: &AgentEvent) -> Result<i64, StoreError> {
         let transaction = self.events.transaction()?;
         let previous: Option<i64> = transaction
