@@ -2,6 +2,8 @@ use ms_proto::{InboundKind, OutboundMessage};
 use rusqlite::Connection;
 use rusqlite::OpenFlags;
 use serde_json::Value;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -143,8 +145,13 @@ pub fn open_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, St
     let path = path.as_ref();
     let control = path.join("control");
     let out = path.join("out");
+    fs::create_dir_all(path)?;
+    #[cfg(unix)]
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     fs::create_dir_all(&control)?;
     fs::create_dir_all(&out)?;
+    #[cfg(unix)]
+    fs::set_permissions(&out, fs::Permissions::from_mode(0o777))?;
     let (inbound_sql, outbound_sql, events_sql) = session_sections()?;
     let inbound = open_database(
         control.join("inbound.db"),
@@ -156,20 +163,34 @@ pub fn open_session_dir(path: impl AsRef<Path>) -> Result<SessionConnections, St
     // Force SQLite to initialize the WAL and shared-memory sidecars while the
     // supervisor has a writable connection, before scope persistence/container start.
     inbound.execute_batch("BEGIN IMMEDIATE; COMMIT;")?;
+    let outbound = open_database(
+        out.join("outbound.db"),
+        outbound_sql,
+        "NORMAL",
+        SESSION_SCHEMA_VERSION,
+    )?;
+    let events = open_database(
+        out.join("events.db"),
+        events_sql,
+        "NORMAL",
+        SESSION_SCHEMA_VERSION,
+    )?;
+    #[cfg(unix)]
+    for database in [out.join("outbound.db"), out.join("events.db")] {
+        for path in [
+            database.clone(),
+            PathBuf::from(format!("{}-wal", database.display())),
+            PathBuf::from(format!("{}-shm", database.display())),
+        ] {
+            if path.exists() {
+                fs::set_permissions(path, fs::Permissions::from_mode(0o666))?;
+            }
+        }
+    }
     Ok(SessionConnections {
         inbound,
-        outbound: open_database(
-            out.join("outbound.db"),
-            outbound_sql,
-            "NORMAL",
-            SESSION_SCHEMA_VERSION,
-        )?,
-        events: open_database(
-            out.join("events.db"),
-            events_sql,
-            "NORMAL",
-            SESSION_SCHEMA_VERSION,
-        )?,
+        outbound,
+        events,
     })
 }
 

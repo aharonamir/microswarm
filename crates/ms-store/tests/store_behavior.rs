@@ -142,6 +142,41 @@ fn agent_session_opens_control_database_read_only_and_writes_only_under_out() {
 }
 
 #[test]
+fn session_output_mount_is_writable_by_the_fixed_container_uid() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = temp_dir("container-output-permissions");
+    let supervisor = open_session_dir(&dir).unwrap();
+
+    let out_mode = fs::metadata(dir.join("out")).unwrap().permissions().mode();
+    assert_ne!(
+        out_mode & 0o002,
+        0,
+        "container uid must create WAL sidecars"
+    );
+    for database in ["outbound.db", "events.db"] {
+        for suffix in ["", "-wal", "-shm"] {
+            let path = dir.join("out").join(format!("{database}{suffix}"));
+            if !path.exists() {
+                continue;
+            }
+            let mode = fs::metadata(&path).unwrap().permissions().mode();
+            assert_ne!(
+                mode & 0o002,
+                0,
+                "container uid must write {}",
+                path.display()
+            );
+        }
+    }
+    let session_mode = fs::metadata(&dir).unwrap().permissions().mode();
+    assert_eq!(session_mode & 0o077, 0, "session directory stays private");
+
+    drop(supervisor);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn unknown_inbound_kind_is_read_and_can_be_acknowledged() {
     let dir = temp_dir("unknown-inbound");
     let supervisor = open_session_dir(&dir).unwrap();

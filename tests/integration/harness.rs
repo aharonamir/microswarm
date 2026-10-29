@@ -67,12 +67,31 @@ impl IntegrationHarness {
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
             .unwrap_or_else(|_| "microswarm-agent:dev".to_owned());
         write_test_config(&home, &model, runtime, &agent_image, approval_tool)?;
-        let supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
+        let mut supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
             .env("MS_HOME", &home)
             .env("MS_MODEL_BASE_URL", model.base_url())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()?;
+        let socket = home.join("supervisor.sock");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !socket.exists() {
+            if let Some(status) = supervisor.try_wait()? {
+                let mut stderr = String::new();
+                if let Some(mut pipe) = supervisor.stderr.take() {
+                    pipe.read_to_string(&mut stderr)?;
+                }
+                return Err(
+                    format!("microswarmd exited during startup ({status}): {stderr}").into(),
+                );
+            }
+            if Instant::now() >= deadline {
+                return Err(
+                    "microswarmd did not create supervisor.sock within five seconds".into(),
+                );
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
         Ok(Self {
             home,
             model,
@@ -91,7 +110,7 @@ impl IntegrationHarness {
             .args(session_id.into_iter().flat_map(|id| ["--session", id]))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::inherit())
             .spawn()?;
         let stdin = child.stdin.take().expect("stdin is piped");
         let stdout = child.stdout.take().expect("stdout is piped");
@@ -212,11 +231,36 @@ mod runtime_requirement_tests {
 
 impl Drop for IntegrationHarness {
     fn drop(&mut self) {
+        let runtime_name = match self.runtime {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        };
+        if let Ok(sessions) = self.session_dirs() {
+            for session in sessions {
+                let Some(session_id) = session.file_name().and_then(|name| name.to_str()) else {
+                    continue;
+                };
+                if let Ok(containers) = self.containers_for(session_id) {
+                    for container in containers {
+                        let _ = Command::new(runtime_name)
+                            .args(["rm", "--force", &container])
+                            .output();
+                    }
+                }
+                let _ = Command::new(runtime_name)
+                    .args(["network", "rm", &format!("ms-net-{session_id}")])
+                    .output();
+            }
+        }
         if let Some(mut child) = self.supervisor.take() {
             let _ = child.kill();
             let _ = child.wait();
         }
-        let _ = fs::remove_dir_all(&self.home);
+        if std::env::var("MS_KEEP_TEST_HOME").as_deref() == Ok("1") {
+            eprintln!("preserving integration test home: {}", self.home.display());
+        } else {
+            let _ = fs::remove_dir_all(&self.home);
+        }
     }
 }
 
@@ -232,9 +276,23 @@ fn unique_home() -> std::io::Result<PathBuf> {
 }
 
 fn detect_runtime() -> Result<Runtime, std::io::Error> {
-    for (name, runtime) in [("docker", Runtime::Docker), ("podman", Runtime::Podman)] {
+    let candidates = match std::env::var("MS_TEST_RUNTIME").as_deref() {
+        Ok("docker") => vec![("docker", "{{.ServerVersion}}", Runtime::Docker)],
+        Ok("podman") => vec![("podman", "{{.Host.Security.Rootless}}", Runtime::Podman)],
+        Ok(value) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("MS_TEST_RUNTIME must be docker or podman, got {value:?}"),
+            ));
+        }
+        Err(_) => vec![
+            ("docker", "{{.ServerVersion}}", Runtime::Docker),
+            ("podman", "{{.Host.Security.Rootless}}", Runtime::Podman),
+        ],
+    };
+    for (name, info_format, runtime) in candidates {
         if Command::new(name)
-            .args(["info", "--format", "{{.ServerVersion}}"])
+            .args(["info", "--format", info_format])
             .output()
             .is_ok_and(|result| result.status.success())
         {
@@ -359,6 +417,13 @@ impl InteractiveChat {
     pub fn wait(mut self) -> std::io::Result<std::process::ExitStatus> {
         self.close_input();
         self.child.wait()
+    }
+}
+
+impl Drop for InteractiveChat {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 

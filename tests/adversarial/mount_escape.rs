@@ -6,7 +6,6 @@ use std::fs;
 use std::process::Command;
 
 #[test]
-#[ignore = "red: T025 — session container lifecycle and mount wiring are not implemented yet"]
 fn agent_container_cannot_reach_host_control_or_another_session() {
     let Some(harness) = IntegrationHarness::start_or_skip() else {
         return;

@@ -5,7 +5,6 @@ use harness::IntegrationHarness;
 use std::process::Command;
 
 #[test]
-#[ignore = "red: T026 — container credential, filesystem, and egress isolation are not implemented yet"]
 fn agent_has_no_secrets_and_only_proxy_egress() {
     let Some(harness) = IntegrationHarness::start_or_skip() else {
         return;
