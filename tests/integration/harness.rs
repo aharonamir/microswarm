@@ -36,9 +36,9 @@ impl IntegrationHarness {
     }
 
     fn start_or_skip_with_approval_tool(approval_tool: bool) -> Option<Self> {
-        if let Err(error) = detect_runtime() {
+        if let Err(error) = runtime_prerequisite_error() {
             runtime_unavailable(
-                &error.to_string(),
+                &error,
                 std::env::var("MS_REQUIRE_RUNTIME").as_deref() == Ok("1"),
             );
             return None;
@@ -66,6 +66,8 @@ impl IntegrationHarness {
         let runtime = detect_runtime()?;
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
             .unwrap_or_else(|_| "microswarm-agent:dev".to_owned());
+        verify_agent_image(runtime, &agent_image)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::NotFound, error))?;
         write_test_config(&home, &model, runtime, &agent_image, approval_tool)?;
         let mut supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
             .env("MS_HOME", &home)
@@ -217,6 +219,30 @@ fn runtime_unavailable(reason: &str, required: bool) {
 
 #[cfg(test)]
 mod runtime_requirement_tests {
+    use super::{detect_runtime, unique_home, verify_agent_image};
+
+    #[test]
+    fn missing_agent_image_is_a_runtime_prerequisite_failure() {
+        let runtime = match detect_runtime() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                super::runtime_unavailable(
+                    &error.to_string(),
+                    std::env::var("MS_REQUIRE_RUNTIME").as_deref() == Ok("1"),
+                );
+                return;
+            }
+        };
+        let image = unique_home()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let error = verify_agent_image(runtime, &image).unwrap_err();
+        assert!(error.contains("not present"));
+    }
+
     #[test]
     fn required_runtime_turns_skip_into_failure() {
         let result = std::panic::catch_unwind(|| super::runtime_unavailable("no socket", true));
@@ -303,6 +329,31 @@ fn detect_runtime() -> Result<Runtime, std::io::Error> {
         std::io::ErrorKind::NotFound,
         "neither Docker nor Podman API is reachable",
     ))
+}
+
+fn runtime_prerequisite_error() -> Result<(), String> {
+    let runtime = detect_runtime().map_err(|error| error.to_string())?;
+    let image =
+        std::env::var("MS_TEST_AGENT_IMAGE").unwrap_or_else(|_| "microswarm-agent:dev".to_owned());
+    verify_agent_image(runtime, &image)
+}
+
+fn verify_agent_image(runtime: Runtime, image: &str) -> Result<(), String> {
+    let (program, args) = match runtime {
+        Runtime::Docker => ("docker", vec!["image", "inspect", image]),
+        Runtime::Podman => ("podman", vec!["image", "exists", image]),
+    };
+    let result = Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|error| format!("cannot check {runtime:?} image {image:?}: {error}"))?;
+    if result.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{runtime:?} agent image {image:?} is not present; build it before running runtime integration tests"
+        ))
+    }
 }
 
 fn write_test_config(

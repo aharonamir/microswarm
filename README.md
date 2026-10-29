@@ -12,4 +12,4 @@ specs/001-microswarm/
   tasks.md         T001–T100 by user story
 ```
 
-Runtime integration tests print a skip when neither Docker nor Podman is reachable. A future dedicated runtime CI job must set `MS_REQUIRE_RUNTIME=1` so an unavailable runtime fails the job instead of silently skipping coverage.
+Runtime integration tests print a skip when neither Docker nor Podman is reachable, or when the configured agent image is not present. A dedicated runtime CI job must build the image and set `MS_REQUIRE_RUNTIME=1` so missing prerequisites fail instead of silently skipping coverage.
