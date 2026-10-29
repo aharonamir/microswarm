@@ -121,3 +121,7 @@ path = "../../tests/adversarial/member_isolation.rs"
 [[test]]
 name = "symlink-scope"
 path = "../../tests/adversarial/symlink_scope.rs"
+
+[[test]]
+name = "spawn-policy"
+path = "tests/policy.rs"

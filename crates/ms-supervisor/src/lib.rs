@@ -1,6 +1,7 @@
 pub mod approvals;
 pub mod config;
 pub mod i18n;
+pub mod policy;
 pub mod proxy;
 pub mod router;
 pub mod runtime;
