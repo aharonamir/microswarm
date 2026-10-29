@@ -485,6 +485,8 @@ kind = "cli"
     fs::write(dir.join("ceiling.toml"), "")?;
     let tools = if approval_tool {
         "[[servers]]\nid = \"first-party\"\ntransport = \"stdio\"\ncommand = \"/microswarm-tools\"\n"
+    } else if swarm {
+        "[[servers]]\nid = \"microswarm-tools\"\ntransport = \"stdio\"\ncommand = \"/microswarm-tools\"\n"
     } else {
         ""
     };

@@ -2,7 +2,6 @@
 mod support;
 
 #[test]
-#[ignore = "red: T052 — supervisor must reject forged member delegation requests"]
 fn forged_member_delegation_row_is_rejected_and_member_tools_are_lead_only() {
     let Some(harness) = support::start_with_skill() else {
         return;

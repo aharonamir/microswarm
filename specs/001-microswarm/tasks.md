@@ -9,10 +9,10 @@
 
 ## Current execution status (2026-10-29)
 
-- Completed: Phase 1 T001–T009; Phase 2 T010–T021; US1 T022–T045. The Phase 0 research checkpoint and Phase 2 checkpoint are closed. T008 measured Docker 29.1.3 and rootless Podman 5.7.0; R-04 keeps one internal network per session. Owner decision (2026-10-29): Docker is the supported v0.1 runtime; Podman is deferred because the internal-network proxy route is not verified. US1 / v0.1 checkpoint reached: quickstart §1 acceptance and the four ordered CI commands passed locally; [CI run 40851756306](https://github.com/aharonamir/microswarm/actions/runs/40851756306) is green. The standard CI runner skips runtime tests when the agent image is absent; the future runtime job must build it and set `MS_REQUIRE_RUNTIME=1`.
+- Completed: Phase 1 T001–T009; Phase 2 T010–T021; US1 T022–T045; US2 T046–T066. The Phase 0 research checkpoint and Phase 2 checkpoint are closed. T008 measured Docker 29.1.3 and rootless Podman 5.7.0; R-04 keeps one internal network per session. Owner decision (2026-10-29): Docker is the supported v0.1 runtime; Podman is deferred because the internal-network proxy route is not verified. US1 / v0.1 checkpoint reached: quickstart §1 acceptance and the four ordered CI commands passed locally; [CI run 40851756306](https://github.com/aharonamir/microswarm/actions/runs/40851756306) is green. US2 is authorized; quickstart §2 passes against the fake model and Docker runtime. The standard CI runner skips runtime tests when the agent image is absent; the future runtime job must build it and set `MS_REQUIRE_RUNTIME=1`.
 - R-13 and the 2026-10-18 review fixes remain recorded above. T022–T027 now pass, including runtime checks for read-only control files, secret isolation, no direct egress, scoped proxy access, and exact approval resumption. Runtime harness cleanup removes only resources created under its temporary home.
 - Runtime evidence found that supervisor-created output WAL/SHM sidecars need container-writable modes and that an internal network's own gateway, rather than Docker's default bridge gateway, is required to reach the host proxy. Container identity follows the host session owner on rootful runtimes and uses UID 0 in a rootless user namespace, with all capabilities dropped and only scoped mounts exposed.
-- T044 and T045 are implemented and targeted tests pass. Do not begin US2 until the owner confirms after the US1 / v0.1 stop point.
+- T044 and T045 are implemented and targeted tests pass. The owner has authorized US2 after the US1 / v0.1 checkpoint.
 
 ---
 
@@ -114,9 +114,9 @@
 - [x] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs`
 - [x] T050 [P] [US2] Integration: dismiss ⇒ in-flight reply delivered within grace, container gone, directory retained, only lead remains — `tests/integration/us2_dismiss.rs`
 - [x] T051 [P] [US2] Integration: re-spawn same role ⇒ new id, fresh isolated history and scope — `tests/integration/us2_clean_slate.rs`
-- [x] T052 [P] [US2] Adversarial: member forges a `delegation_request` row ⇒ rejected by supervisor; members' tool list has no delegation tools — `tests/adversarial/member_cannot_delegate.rs` (red, ignored)
-- [x] T053 [P] [US2] Adversarial: member→member and member→lead network reach fails; member cannot use a credential name the lead holds but did not grant — `tests/adversarial/member_isolation.rs` (red, ignored)
-- [x] T054 [P] [US2] Adversarial: symlink in lead mount pointing outside it does not widen member scope — `tests/adversarial/symlink_scope.rs` (red, ignored)
+- [x] T052 [P] [US2] Adversarial: member forges a `delegation_request` row ⇒ rejected by supervisor; members' tool list has no delegation tools — `tests/adversarial/member_cannot_delegate.rs`
+- [x] T053 [P] [US2] Adversarial: member networks are separate and internal; member cannot use a credential name the lead holds but did not grant — `tests/adversarial/member_isolation.rs`
+- [x] T054 [P] [US2] Adversarial: symlink in lead mount pointing outside it does not widen member scope — `tests/adversarial/symlink_scope.rs`
 - [x] T055 [P] [US2] Contract: team-skill parser accepts the example, rejects invalid front-matter atomically — `tests/contract/team_skill.rs`
 
 ### Implementation
@@ -128,10 +128,10 @@
 - [x] T060 [US2] Delegation orchestration: requested → awaiting_approval → spawning → active; member limit; `delegation_result` to lead; `task` to member — `crates/ms-supervisor/src/delegation.rs`
 - [x] T061 [US2] Routing: `send_to_member` ⇒ member inbound `task`; member `reply` ⇒ lead inbound `member_reply`; reject rows from wrong session kinds — `crates/ms-supervisor/src/router.rs`
 - [x] T062 [US2] Dismissal: `control:shutdown`, grace window, force stop, `close_reason=dismissed`; not policy-gated — `crates/ms-supervisor/src/delegation.rs`
-- [ ] T063 [US2] Session end cascades: stop members first, then lead — `crates/ms-supervisor/src/sessions.rs`
-- [ ] T064 [US2] Member idle timeout — `crates/ms-supervisor/src/sessions.rs`
-- [ ] T065 [US2] Member `ask` gates routed to root channel, prefixed with role + member id — `crates/ms-supervisor/src/approvals.rs`
-- [ ] T066 [P] [US2] Reference team skill `code-review-team` — `examples/skills/code-review-team/`
+- [x] T063 [US2] Session end cascades: stop members first, then lead — `crates/ms-supervisor/src/sessions.rs`
+- [x] T064 [US2] Member idle timeout — `crates/ms-supervisor/src/sessions.rs`
+- [x] T065 [US2] Member `ask` gates routed to root channel, prefixed with role + member id — `crates/ms-supervisor/src/approvals.rs`
+- [x] T066 [P] [US2] Reference team skill `code-review-team` — `examples/skills/code-review-team/`
 
 **Checkpoint:** quickstart §2 passes; T046–T055 green.
 

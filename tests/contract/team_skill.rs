@@ -92,6 +92,30 @@ fn invalid_install_leaves_database_and_skill_directory_unchanged() {
     fs::remove_dir_all(home).unwrap();
 }
 
+#[test]
+fn reference_code_review_team_installs_with_all_role_instructions() {
+    let home = temporary_home("reference");
+    let mut store = SupervisorStore::open(home.join("supervisor.db")).unwrap();
+    let source =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/skills/code-review-team");
+    let skill =
+        ms_supervisor::skills::install_team_skill(&mut store, &home.join("skills"), &source)
+            .expect("reference skill should install");
+    assert_eq!(skill.name, "code-review-team");
+    for role in ["researcher", "tester"] {
+        let path: String = store
+            .connection()
+            .query_row(
+                "SELECT instructions FROM team_roles WHERE skill=?1 AND role=?2",
+                [&skill.name, role],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(PathBuf::from(path).is_file(), "missing {role} instructions");
+    }
+    fs::remove_dir_all(home).unwrap();
+}
+
 fn temporary_home(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "ms-team-skill-{label}-{}-{}",

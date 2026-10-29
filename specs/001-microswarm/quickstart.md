@@ -66,7 +66,7 @@ you › review the auth module and run its tests
   task:   run cargo test for src/auth
   mounts: /work ro · /work/target rw
   tools:  shell.run, fs.read
-  credentials: none
+  credentials: model-key
   /approve K7QF   /deny K7QF
 you › /approve K7QF
 agent › Researcher found two issues; tests pass (14/14). Details: …
@@ -77,8 +77,8 @@ Verify scope narrowing and teardown:
 ```console
 $ microswarm trace 01JB…
 01JB… lead  ready
-├─ 01JC… researcher  closed(dismissed)  scope: 1 mount(ro) · 3 tools · 1 cred
-└─ 01JD… tester      closed(dismissed)  scope: 2 mounts · 2 tools · 0 creds
+├─ 01JC… researcher  closed(dismissed)  scope: 1 mount(ro) · 3 tools · 2 creds
+└─ 01JD… tester      closed(dismissed)  scope: 2 mounts · 2 tools · 1 cred
 $ jq '.mounts, .narrowed' ~/.microswarm/sessions/01JD…/control/scope.json
 $ docker ps --filter label=ms.root=01JB… --format '{{.Labels}}' | wc -l
 1          # only the lead remains

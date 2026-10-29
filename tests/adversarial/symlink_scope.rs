@@ -2,7 +2,6 @@
 mod support;
 
 #[test]
-#[ignore = "red: T054 — symlinks outside the lead mount must not widen member scope"]
 fn symlink_in_lead_mount_does_not_widen_member_scope() {
     let Some(harness) = support::start_with_skill() else {
         return;

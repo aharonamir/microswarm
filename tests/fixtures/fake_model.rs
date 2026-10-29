@@ -135,6 +135,23 @@ fn delegation_response(body: &str) -> String {
         .iter()
         .any(|name| name.starts_with("microswarm-core/"))
     {
+        if user_text.contains("read file")
+            && names.contains(&"microswarm-tools/fs.read")
+            && !messages.iter().any(|message| {
+                message["tool_calls"].as_array().is_some_and(|calls| {
+                    calls.iter().any(|call| {
+                        call.pointer("/function/name")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("microswarm-tools/fs.read")
+                    })
+                })
+            })
+        {
+            return external_tool_call(
+                "microswarm-tools/fs.read",
+                serde_json::json!({"path":"/work/approval-target"}),
+            );
+        }
         return RESPONSE.into();
     }
     let count = |name: &str| {
@@ -196,9 +213,14 @@ fn delegation_response(body: &str) -> String {
         && count("microswarm-core/send_to_member") == 0
         && let Some(member_id) = &member_id
     {
+        let text = if user_text.contains("read file") {
+            "read file"
+        } else {
+            "run the auth test suite"
+        };
         return tool_call(
             "send_to_member",
-            serde_json::json!({"member_id":member_id,"text":"run the auth test suite","timeout_s":10}),
+            serde_json::json!({"member_id":member_id,"text":text,"timeout_s":10}),
         );
     }
     if user_text.contains("dismiss")
@@ -226,12 +248,16 @@ fn spawn_call(role: &str, task: &str, scope: serde_json::Value) -> String {
 }
 
 fn tool_call(name: &str, arguments: serde_json::Value) -> String {
+    external_tool_call(&format!("microswarm-core/{name}"), arguments)
+}
+
+fn external_tool_call(name: &str, arguments: serde_json::Value) -> String {
     serde_json::json!({
         "id":"chatcmpl-delegation",
         "object":"chat.completion",
         "choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{
             "id":"fixture-delegation","type":"function","function":{
-                "name":format!("microswarm-core/{name}"),
+                "name":name,
                 "arguments":arguments.to_string()
             }
         }]},"finish_reason":"tool_calls"}]

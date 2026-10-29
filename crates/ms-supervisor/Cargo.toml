@@ -107,6 +107,22 @@ name = "us2-limit"
 path = "../../tests/integration/us2_limit.rs"
 
 [[test]]
+name = "us2-cascade"
+path = "../../tests/integration/us2_cascade.rs"
+
+[[test]]
+name = "us2-member-idle"
+path = "../../tests/integration/us2_member_idle.rs"
+
+[[test]]
+name = "us2-member-approval"
+path = "../../tests/integration/us2_member_approval.rs"
+
+[[test]]
+name = "us2-quickstart"
+path = "../../tests/integration/us2_quickstart.rs"
+
+[[test]]
 name = "us2-narrowing"
 path = "../../tests/integration/us2_narrowing.rs"
 

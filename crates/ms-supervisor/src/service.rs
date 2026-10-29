@@ -82,6 +82,9 @@ async fn idle_session_watcher(home: PathBuf) {
         if let Err(error) = close_idle_leads(&home).await {
             eprintln!("idle session watcher failed: {error}");
         }
+        if let Err(error) = close_idle_members(&home).await {
+            eprintln!("member idle watcher failed: {error}");
+        }
     }
 }
 
@@ -128,28 +131,61 @@ async fn close_idle_leads(home: &Path) -> Result<(), String> {
     Ok(())
 }
 
+async fn close_idle_members(home: &Path) -> Result<(), String> {
+    let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
+    let store =
+        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
+    let due = store.connection().prepare(
+        "UPDATE sessions SET status='stopping' WHERE id IN (
+           SELECT id FROM sessions WHERE kind='member' AND status='ready' AND container_id IS NOT NULL
+           AND (julianday('now') - julianday(last_active_at)) * 86400.0 >= ?1
+         ) RETURNING id,parent_id,container_id",
+    ).map_err(|e|e.to_string())?.query_map([config.microswarm.limits.member_idle_s as f64],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).map_err(|e|e.to_string())?.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    for (member_id, lead_id, container_id) in due {
+        stop_member_idle(home, &config, &member_id, &lead_id, &container_id).await?;
+    }
+    Ok(())
+}
+
+async fn stop_member_idle(
+    home: &Path,
+    config: &ConfigSet,
+    member_id: &str,
+    lead_id: &str,
+    container_id: &str,
+) -> Result<(), String> {
+    graceful_stop_session(home, config, member_id, container_id).await?;
+    let now = utc_now();
+    let mut store =
+        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
+    store.connection().execute("UPDATE sessions SET status='closed',close_reason='idle',closed_at=?2,last_active_at=?2 WHERE id=?1",[member_id,now.as_str()]).map_err(|error|error.to_string())?;
+    store.connection().execute("UPDATE delegations SET status='failed',failure_reason='timeout',updated_at=?2 WHERE lead_id=?1 AND member_id=?3",[lead_id,now.as_str(),member_id]).map_err(|error|error.to_string())?;
+    emit_supervisor_event(
+        &mut store,
+        member_id,
+        lead_id,
+        "member",
+        SupervisorEventType::DelegationTimeout,
+        json!({"reason":"idle"}),
+    )?;
+    open_session_dir(home.join("sessions").join(lead_id))
+        .map_err(|error| error.to_string())?
+        .append_inbound(
+            &InboundKind::MemberFailed,
+            &json!({"member_id":member_id,"reason":"timeout"}),
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 async fn stop_idle_lead(
     home: &Path,
     config: &ConfigSet,
     session_id: &str,
     container_id: &str,
 ) -> Result<(), String> {
-    let runtime = runtime_for(config)?;
-    let session = open_session_dir(home.join("sessions").join(session_id))
-        .map_err(|error| error.to_string())?;
-    session
-        .append_inbound(&InboundKind::Control, &json!({"op":"shutdown"}))
-        .map_err(|error| error.to_string())?;
-    runtime.signal(container_id, "SIGUSR1").await?;
-
-    let grace = Duration::from_millis(config.microswarm.limits.grace_ms);
-    let deadline = Instant::now() + grace;
-    while runtime.is_running(container_id).await? && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    if runtime.is_running(container_id).await? {
-        runtime.stop(container_id, grace).await?;
-    }
+    stop_members_for_lead(home, config, session_id).await?;
+    graceful_stop_session(home, config, session_id, container_id).await?;
 
     let closed_at = utc_now();
     let store =
@@ -162,6 +198,79 @@ async fn stop_idle_lead(
             [session_id, closed_at.as_str()],
         )
         .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+async fn stop_members_for_lead(
+    home: &Path,
+    config: &ConfigSet,
+    lead_id: &str,
+) -> Result<(), String> {
+    let mut store =
+        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
+    let members = {
+        let mut statement = store.connection().prepare(
+            "SELECT id, container_id, role FROM sessions WHERE parent_id=?1 AND kind='member'
+             AND status NOT IN ('closed','failed') AND container_id IS NOT NULL ORDER BY created_at",
+        ).map_err(|error| error.to_string())?;
+        statement
+            .query_map([lead_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    };
+    for (member_id, container_id, role) in members {
+        graceful_stop_session(home, config, &member_id, &container_id).await?;
+        let now = utc_now();
+        store.connection().execute(
+            "UPDATE sessions SET status='closed', close_reason='session_end', closed_at=?2, last_active_at=?2 WHERE id=?1",
+            [member_id.as_str(),now.as_str()],
+        ).map_err(|error| error.to_string())?;
+        store.connection().execute(
+            "UPDATE delegations SET status='dismissed', updated_at=?2 WHERE lead_id=?1 AND member_id=?3",
+            [lead_id,now.as_str(),member_id.as_str()],
+        ).map_err(|error| error.to_string())?;
+        emit_supervisor_event(
+            &mut store,
+            &member_id,
+            lead_id,
+            &role,
+            SupervisorEventType::SessionClosed,
+            json!({"reason":"session_end"}),
+        )?;
+    }
+    Ok(())
+}
+
+async fn graceful_stop_session(
+    home: &Path,
+    config: &ConfigSet,
+    session_id: &str,
+    container_id: &str,
+) -> Result<(), String> {
+    open_session_dir(home.join("sessions").join(session_id))
+        .map_err(|error| error.to_string())?
+        .append_inbound(
+            &InboundKind::Control,
+            &json!({"op":"shutdown","grace_ms":config.microswarm.limits.grace_ms}),
+        )
+        .map_err(|error| error.to_string())?;
+    let runtime = runtime_for(config)?;
+    runtime.signal(container_id, "SIGUSR1").await?;
+    let grace = Duration::from_millis(config.microswarm.limits.grace_ms);
+    let deadline = Instant::now() + grace;
+    while runtime.is_running(container_id).await? && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    if runtime.is_running(container_id).await? {
+        runtime.stop(container_id, grace).await?;
+    }
     Ok(())
 }
 
@@ -327,8 +436,8 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
                     json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
                 );
             }
-            if message.kind == OutboundKind::SendToMember {
-                handle_send_to_member(
+            if message.kind == OutboundKind::SendToMember
+                && let Some(prompt) = handle_send_to_member(
                     home,
                     &config,
                     &mut store,
@@ -336,7 +445,11 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
                     &session_id,
                     &message.body,
                 )
-                .await?;
+                .await?
+            {
+                return Ok(
+                    json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
+                );
             }
             if message.kind == OutboundKind::Dismiss {
                 handle_dismiss_member(
@@ -998,7 +1111,7 @@ async fn handle_send_to_member(
     lead_session_dir: &Path,
     lead_id: &str,
     body: &Value,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let member_id = body
         .get("member_id")
         .and_then(Value::as_str)
@@ -1027,7 +1140,7 @@ async fn handle_send_to_member(
                 &json!({"member_id":member_id,"reason":"crashed"}),
             )
             .map_err(|error| error.to_string())?;
-        return Ok(());
+        return Ok(None);
     }
     let container_id = member
         .container_id
@@ -1051,6 +1164,10 @@ async fn handle_send_to_member(
             &json!({"delegation_id":delegation_id,"from_lead":lead_id,"text":text}),
         )
         .map_err(|error| error.to_string())?;
+    store.connection().execute(
+        "UPDATE sessions SET status='busy',last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
+        [member_id,utc_now().as_str()],
+    ).map_err(|error|error.to_string())?;
     let runtime = runtime_for(config)?;
     runtime.signal(&container_id, "SIGUSR1").await?;
     let deadline = Instant::now() + Duration::from_secs(timeout_s);
@@ -1063,6 +1180,38 @@ async fn handle_send_to_member(
             if let Some(id) = reply.id {
                 after_id = id;
             }
+            if reply.kind == OutboundKind::ApprovalRequest {
+                let binding: ms_proto::ApprovalBinding = serde_json::from_value(
+                    reply
+                        .body
+                        .get("binding")
+                        .cloned()
+                        .ok_or("member approval has no binding")?,
+                )
+                .map_err(|error| error.to_string())?;
+                let arguments = reply.body.get("args").cloned().unwrap_or(Value::Null);
+                let approval = crate::approvals::request_tool_approval(
+                    store,
+                    member_id,
+                    lead_id,
+                    &binding,
+                    &arguments,
+                    Duration::from_secs(config.microswarm.limits.approval_timeout_s),
+                )
+                .map_err(|error| error.to_string())?;
+                store.connection().execute(
+                    "UPDATE delegations SET status='waiting_reply',waiting_since=?2,updated_at=?2 WHERE id=?1",
+                    [&delegation_id,utc_now_precise().as_str()],
+                ).map_err(|error|error.to_string())?;
+                let rendered = crate::approvals::render_prompt(
+                    config.microswarm.home.lang,
+                    &approval.code,
+                    &binding.server,
+                    &binding.tool,
+                    &arguments,
+                );
+                return Ok(Some(format!("[{} {}] {rendered}", member.role, member_id)));
+            }
             if reply.kind != OutboundKind::Reply || reply.in_reply_to != Some(task_id) {
                 continue;
             }
@@ -1074,6 +1223,14 @@ async fn handle_send_to_member(
                     &json!({"member_id":member_id,"delegation_id":delegation_id,"text":response}),
                 )
                 .map_err(|error| error.to_string())?;
+            store.connection().execute(
+                "UPDATE delegations SET status='active',waiting_since=NULL,updated_at=?2 WHERE id=?1",
+                [&delegation_id,utc_now().as_str()],
+            ).map_err(|error|error.to_string())?;
+            store.connection().execute(
+                "UPDATE sessions SET status='ready',last_active_at=?2 WHERE id=?1 AND status='busy'",
+                [member_id,utc_now().as_str()],
+            ).map_err(|error|error.to_string())?;
             emit_supervisor_event(
                 store,
                 member_id,
@@ -1082,7 +1239,7 @@ async fn handle_send_to_member(
                 SupervisorEventType::DelegationReply,
                 json!({"member_id":member_id,"delegation_id":delegation_id}),
             )?;
-            return Ok(());
+            return Ok(None);
         }
         let status: String = store
             .connection()
@@ -1100,7 +1257,7 @@ async fn handle_send_to_member(
                     &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"crashed"}),
                 )
                 .map_err(|error| error.to_string())?;
-            return Ok(());
+            return Ok(None);
         }
         if Instant::now() >= deadline {
             open_session_dir(lead_session_dir)
@@ -1110,6 +1267,10 @@ async fn handle_send_to_member(
                     &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"timeout"}),
                 )
                 .map_err(|error| error.to_string())?;
+            store.connection().execute(
+                "UPDATE sessions SET status='ready',last_active_at=?2 WHERE id=?1 AND status='busy'",
+                [member_id,utc_now().as_str()],
+            ).map_err(|error|error.to_string())?;
             emit_supervisor_event(
                 store,
                 member_id,
@@ -1118,7 +1279,7 @@ async fn handle_send_to_member(
                 SupervisorEventType::DelegationTimeout,
                 json!({"member_id":member_id,"delegation_id":delegation_id}),
             )?;
-            return Ok(());
+            return Ok(None);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -1160,24 +1321,7 @@ async fn handle_dismiss_member(
         return Ok(());
     }
     let container_id = member.container_id.ok_or("member has no container")?;
-    let member_session = open_session_dir(home.join("sessions").join(member_id))
-        .map_err(|error| error.to_string())?;
-    member_session
-        .append_inbound(
-            &InboundKind::Control,
-            &json!({"op":"shutdown","grace_ms":config.microswarm.limits.grace_ms}),
-        )
-        .map_err(|error| error.to_string())?;
-    let runtime = runtime_for(config)?;
-    runtime.signal(&container_id, "SIGUSR1").await?;
-    let grace = Duration::from_millis(config.microswarm.limits.grace_ms);
-    let deadline = Instant::now() + grace;
-    while runtime.is_running(&container_id).await? && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    if runtime.is_running(&container_id).await? {
-        runtime.stop(&container_id, grace).await?;
-    }
+    graceful_stop_session(home, config, member_id, &container_id).await?;
     let now = utc_now();
     store
         .connection()
@@ -1330,6 +1474,18 @@ fn utc_now() -> String {
         sec / 3600,
         (sec % 3600) / 60,
         sec % 60
+    )
+}
+
+fn utc_now_precise() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let second = utc_now();
+    format!(
+        "{}.{:03}Z",
+        second.trim_end_matches('Z'),
+        elapsed.subsec_millis()
     )
 }
 
@@ -1538,6 +1694,7 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
     let deadline =
         Instant::now() + Duration::from_secs(config.microswarm.limits.approval_timeout_s + 90);
     loop {
+        route_waiting_member_replies(home, &config, &mut store, session_id).await?;
         if crate::approvals::expire_due(&mut store, session_id, &session)
             .map_err(|error| error.to_string())?
             > 0
@@ -1568,6 +1725,66 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+async fn route_waiting_member_replies(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    lead_id: &str,
+) -> Result<(), String> {
+    let waiting = {
+        let mut statement=store.connection().prepare("SELECT id,member_id,waiting_since FROM delegations WHERE lead_id=?1 AND status='waiting_reply' AND member_id IS NOT NULL").map_err(|e|e.to_string())?;
+        statement
+            .query_map([lead_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    let mut routed = false;
+    for (delegation_id, member_id, since) in waiting {
+        let Some(since) = since else { continue };
+        let member =
+            open_session_dir(home.join("sessions").join(&member_id)).map_err(|e| e.to_string())?;
+        let reply=member.outbound().query_row(
+            "SELECT body FROM outbound WHERE kind='reply' AND created_at>?1 ORDER BY id DESC LIMIT 1",[since],|row|row.get::<_,String>(0)
+        );
+        let Ok(body) = reply else { continue };
+        let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+        let text = body.get("text").and_then(Value::as_str).unwrap_or("");
+        open_session_dir(home.join("sessions").join(lead_id))
+            .map_err(|e| e.to_string())?
+            .append_inbound(
+                &InboundKind::MemberReply,
+                &json!({"member_id":member_id,"delegation_id":delegation_id,"text":text}),
+            )
+            .map_err(|e| e.to_string())?;
+        store.connection().execute("UPDATE delegations SET status='active',waiting_since=NULL,updated_at=?2 WHERE id=?1 AND status='waiting_reply'",[&delegation_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
+        emit_supervisor_event(
+            store,
+            &member_id,
+            lead_id,
+            "member",
+            SupervisorEventType::DelegationReply,
+            json!({"member_id":member_id,"delegation_id":delegation_id}),
+        )?;
+        routed = true;
+    }
+    if routed {
+        let container = store
+            .session_container_id(lead_id)
+            .map_err(|e| e.to_string())?;
+        if let Some(container) = container {
+            runtime_for(config)?.signal(&container, "SIGUSR1").await?;
+        }
+    }
+    Ok(())
 }
 
 fn config_dir(home: &Path) -> PathBuf {
