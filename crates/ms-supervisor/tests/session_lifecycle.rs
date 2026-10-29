@@ -159,7 +159,6 @@ fn lifecycle_status_and_restart_count_are_persisted_to_supervisor_db() {
 }
 
 #[test]
-#[ignore = "red: T072 — exit classification must cross-check the last agent.exit event"]
 fn exit_classification_uses_the_stricter_runtime_or_agent_reason() {
     use ms_proto::ExitReason;
     use ms_supervisor::sessions::classify_exit_with_agent_reason;

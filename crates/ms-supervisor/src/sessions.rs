@@ -22,6 +22,7 @@ pub enum SessionEvent {
     Shutdown,
     Restart,
     ContainerExited { code: i32, oom_killed: bool },
+    ContainerExit { reason: ExitReason },
 }
 
 pub struct SessionLifecycle {
@@ -99,6 +100,20 @@ impl SessionLifecycle {
                 let reason = classify_exit(code, oom_killed);
                 self.failure_reason = Some(reason);
                 if reason == ExitReason::Transient && self.restart_count < self.restart_limit {
+                    self.restart_count += 1;
+                    SessionStatus::Crashed
+                } else {
+                    SessionStatus::Failed
+                }
+            }
+            SessionEvent::ContainerExit { reason }
+                if !matches!(self.status, SessionStatus::Closed | SessionStatus::Failed) =>
+            {
+                self.failure_reason = (reason != ExitReason::Ok).then_some(reason);
+                if reason == ExitReason::Ok {
+                    SessionStatus::Closed
+                } else if reason == ExitReason::Transient && self.restart_count < self.restart_limit
+                {
                     self.restart_count += 1;
                     SessionStatus::Crashed
                 } else {
@@ -184,9 +199,33 @@ pub const fn classify_exit(code: i32, oom_killed: bool) -> ExitReason {
 }
 
 pub fn classify_exit_with_agent_reason(
-    _code: i32,
-    _oom_killed: bool,
-    _agent_reason: Option<&str>,
+    code: i32,
+    oom_killed: bool,
+    agent_reason: Option<&str>,
 ) -> ExitReason {
-    todo!("T072: cross-check the agent exit event with the runtime result")
+    let runtime_reason = classify_exit(code, oom_killed);
+    let Some(agent_reason) = agent_reason else {
+        return runtime_reason;
+    };
+    let agent_reason = match agent_reason {
+        "ok" => ExitReason::Ok,
+        "transient" => ExitReason::Transient,
+        "config" => ExitReason::Config,
+        "safety" => ExitReason::Safety,
+        _ => ExitReason::Safety,
+    };
+    if exit_reason_rank(agent_reason) > exit_reason_rank(runtime_reason) {
+        agent_reason
+    } else {
+        runtime_reason
+    }
+}
+
+const fn exit_reason_rank(reason: ExitReason) -> u8 {
+    match reason {
+        ExitReason::Ok => 0,
+        ExitReason::Transient => 1,
+        ExitReason::Config => 2,
+        ExitReason::Safety => 3,
+    }
 }
