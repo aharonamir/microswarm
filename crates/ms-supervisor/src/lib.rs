@@ -4,7 +4,7 @@ pub mod i18n;
 pub mod policy;
 pub mod proxy;
 pub mod router;
-pub mod runtime;
+pub use ms_runtime as runtime;
 pub mod scope;
 pub mod service;
 pub mod sessions;

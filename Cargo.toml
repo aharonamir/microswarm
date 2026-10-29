@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/ms-proto",
     "crates/ms-store",
+    "crates/ms-runtime",
     "crates/ms-agent",
     "crates/ms-supervisor",
     "crates/ms-channels",

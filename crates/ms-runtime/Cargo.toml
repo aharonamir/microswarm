@@ -1,0 +1,14 @@
+[package]
+name = "ms-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
+futures-util = "0.3.34"
+ms-proto = { path = "../ms-proto" }
+
+[lib]
+path = "src/lib.rs"

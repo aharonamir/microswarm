@@ -74,6 +74,8 @@ crates/
 │   └── src/{lib,message,event,scope,exit}.rs
 ├── ms-store/                      # SQLite open/WAL/migrations for session + supervisor dbs
 │   └── src/{lib,session,supervisor,migrate}.rs
+├── ms-runtime/                    # container runtime adapter and hardened container profile
+│   └── src/lib.rs                 # Bollard operations, per-session networks, exit events
 ├── ms-agent/                      # bin: microswarm-agent (runs in container)
 │   └── src/
 │       ├── main.rs                # boot, exit-code mapping
@@ -92,7 +94,6 @@ crates/
 │       ├── exit.rs                # exit classification (fail closed)
 │       ├── router.rs              # channel → session resolution, inbound writes, outbound delivery
 │       ├── sessions.rs            # session registry + lifecycle state machine
-│       ├── runtime.rs             # container create/start/stop/watch via bollard
 │       ├── scope.rs               # intersection + ceiling + control/scope.json writer
 │       ├── policy.rs              # spawn policy resolution
 │       ├── approvals.rs           # ask gates, expiry, re-issue
@@ -116,7 +117,7 @@ images/
 └── agent.Containerfile            # FROM scratch + static agent + tools
 ```
 
-**Structure decision:** a Cargo workspace with two security-relevant binaries (`ms-agent`, `ms-supervisor`) whose line budgets are tracked separately. Shared types live in `ms-proto`, which does no I/O so it can be read in isolation. Channels and the CLI are separate crates so they don't count toward the audited budgets.
+**Structure decision:** a Cargo workspace with two security-relevant binaries (`ms-agent`, `ms-supervisor`) whose line budgets are tracked separately. Shared types live in `ms-proto`, which does no I/O so it can be read in isolation. The container runtime adapter is a separate security-critical `ms-runtime` crate with its own line budget; its narrow API owns hardened container profiles, runtime operations, and container exit events. This boundary keeps Bollard integration independently reviewable while supervisor policy and lifecycle decisions remain in `ms-supervisor`. Channels and the CLI are separate crates so they don't count toward the binary budgets. `scripts/loc-budget.sh` gates `ms-agent + ms-proto + ms-store`, `ms-supervisor + ms-proto + ms-store`, and `ms-runtime + ms-proto` independently at 6,000 Rust code lines each.
 
 ## Architecture
 

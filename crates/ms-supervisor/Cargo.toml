@@ -8,8 +8,7 @@ license.workspace = true
 [dependencies]
 ms-proto = { path = "../ms-proto" }
 ms-store = { path = "../ms-store" }
-bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
-futures-util = "0.3.34"
+ms-runtime = { path = "../ms-runtime" }
 http = "1.3.1"
 http-body-util = "0.1.5"
 hyper = { version = "1.12.0", default-features = false, features = ["client", "server", "http1"] }
@@ -22,6 +21,9 @@ serde_json = "1.0.145"
 sha2 = "=0.10.9"
 tokio = { version = "1.53.2", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "1.1.6"
+
+[dev-dependencies]
+bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
 
 [lib]
 path = "src/lib.rs"
