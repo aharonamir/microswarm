@@ -30,10 +30,44 @@ fn expired_send_deadline_is_persisted_and_member_is_torn_down() {
         thread::sleep(std::time::Duration::from_millis(25));
     }
     let store = ms_store::SupervisorStore::open(harness.home.join("supervisor.db")).unwrap();
+    let member: String = store
+        .connection()
+        .query_row(
+            "SELECT member_id FROM delegations WHERE lead_id=?1",
+            [&lead],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let container = harness.containers_for(&member).unwrap().remove(0);
+    let config_path = harness.home.join("config/microswarm.toml");
+    let original = std::fs::read_to_string(&config_path).unwrap();
+    let unavailable = original
+        .lines()
+        .map(|line| {
+            if line.starts_with("socket = ") {
+                "socket = \"unix:///missing-microswarm-runtime.sock\""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&config_path, unavailable).unwrap();
     store.connection().execute(
         "UPDATE delegations SET deadline_at='2000-01-01T00:00:00.000Z' WHERE lead_id=?1 AND status='waiting_reply'",
         [&lead],
     ).unwrap();
+    support::wait_for_status(
+        &harness.home,
+        &member,
+        "stopping",
+        std::time::Duration::from_secs(3),
+    );
+    assert!(
+        harness.container_running(&container).unwrap(),
+        "member must remain marked for teardown"
+    );
+    std::fs::write(&config_path, original).unwrap();
     let failure: Value = support::wait_for_inbound(
         &harness.home,
         &lead,
@@ -51,13 +85,12 @@ fn expired_send_deadline_is_persisted_and_member_is_torn_down() {
     assert_eq!(delegation.3.as_deref(), Some("timeout"));
     let _ = chat.wait_for("agent ›", std::time::Duration::from_secs(3));
     chat.close_input();
-    let member = delegation.0;
+    assert_eq!(member, delegation.0);
     support::wait_for_status(
         &harness.home,
         &member,
         "failed",
         std::time::Duration::from_secs(2),
     );
-    let container = harness.containers_for(&member).unwrap().remove(0);
     assert!(!harness.container_running(&container).unwrap());
 }

@@ -27,6 +27,35 @@ pub struct IntegrationHarness {
 }
 
 impl IntegrationHarness {
+    pub fn stop_supervisor_for_test(&mut self) {
+        if let Some(mut child) = self.supervisor.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+    pub fn restart_supervisor(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(mut child) = self.supervisor.take() {
+            child.kill()?;
+            child.wait()?;
+        }
+        let child = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
+            .env("MS_HOME", &self.home)
+            .env("MS_MODEL_BASE_URL", self.model.base_url())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let socket = self.home.join("supervisor.sock");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
+                break;
+            }
+            assert!(Instant::now() < deadline, "supervisor did not restart");
+            thread::sleep(Duration::from_millis(20));
+        }
+        self.supervisor = Some(child);
+        Ok(())
+    }
     pub fn start_or_skip() -> Option<Self> {
         Self::start_or_skip_with_approval_tool(false)
     }

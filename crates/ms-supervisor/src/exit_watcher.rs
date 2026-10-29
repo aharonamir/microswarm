@@ -13,18 +13,42 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+static EXIT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+pub async fn reconcile_loop(home: PathBuf) {
+    loop {
+        if let Err(error) = reconcile(&home).await {
+            eprintln!("container reconciliation: {error}");
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+async fn reconcile(home: &Path) -> Result<(), String> {
+    let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
+    let runtime = ContainerRuntime::connect(&config.microswarm.runtime.socket)?;
+    for event in runtime
+        .stopped_sessions(&home.join("supervisor.db"))
+        .await?
+    {
+        handle_exit(
+            home,
+            &runtime,
+            &event.session_id,
+            &event.container_id,
+            event.exit_code,
+        )
+        .await?;
+    }
+    Ok(())
+}
 
 pub async fn watch(home: PathBuf) {
     loop {
-        let config = match load_config_dir(config_dir(&home)) {
-            Ok(config) => config,
-            Err(error) => {
-                eprintln!("container exit watcher config: {error}");
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
-        let runtime = match ContainerRuntime::connect(&config.microswarm.runtime.socket) {
+        let runtime = match load_config_dir(config_dir(&home))
+            .map_err(|error| error.to_string())
+            .and_then(|config| ContainerRuntime::connect(&config.microswarm.runtime.socket))
+        {
             Ok(runtime) => runtime,
             Err(error) => {
                 eprintln!("container exit watcher: {error}");
@@ -64,6 +88,17 @@ async fn handle_exit(
     container: &str,
     code: Option<i32>,
 ) -> Result<(), String> {
+    let _guard = EXIT_LOCK.lock().await;
+    handle_exit_locked(home, runtime, id, container, code).await
+}
+
+async fn handle_exit_locked(
+    home: &Path,
+    runtime: &ContainerRuntime,
+    id: &str,
+    container: &str,
+    code: Option<i32>,
+) -> Result<(), String> {
     let config = load_config_dir(config_dir(home)).map_err(|e| e.to_string())?;
     let mut store = SupervisorStore::open(home.join("supervisor.db")).map_err(|e| e.to_string())?;
     let row: Option<(String, String, String, String, Option<String>, u8)> = store
@@ -89,6 +124,7 @@ async fn handle_exit(
     };
     if stored_container.as_deref() != Some(container)
         || matches!(status.as_str(), "closed" | "failed" | "stopping")
+        || runtime.is_running(container).await?
     {
         return Ok(());
     }
@@ -137,7 +173,24 @@ async fn handle_exit(
             .events()
             .query_row("SELECT COALESCE(MAX(seq),0) FROM events", [], |r| r.get(0))
             .map_err(|e| e.to_string())?;
-        runtime.start(container).await?;
+        if let Err(error) = runtime.start(container).await {
+            lifecycle.apply(SessionEvent::ContainerExit {
+                reason: ExitReason::Config,
+            })?;
+            persist(&mut store, id, container, &lifecycle)?;
+            emit_supervisor_event(
+                &mut store,
+                id,
+                &root,
+                &role,
+                SupervisorEventType::ContainerExited,
+                json!({"reason":"config","detail":error,"status":"failed"}),
+            )?;
+            if kind == "member" {
+                notify_member_failure(home, &mut store, id, &root, ExitReason::Config)?;
+            }
+            return Ok(());
+        }
         emit_supervisor_event(
             &mut store,
             id,
@@ -146,10 +199,9 @@ async fn handle_exit(
             SupervisorEventType::ContainerRestart,
             json!({"restart_count":count,"backoff_s":wait.as_secs()}),
         )?;
-        if wait_ready(&dir, old_seq, Duration::from_secs(30)).await?
-            && let Ok(mut current) =
-                SessionLifecycle::restore("starting", count, config.microswarm.limits.restart_max)
-        {
+        if wait_ready(&dir, old_seq, Duration::from_secs(30)).await? {
+            let mut current =
+                SessionLifecycle::restore("starting", count, config.microswarm.limits.restart_max)?;
             current.apply(SessionEvent::AgentReady)?;
             persist(&mut store, id, container, &current)?;
         }

@@ -114,6 +114,8 @@ fn respond(
     let request_body = String::from_utf8_lossy(&request_body);
     requests.fetch_add(1, Ordering::Relaxed);
     if request_body.contains("transient always")
+        || (request_body.contains("member-only-transient")
+            && transient_failures.fetch_add(1, Ordering::Relaxed) == 0)
         || (request_body.contains("transient once")
             && transient_failures.fetch_add(1, Ordering::Relaxed) == 0)
     {
@@ -288,7 +290,9 @@ fn delegation_response(body: &str) -> String {
         && count("microswarm-core/send_to_member") == 0
         && let Some(member_id) = &member_id
     {
-        let text = if user_text.contains("hang") {
+        let text = if user_text.contains("retry member") {
+            "member-only-transient"
+        } else if user_text.contains("hang") {
             "hang"
         } else if user_text.contains("read file") {
             "read file"

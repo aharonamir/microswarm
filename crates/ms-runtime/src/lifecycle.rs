@@ -169,6 +169,22 @@ pub const fn classify_exit(code: i32, oom_killed: bool) -> ExitReason {
     }
 }
 
+pub fn terminal_notice(
+    close_reason: Option<&str>,
+    agent_reason: Option<&str>,
+    restarts: u8,
+) -> &'static str {
+    if close_reason == Some("safety") {
+        "safety"
+    } else if agent_reason == Some("config") {
+        "config"
+    } else if restarts > 0 {
+        "retry_exhausted"
+    } else {
+        "safety"
+    }
+}
+
 pub fn classify_exit_with_agent_reason(
     code: i32,
     oom_killed: bool,

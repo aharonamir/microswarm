@@ -9,6 +9,7 @@ license.workspace = true
 bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
 futures-util = "0.3.34"
 ms-proto = { path = "../ms-proto" }
+ms-store = { path = "../ms-store" }
 
 [lib]
 path = "src/lib.rs"

@@ -254,11 +254,13 @@ impl ContainerRuntime {
     }
 
     pub async fn is_running(&self, container_id: &str) -> Result<bool, String> {
-        let inspected = self
-            .docker
-            .inspect_container(container_id, None)
-            .await
-            .map_err(|error| format!("cannot inspect agent container: {error}"))?;
+        let inspected = match self.docker.inspect_container(container_id, None).await {
+            Ok(inspected) => inspected,
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => return Ok(false),
+            Err(error) => return Err(format!("cannot inspect agent container: {error}")),
+        };
         Ok(inspected
             .state
             .and_then(|state| state.running)
@@ -275,6 +277,52 @@ impl ContainerRuntime {
             .state
             .and_then(|state| state.oom_killed)
             .unwrap_or(false))
+    }
+
+    pub async fn stopped_exit(&self, container_id: &str) -> Result<Option<i32>, String> {
+        let inspected = match self.docker.inspect_container(container_id, None).await {
+            Ok(inspected) => inspected,
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => return Ok(Some(-1)),
+            Err(error) => return Err(format!("cannot inspect agent container: {error}")),
+        };
+        let state = inspected.state.unwrap_or_default();
+        let started = state
+            .started_at
+            .as_deref()
+            .is_some_and(|value| !value.starts_with("0001-") && !value.is_empty());
+        Ok((state.running == Some(false) && started)
+            .then_some(state.exit_code.unwrap_or(-1) as i32))
+    }
+
+    pub async fn stopped_sessions(
+        &self,
+        database: &Path,
+    ) -> Result<Vec<ContainerExitEvent>, String> {
+        let store = ms_store::SupervisorStore::open_readonly(database)
+            .map_err(|error| error.to_string())?;
+        let sessions = {
+            let mut query=store.connection().prepare("SELECT id,container_id FROM sessions WHERE status IN ('starting','ready','busy') AND container_id IS NOT NULL").map_err(|error|error.to_string())?;
+            query
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(|error| error.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())?
+        };
+        let mut exits = Vec::new();
+        for (session_id, container_id) in sessions {
+            if let Some(exit_code) = self.stopped_exit(&container_id).await? {
+                exits.push(ContainerExitEvent {
+                    session_id,
+                    container_id,
+                    exit_code: Some(exit_code),
+                });
+            }
+        }
+        Ok(exits)
     }
 
     pub async fn kill(&self, container_id: &str) -> Result<(), String> {

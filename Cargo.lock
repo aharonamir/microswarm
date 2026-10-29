@@ -1261,6 +1261,7 @@ dependencies = [
  "bollard",
  "futures-util",
  "ms-proto",
+ "ms-store",
 ]
 
 [[package]]

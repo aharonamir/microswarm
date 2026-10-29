@@ -41,8 +41,8 @@ pub async fn serve(home: impl AsRef<Path>) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let idle_home = home.clone();
     tokio::spawn(async move { idle_session_watcher(idle_home).await });
-    let exit_home = home.clone();
-    tokio::spawn(async move { crate::exit_watcher::watch(exit_home).await });
+    tokio::spawn(crate::exit_watcher::watch(home.clone()));
+    tokio::spawn(crate::exit_watcher::reconcile_loop(home.clone()));
     loop {
         let (stream, _) = listener.accept().await.map_err(|error| error.to_string())?;
         let home = home.clone();
@@ -394,14 +394,13 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
                         .and_then(Value::as_str)
                         .map(str::to_owned)
                 });
-            let key = match (
+            let key = match ms_runtime::lifecycle::terminal_notice(
                 close_reason.as_deref(),
                 exit_reason.as_deref(),
                 restart_count,
             ) {
-                (Some("safety"), _, _) => crate::i18n::MessageKey::SessionFailed,
-                (_, Some("config"), _) => crate::i18n::MessageKey::ConfigInvalid,
-                (_, _, count) if count > 0 => crate::i18n::MessageKey::RetryExhausted,
+                "config" => crate::i18n::MessageKey::ConfigInvalid,
+                "retry_exhausted" => crate::i18n::MessageKey::RetryExhausted,
                 _ => crate::i18n::MessageKey::SessionFailed,
             };
             let notice = crate::i18n::translate(config.microswarm.home.lang, key);
@@ -1328,36 +1327,8 @@ async fn handle_send_to_member(
     let mut after_id = cursor;
     loop {
         if Instant::now() >= deadline {
-            let now = utc_now();
-            let claimed=store.connection().execute(
-                "UPDATE delegations SET status='failed',failure_reason='timeout',updated_at=?2 WHERE id=?1 AND status='waiting_reply'",
-                [&delegation_id, now.as_str()],
-            ).map_err(|error| error.to_string())?;
-            if claimed == 1 {
-                store.connection().execute(
-                    "UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status IN ('busy','ready')",
-                    [member_id, now.as_str()],
-                ).map_err(|error| error.to_string())?;
-                graceful_stop_session(home, config, member_id, &container_id).await?;
-            }
-            if claimed == 0 {
-                return Ok(None);
-            }
-            open_session_dir(lead_session_dir)
-                .map_err(|error| error.to_string())?
-                .append_inbound(
-                    &InboundKind::MemberFailed,
-                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"timeout"}),
-                )
-                .map_err(|error| error.to_string())?;
-            emit_supervisor_event(
-                store,
-                member_id,
-                lead_id,
-                &member.kind,
-                SupervisorEventType::DelegationTimeout,
-                json!({"member_id":member_id,"delegation_id":delegation_id}),
-            )?;
+            store.connection().execute("UPDATE delegations SET deadline_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?1 AND status='waiting_reply'",[&delegation_id]).map_err(|error|error.to_string())?;
+            crate::deadlines::process_due(home).await?;
             return Ok(None);
         }
         for reply in member_session
@@ -1439,25 +1410,7 @@ async fn handle_send_to_member(
                 |row| row.get(0),
             )
             .map_err(|error| error.to_string())?;
-        if matches!(status.as_str(), "crashed" | "closed" | "failed") {
-            let failure_reason: Option<String> = store
-                .connection()
-                .query_row(
-                    "SELECT failure_reason FROM delegations WHERE id=?1",
-                    [&delegation_id],
-                    |row| row.get(0),
-                )
-                .map_err(|error| error.to_string())?;
-            if failure_reason.as_deref() == Some("timeout") {
-                return Ok(None);
-            }
-            open_session_dir(lead_session_dir)
-                .map_err(|error| error.to_string())?
-                .append_inbound(
-                    &InboundKind::MemberFailed,
-                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"crashed"}),
-                )
-                .map_err(|error| error.to_string())?;
+        if matches!(status.as_str(), "closed" | "failed") {
             return Ok(None);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;

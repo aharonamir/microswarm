@@ -17,10 +17,10 @@ print(report.get("Rust", {}).get("code", 0))
 
 agent=$(count_rust_code crates/ms-agent/src crates/ms-proto/src crates/ms-store/src)
 supervisor=$(count_rust_code crates/ms-supervisor/src crates/ms-proto/src crates/ms-store/src)
-runtime=$(count_rust_code crates/ms-runtime/src crates/ms-proto/src)
+runtime=$(count_rust_code crates/ms-runtime/src crates/ms-proto/src crates/ms-store/src)
 printf 'ms-agent + shared crates: %s / %s Rust code lines\n' "$agent" "$limit"
 printf 'ms-supervisor + shared crates: %s / %s Rust code lines\n' "$supervisor" "$limit"
-printf 'ms-runtime + shared types: %s / %s Rust code lines\n' "$runtime" "$limit"
+printf 'ms-runtime + shared crates: %s / %s Rust code lines\n' "$runtime" "$limit"
 
 if (( agent > limit || supervisor > limit || runtime > limit )); then
   echo "Rust source line budget exceeded" >&2

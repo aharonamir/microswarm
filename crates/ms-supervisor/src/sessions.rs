@@ -24,10 +24,6 @@ impl SessionLifecycle {
         self.0.restart_count()
     }
 
-    pub fn failure_reason(&self) -> Option<ExitReason> {
-        self.0.failure_reason()
-    }
-
     pub fn apply(&mut self, event: SessionEvent) -> Result<SessionStatus, String> {
         self.0.apply(event)
     }
@@ -41,7 +37,7 @@ impl SessionLifecycle {
     ) -> Result<(), StoreError> {
         let status = self.status();
         let terminal = matches!(status, SessionStatus::Closed | SessionStatus::Failed);
-        let close_reason = match (status, self.failure_reason()) {
+        let close_reason = match (status, self.0.failure_reason()) {
             (SessionStatus::Closed, _) => Some("session_end"),
             (SessionStatus::Failed, Some(ExitReason::Safety)) => Some("safety"),
             (SessionStatus::Failed, _) => Some("failed"),

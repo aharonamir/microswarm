@@ -47,4 +47,53 @@ fn non_oom_signal_fails_member_safely_and_notifies_its_lead() {
     assert_eq!(failure["reason"], "safety");
     support::wait_for_status(&harness.home, &member.0, "failed", Duration::from_secs(3));
     assert_eq!(support::session_state(&harness.home, &member.0).1, 0);
+    let lead_session =
+        ms_store::open_session_dir(harness.home.join("sessions").join(&member.1)).unwrap();
+    let notices: i64 = lead_session
+        .inbound()
+        .query_row(
+            "SELECT COUNT(*) FROM inbound WHERE kind='member_failed'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(notices, 1);
+}
+
+#[test]
+fn supervisor_reconciles_an_exit_that_occurred_while_disconnected() {
+    let Some(mut harness) = support::start() else {
+        return;
+    };
+    harness.chat(None, &["hello"]).unwrap();
+    let lead = support::lead_id(&harness.home);
+    let container = harness.containers_for(&lead).unwrap().remove(0);
+    let runtime = support::runtime_name(&harness);
+    harness.stop_supervisor_for_test();
+    let output = Command::new(runtime)
+        .args(["kill", "--signal", "SIGTERM", &container])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    harness.restart_supervisor().unwrap();
+    support::wait_for_status(&harness.home, &lead, "failed", Duration::from_secs(5));
+}
+
+#[test]
+fn supervisor_reconciles_a_missing_container_after_restart() {
+    let Some(mut harness) = support::start() else {
+        return;
+    };
+    harness.chat(None, &["hello"]).unwrap();
+    let lead = support::lead_id(&harness.home);
+    let container = harness.containers_for(&lead).unwrap().remove(0);
+    let runtime = support::runtime_name(&harness);
+    harness.stop_supervisor_for_test();
+    let output = Command::new(runtime)
+        .args(["rm", "-f", &container])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    harness.restart_supervisor().unwrap();
+    support::wait_for_status(&harness.home, &lead, "failed", Duration::from_secs(5));
 }
