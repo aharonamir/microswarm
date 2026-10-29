@@ -18,7 +18,6 @@ fn home() -> PathBuf {
 }
 
 #[test]
-#[ignore = "red: T044 — operator CLI commands are not implemented"]
 fn init_help_and_empty_sessions_are_available() {
     let dir = home();
     let init = Command::new(env!("CARGO_BIN_EXE_microswarm"))
@@ -31,6 +30,8 @@ fn init_help_and_empty_sessions_are_available() {
         "{}",
         String::from_utf8_lossy(&init.stderr)
     );
+    let config = fs::read_to_string(dir.join("microswarm.toml")).unwrap();
+    assert!(config.contains("socket = \"unix:///var/run/docker.sock\""));
     assert!(dir.join("microswarm.toml").is_file());
     assert!(dir.join("policy.toml").is_file());
     assert!(dir.join("ceiling.toml").is_file());
