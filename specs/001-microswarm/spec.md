@@ -220,7 +220,7 @@ An operator wants to know what happened in a session: which members ran, what ea
 ## Assumptions
 
 - Single host in v1; no cross-host scheduling.
-- Linux host with a rootless-capable OCI runtime (Docker or Podman) available.
+- Linux host with Docker Engine available and its socket reachable by the supervisor. v0.1 supports Docker; Podman support is deferred until host-proxy access is verified without allowing direct egress.
 - One user/operator per install; multi-tenancy is out of scope.
 - Skills are Markdown plus scripts; skills packaged as Python modules are out of scope.
 - Model providers are reached over HTTP with OpenAI-compatible or Anthropic-compatible APIs.

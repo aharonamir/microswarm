@@ -7,13 +7,12 @@
 - **[USn]** — the user story the task delivers. Setup, Foundational and Polish tasks carry no story label.
 - Tests are written first and must fail before their implementation task starts.
 
-## Current execution status (2026-10-15)
+## Current execution status (2026-10-29)
 
-- Completed: Phase 1 tasks T001–T009; Phase 2 tasks T010–T021; US1 test tasks T022–T024 and T027, plus agent tasks T028–T031. T008 measured Docker 29.1.3 and rootless Podman 5.7.0 on the reference host; R-04's decision is to keep one internal network per session, without pooling. The Phase 0 research checkpoint is closed.
-- Phase 2 checkpoint passed. Current gates: formatting, workspace Clippy, target-aware dependency gate, and T003 line budget are green. Most recent line counts: ms-agent + shared crates 1,919 / 6,000; ms-supervisor + shared crates 1,679 / 6,000.
-- T022, T023 and T024 are red against the current CLI/agent stubs; keep them as acceptance gates until the US1 implementation lands. Review remediation in progress before resuming T025. T027 is green for the unparseable deny and conservative parseable ask branches; the simple-command allow boundary is covered. Do not begin US2 until the user confirms after the US1 / v0.1 stop point.
-- 2026-10-18 review remediation: R-13 confirmed read-only WAL reads require the live supervisor writer/sidecars; session databases now use `control/` (read-only to the agent) and `out/` (agent writable). Scope intersection/subset, member delegation clearing, history deltas, missing ceiling path handling, role-kind env, auth exit mapping, unknown inbound acknowledgement, and permit-token dispatch changes are implemented with targeted tests. Store-level lifecycle coverage confirms the retained writer serves new rows while the agent's read-only connection stays open. T025 now has a compileable ignored adversarial integration draft; container creation and the complete supervisor session-lifetime wiring remain pending T036/T039.
-- 2026-10-18 follow-up review: T027 now asks for every shell operator outside quotes and interpreter/wrapper executable; only simple commands allow. Invalid or unhandled inbound messages emit `inbound.error`, acknowledge, and continue. Model status classification uses the HTTP status field; non-transient storage errors exit safety, while SQLite busy/locked/CANTOPEN remain transient. R-13 persistence and close/reopen tests are recorded. T025 now attempts writes to inbound.db, scope.json, and both WAL sidecars from inside the container, but remains ignored/red until T036/T039 provide the actual session container lifecycle.
+- Completed: Phase 1 T001–T009; Phase 2 T010–T021; US1 T022–T045. The Phase 0 research checkpoint and Phase 2 checkpoint are closed. T008 measured Docker 29.1.3 and rootless Podman 5.7.0; R-04 keeps one internal network per session. Owner decision (2026-10-29): Docker is the supported v0.1 runtime; Podman is deferred because the internal-network proxy route is not verified. The quickstart §1 runtime acceptance is exercised with Docker and the fake model server; full ordered CI commands remain the checkpoint gate.
+- R-13 and the 2026-10-18 review fixes remain recorded above. T022–T027 now pass, including runtime checks for read-only control files, secret isolation, no direct egress, scoped proxy access, and exact approval resumption. Runtime harness cleanup removes only resources created under its temporary home.
+- Runtime evidence found that supervisor-created output WAL/SHM sidecars need container-writable modes and that an internal network's own gateway, rather than Docker's default bridge gateway, is required to reach the host proxy. Container identity follows the host session owner on rootful runtimes and uses UID 0 in a rootless user namespace, with all capabilities dropped and only scoped mounts exposed.
+- T044 and T045 are implemented and targeted tests pass. Do not begin US2 until the owner confirms after the US1 / v0.1 stop point.
 
 ---
 
@@ -70,8 +69,8 @@
 - [x] T022 [P] [US1] Integration: message on CLI channel → reply; exactly one container with `ms.session` label; session dir has four files — `tests/integration/us1_single_agent.rs` (red against current CLI/supervisor stubs)
 - [x] T023 [P] [US1] Integration: second message handled by the same container (no new `container.created`) — same file (red against current CLI/supervisor stubs)
 - [x] T024 [P] [US1] Integration: tool with policy `ask` produces approval prompt; tool runs only after `/approve` — `tests/integration/us1_approval.rs` (red against CLI/supervisor stubs; checks marker absent before approval and present afterward)
-- [ ] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level; writes to `/session/control/inbound.db`, `scope.json`, `-wal`, and `-shm` fail at the OS level; shell.run/fs.write cannot forge approval rows — `tests/adversarial/mount_escape.rs` (compileable, ignored red draft; waits for T036/T039 container/session lifecycle)
-- [ ] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs` (compileable, ignored red draft; depends on T035/T036/T039/T041)
+- [x] T025 [P] [US1] Adversarial: agent reading `~/.ssh`, `$MS_HOME/supervisor.db`, `/run/podman/podman.sock`, another session's dir → all fail at OS level; writes to `/session/control/inbound.db`, `scope.json`, `-wal`, and `-shm` fail at the OS level; shell.run/fs.write cannot forge approval rows — `tests/adversarial/mount_escape.rs`
+- [x] T026 [P] [US1] Adversarial: container has no secrets in env, filesystem or `/proc/1/environ`; direct egress to the internet fails; egress via proxy without a scoped credential name fails — `tests/adversarial/no_secrets.rs`
 - [x] T027 [P] [US1] Unit: permit engine defaults to ask for operators/interpreters with parsed structure; only simple commands allow; unparseable shell ⇒ deny with structured rewrite guidance — `crates/ms-agent/tests/permit.rs` (shell parsing branches green; full permission flow remains T032)
 
 ### Agent core
@@ -80,7 +79,7 @@
 - [x] T029 [US1] Loop: wake on `SIGUSR1` or 500 ms poll; read past cursor; one turn; write outbound + cursor atomically — `crates/ms-agent/src/loop.rs`
 - [x] T030 [P] [US1] Model client via `MS_PROXY_URL`, OpenAI- and Anthropic-compatible, credential by name header — `crates/ms-agent/src/model.rs`
 - [x] T031 [P] [US1] MCP client adapter: launch stdio servers listed in scope, connect HTTP servers via proxy, list + call tools filtered by scope — `crates/ms-agent/src/mcp.rs`; fake stdio MCP integration tests green; runtime descriptor contract documented as `MS_MCP_SERVERS`; host `tools.toml` accepts only scoped credential names.
-- [ ] T032 [US1] Permission engine: per-tool policy from scope + defaults; shell lexer per R-07; `ask` ⇒ outbound `approval_request` and suspend turn until `approval_result`; approval tokens must bind exact server, tool, and argument hash — `crates/ms-agent/src/permit.rs`
+- [x] T032 [US1] Permission engine: per-tool policy from scope + defaults; shell lexer per R-07; `ask` ⇒ outbound `approval_request` and suspend turn until `approval_result`; approval tokens must bind exact server, tool, and argument hash — `crates/ms-agent/src/permit.rs`
 - [x] T033 [P] [US1] Event emitter: every agent event type in the schema — `crates/ms-agent/src/emit.rs`
 - [x] T034 [US1] Exit mapping to contract codes; final `agent.exit` event — `crates/ms-agent/src/main.rs`
 - [x] T035 [P] [US1] First-party MCP server: `fs.read/list/write`, `shell.run`, `web.fetch` (via proxy) — `crates/ms-tools/src/`
@@ -91,12 +90,12 @@
 - [x] T037 [US1] Runtime events watcher: push exits to sessions (no polling) — `crates/ms-supervisor/src/runtime.rs`
 - [x] T038 [US1] Lead scope from config ∩ ceiling ⇒ authoritative scope/hash persisted in `supervisor.db`; `control/scope.json` written + fsynced before create — `crates/ms-supervisor/src/scope.rs`
 - [x] T039 [US1] Session lifecycle state machine per data-model — `crates/ms-supervisor/src/sessions.rs`
-- [ ] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
+- [x] T040 [US1] Router: channel thread ⇒ session (create lead on first message); append inbound; signal agent; tail outbound via `data_version`; deliver replies — `crates/ms-supervisor/src/router.rs`
 - [x] T041 [US1] Per-session credential proxy: listener on session network, credential-name allowlist from authoritative scope, inject, forward over rustls, report outcomes through a supervisor event observer — `crates/ms-supervisor/src/proxy.rs`; local listener test covers scope checks and fetch forwarding.
 - [x] T042 [US1] Approvals: create with a short code, render en/zh prompts, resolve once, expire to timed_out, write an inbound `approval_result` carrying the exact server/tool/argument hash — `crates/ms-supervisor/src/approvals.rs`; tests cover binding and timeout.
 - [x] T043 [P] [US1] CLI channel adapter reads user lines and renders reply/approval messages — `crates/ms-channels/src/cli.rs`
-- [ ] T044 [P] [US1] `microswarm init`, `doctor`, `chat`, `creds`, `sessions` — `crates/ms-cli/src/`
-- [ ] T045 [US1] Lead idle timeout ⇒ graceful stop, `close_reason=idle` — `crates/ms-supervisor/src/sessions.rs`
+- [x] T044 [P] [US1] `microswarm init`, `doctor`, `chat`, `creds`, `sessions` — `crates/ms-cli/src/`
+- [x] T045 [US1] Lead idle timeout ⇒ graceful stop, `close_reason=idle` — `crates/ms-supervisor/src/sessions.rs`
 
 **Checkpoint:** quickstart §1 passes; T022–T027 green. **v0.1 shippable.**
 

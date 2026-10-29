@@ -16,7 +16,7 @@ Delegation is four tools the core exposes to a lead. The core does not spawn any
 | **Async** | Tokio (multi-thread in supervisor, current-thread in agent) |
 | **Storage** | SQLite via `rusqlite` (bundled), WAL mode |
 | **HTTP** | `hyper` + `rustls` (single TLS stack) |
-| **Container runtime** | OCI via Docker Engine API over the local socket (`bollard`); Podman via its Docker-compatible socket |
+| **Container runtime** | v0.1 supports Docker Engine over its local socket (`bollard`). Podman API compatibility exists, but Podman proxy networking is deferred until it can reach the host proxy while preserving internal-network egress isolation. |
 | **MCP** | MCP client in core over stdio and streamable HTTP — see research R-02 |
 | **Serialization** | `serde`, `serde_json`, `toml` |
 | **Testing** | `cargo test`, `insta` for snapshots, `testcontainers`-style harness for integration, `proptest` for scope algebra |

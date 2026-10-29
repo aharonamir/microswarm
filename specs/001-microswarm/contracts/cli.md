@@ -50,7 +50,7 @@ retention_days = 30
 lang = "en"                       # en | zh — user-facing supervisor strings
 
 [runtime]
-socket = "unix:///run/user/1000/podman/podman.sock"
+socket = "unix:///var/run/docker.sock"
 image  = "ghcr.io/microswarm/agent:0.1"
 
 [limits]

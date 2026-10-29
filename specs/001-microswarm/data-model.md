@@ -26,6 +26,8 @@ $MS_HOME/
 
 `session_id` is a ULID. Session directories are retained after teardown for `retention_days` (default 30). During session creation, the supervisor opens `control/inbound.db`, sets `SQLITE_FCNTL_PERSIST_WAL`, and creates its WAL/SHM sidecars before writing `control/scope.json` or creating the container. The supervisor retains the inbound writer through teardown.
 
+The host session directory is private to the invoking user. The `out/` bind mount and its databases must be writable by the image's fixed non-root UID (65532), including SQLite WAL/SHM creation; the agent receives no mount of the session parent or another session's output.
+
 ---
 
 ## Entities

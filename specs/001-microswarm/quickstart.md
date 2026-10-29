@@ -5,22 +5,25 @@ Validates the feature end to end. Each section maps to a user story and doubles 
 ## Prerequisites
 
 - Linux host, x86_64 or aarch64
-- Rootless Podman ≥ 4 or Docker ≥ 24, socket reachable by your user
+- Docker Engine ≥ 24, socket reachable by your user (v0.1 runtime path validated with Docker 29.1.3)
 - A model endpoint (OpenAI-compatible or Anthropic-compatible) and its API key
 
 ## 0 · Install
 
 ```console
 $ cargo install --path crates/ms-cli --path crates/ms-supervisor
-$ podman pull ghcr.io/microswarm/agent:0.1
+$ docker build -t microswarm-agent:dev -f images/agent.Containerfile .
 $ microswarm init --lang en
-$ microswarm creds set model-key        # paste key, Ctrl-D
-$ microswarm doctor
-✓ runtime socket   podman 5.2 rootless
-✓ agent image      ghcr.io/microswarm/agent:0.1  (27.4 MB)
-✓ model            example-model via proxy  (412 ms)
-✓ disk             $MS_HOME writable, 41 GB free
+$ # Edit $MS_HOME/config/microswarm.toml: set [model] provider, base_url, model,
+$ # credential = "model-key", and grant the work directory in [lead.scope].mounts.
 $ microswarmd &
+$ microswarm creds set model-key         # paste the key, then Ctrl-D
+$ microswarm doctor
+✓ configuration   $MS_HOME/config
+✓ runtime socket  unix:///var/run/docker.sock
+✓ agent image     microswarm-agent:dev
+✓ model           example-model via session proxy
+✓ credential      model-key is present on the host
 ```
 
 ## 1 · Single agent (US1)
@@ -28,6 +31,8 @@ $ microswarmd &
 ```console
 $ microswarm chat
 you › list the files in my work folder
+⚠ agent wants to use microswarm-tools/fs.list
+you › /approve K7QF
 agent › README.md, src/, Cargo.toml
 ```
 
@@ -38,7 +43,7 @@ $ microswarm sessions
 01JB… lead  ready  cli  containers: 1
 $ find ~/.microswarm/sessions/01JB…/ -maxdepth 2 -type f
 control/inbound.db  control/scope.json  out/events.db  out/outbound.db
-$ podman ps --filter label=ms.session=01JB… --format '{{.Names}}'
+$ docker ps --filter label=ms.session=01JB… --format '{{.Names}}'
 ms-01jb…
 ```
 
@@ -75,7 +80,7 @@ $ microswarm trace 01JB…
 ├─ 01JC… researcher  closed(dismissed)  scope: 1 mount(ro) · 3 tools · 1 cred
 └─ 01JD… tester      closed(dismissed)  scope: 2 mounts · 2 tools · 0 creds
 $ jq '.mounts, .narrowed' ~/.microswarm/sessions/01JD…/control/scope.json
-$ podman ps --filter label=ms.root=01JB… --format '{{.Labels}}' | wc -l
+$ docker ps --filter label=ms.root=01JB… --format '{{.Labels}}' | wc -l
 1          # only the lead remains
 ```
 
@@ -84,7 +89,7 @@ $ podman ps --filter label=ms.root=01JB… --format '{{.Labels}}' | wc -l
 ```console
 $ microswarm chat
 you › ask the researcher to summarise https://example.com/large
-$ podman kill --signal KILL $(podman ps -q --filter label=ms.role=researcher)
+$ docker kill --signal KILL $(docker ps -q --filter label=ms.role=researcher)
 agent › The researcher stopped unexpectedly; I'll retry it once…
 $ microswarm trace 01JB… --events container.exited,container.restart,delegation.failed
 ```
