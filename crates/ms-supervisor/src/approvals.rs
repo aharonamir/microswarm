@@ -105,10 +105,10 @@ pub fn render_prompt(
 ) -> String {
     match language {
         Language::En => format!(
-            "Approve {server}/{tool} with arguments {arguments}? Reply: microswarm approve {code} or microswarm deny {code}."
+            "Approve {server}/{tool} with arguments {arguments}? Reply: /approve {code} or /deny {code}."
         ),
         Language::Zh => format!(
-            "批准 {server}/{tool}，参数为 {arguments}？回复：microswarm approve {code} 或 microswarm deny {code}。"
+            "批准 {server}/{tool}，参数为 {arguments}？回复：/approve {code} 或 /deny {code}。"
         ),
     }
 }

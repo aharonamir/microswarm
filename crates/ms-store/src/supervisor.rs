@@ -82,6 +82,13 @@ impl SupervisorStore {
         })
     }
 
+    pub fn open_readonly(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let connection =
+            Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        Ok(Self { connection })
+    }
+
     pub fn insert_session(&mut self, session: &SessionRecord) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO sessions(id, root_id, parent_id, role, kind, channel, channel_thread, status, scope_hash, scope_json, created_at, last_active_at)
@@ -105,6 +112,17 @@ impl SupervisorStore {
             .query_row(
                 "SELECT id FROM sessions WHERE kind='lead' AND channel=?1 AND channel_thread=?2 AND status NOT IN ('closed','failed') ORDER BY created_at DESC LIMIT 1",
                 [channel, thread],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(StoreError::from)
+    }
+
+    pub fn session_container_id(&self, session_id: &str) -> Result<Option<String>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT container_id FROM sessions WHERE id=?1",
+                [session_id],
                 |row| row.get(0),
             )
             .optional()

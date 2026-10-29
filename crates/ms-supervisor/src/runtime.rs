@@ -3,6 +3,7 @@ use futures_util::{StreamExt, stream::Stream};
 use ms_proto::{MountMode, Scope};
 use std::{
     collections::{BTreeMap, HashMap},
+    os::unix::fs::MetadataExt,
     path::Path,
     time::Duration,
 };
@@ -24,6 +25,8 @@ pub struct ContainerProfile {
     pub memory_bytes: i64,
     pub pids_limit: i64,
     pub network: String,
+    pub host_gateway: String,
+    pub container_user: String,
     pub tmpfs: BTreeMap<String, String>,
     pub mounts: Vec<MountSpec>,
 }
@@ -34,6 +37,8 @@ impl ContainerProfile {
         image: &str,
         session_dir: &Path,
         network: &str,
+        host_gateway: &str,
+        container_user: &str,
     ) -> Result<Self, String> {
         if image.trim().is_empty() || network.trim().is_empty() {
             return Err("container image and network must not be empty".into());
@@ -89,6 +94,8 @@ impl ContainerProfile {
                 .ok_or_else(|| "memory limit overflows bytes".to_owned())?,
             pids_limit: i64::from(scope.limits.pids),
             network: network.to_owned(),
+            host_gateway: host_gateway.to_owned(),
+            container_user: container_user.to_owned(),
             tmpfs: BTreeMap::from([
                 (
                     "/tmp".into(),
@@ -125,13 +132,17 @@ impl ContainerProfile {
             pids_limit: Some(self.pids_limit),
             network_mode: Some(self.network.clone()),
             mounts: Some(mounts),
+            extra_hosts: Some(vec![
+                format!("host.containers.internal:{}", self.host_gateway),
+                format!("host.docker.internal:{}", self.host_gateway),
+            ]),
             ..Default::default()
         };
         models::ContainerCreateBody {
             image: Some(self.image.clone()),
             entrypoint: Some(vec!["/microswarm-agent".into()]),
             working_dir: Some("/session".into()),
-            user: Some("65532:65532".into()),
+            user: Some(self.container_user.clone()),
             env: Some(extra_env.to_vec()),
             labels: Some(labels),
             host_config: Some(host_config),
@@ -142,13 +153,27 @@ impl ContainerProfile {
 
 pub struct ContainerRuntime {
     docker: Docker,
+    rootless: bool,
 }
 
 impl ContainerRuntime {
     pub fn connect(socket: &str) -> Result<Self, String> {
         let docker = Docker::connect_with_host(socket)
             .map_err(|error| format!("cannot connect to container runtime: {error}"))?;
-        Ok(Self { docker })
+        let rootless = socket
+            .strip_prefix("unix://")
+            .and_then(|path| std::fs::metadata(path).ok())
+            .is_some_and(|metadata| metadata.uid() != 0);
+        Ok(Self { docker, rootless })
+    }
+
+    pub fn container_user(&self, session_dir: &Path) -> Result<String, String> {
+        if self.rootless {
+            return Ok("0:0".into());
+        }
+        let owner = std::fs::metadata(session_dir)
+            .map_err(|error| format!("cannot inspect session directory owner: {error}"))?;
+        Ok(format!("{}:{}", owner.uid(), owner.gid()))
     }
 
     pub async fn ping(&self) -> Result<(), String> {
@@ -157,6 +182,10 @@ impl ContainerRuntime {
             .await
             .map(|_| ())
             .map_err(|error| format!("container runtime ping failed: {error}"))
+    }
+
+    pub async fn image_exists(&self, image: &str) -> bool {
+        self.docker.inspect_image(image).await.is_ok()
     }
 
     pub async fn create_network(&self, name: &str) -> Result<String, String> {
@@ -171,6 +200,19 @@ impl ContainerRuntime {
             .await
             .map_err(|error| format!("cannot create session network: {error}"))?;
         Ok(network.id)
+    }
+
+    pub async fn network_gateway(&self, network_id: &str) -> Result<String, String> {
+        let network = self
+            .docker
+            .inspect_network(network_id, None)
+            .await
+            .map_err(|error| format!("cannot inspect session network: {error}"))?;
+        network
+            .ipam
+            .and_then(|ipam| ipam.config)
+            .and_then(|configs| configs.into_iter().find_map(|config| config.gateway))
+            .ok_or_else(|| "session network has no IPv4 gateway".to_owned())
     }
 
     pub async fn create_container(
@@ -208,6 +250,18 @@ impl ContainerRuntime {
             .map_err(|error| format!("cannot stop agent container: {error}"))
     }
 
+    pub async fn is_running(&self, container_id: &str) -> Result<bool, String> {
+        let inspected = self
+            .docker
+            .inspect_container(container_id, None)
+            .await
+            .map_err(|error| format!("cannot inspect agent container: {error}"))?;
+        Ok(inspected
+            .state
+            .and_then(|state| state.running)
+            .unwrap_or(false))
+    }
+
     pub async fn kill(&self, container_id: &str) -> Result<(), String> {
         self.docker
             .kill_container(container_id, None)
@@ -223,6 +277,39 @@ impl ContainerRuntime {
             .kill_container(container_id, Some(options))
             .await
             .map_err(|error| format!("cannot signal agent container: {error}"))
+    }
+
+    pub async fn container_logs(&self, container_id: &str) -> Result<String, String> {
+        let options = bollard::query_parameters::LogsOptionsBuilder::default()
+            .stdout(true)
+            .stderr(true)
+            .tail("100")
+            .build();
+        let mut stream = self.docker.logs(container_id, Some(options));
+        let mut output = String::new();
+        while let Some(line) = stream.next().await {
+            let line = line.map_err(|error| format!("cannot read container logs: {error}"))?;
+            output.push_str(&line.to_string());
+        }
+        Ok(output)
+    }
+
+    pub async fn container_state(&self, container_id: &str) -> Result<String, String> {
+        let inspected = self
+            .docker
+            .inspect_container(container_id, None)
+            .await
+            .map_err(|error| format!("cannot inspect agent container: {error}"))?;
+        let state = inspected.state.unwrap_or_default();
+        Ok(format!(
+            "path={:?} args={:?} status={:?} running={:?} exit={:?} error={:?}",
+            inspected.path,
+            inspected.args,
+            state.status,
+            state.running,
+            state.exit_code,
+            state.error
+        ))
     }
 
     pub async fn watch_exits<F, Fut>(&self, mut handle_exit: F) -> Result<(), String>

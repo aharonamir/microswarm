@@ -51,6 +51,8 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
         "microswarm-agent:dev",
         &session_dir,
         "ms-net-session",
+        "192.168.112.1",
+        "1000:1000",
     )
     .unwrap();
     assert!(profile.read_only_rootfs);
@@ -84,7 +86,7 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
         config.labels.unwrap()["ms.session"],
         scope(&work_path).session_id
     );
-    assert_eq!(config.user.as_deref(), Some("65532:65532"));
+    assert_eq!(config.user.as_deref(), Some("1000:1000"));
     assert_eq!(host.readonly_rootfs, Some(true));
     assert_eq!(host.security_opt.unwrap(), ["no-new-privileges:true"]);
     assert_eq!(host.cap_drop.unwrap(), ["ALL"]);
@@ -98,5 +100,33 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
     assert!(mounts.iter().any(|mount| {
         mount.target.as_deref() == Some("/session/out") && mount.read_only == Some(false)
     }));
+    fs::remove_dir_all(session_dir).unwrap();
+}
+
+#[test]
+fn runtime_profile_maps_container_host_names_to_the_host_gateway() {
+    let session_dir = std::env::temp_dir().join(format!(
+        "ms-runtime-host-alias-{}-{}",
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir_all(session_dir.join("control")).unwrap();
+    fs::create_dir_all(session_dir.join("out")).unwrap();
+    let work_path = session_dir.join("work");
+    fs::create_dir_all(&work_path).unwrap();
+    let profile = ContainerProfile::for_session(
+        &scope(&work_path),
+        "microswarm-agent:dev",
+        &session_dir,
+        "ms-net-session",
+        "192.168.112.1",
+        "1000:1000",
+    )
+    .unwrap();
+    let config = profile.container_config(&[]);
+    let host = config.host_config.unwrap();
+    let extra_hosts = host.extra_hosts.unwrap();
+    assert!(extra_hosts.contains(&"host.containers.internal:192.168.112.1".to_owned()));
+    assert!(extra_hosts.contains(&"host.docker.internal:192.168.112.1".to_owned()));
     fs::remove_dir_all(session_dir).unwrap();
 }

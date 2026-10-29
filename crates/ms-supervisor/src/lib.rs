@@ -5,4 +5,5 @@ pub mod proxy;
 pub mod router;
 pub mod runtime;
 pub mod scope;
+pub mod service;
 pub mod sessions;

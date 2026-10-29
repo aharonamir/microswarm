@@ -73,6 +73,10 @@ fn approval_code_resolves_once_and_inbound_carries_exact_call_binding() {
     );
     assert!(english.contains(&approval.code));
     assert!(chinese.contains(&approval.code));
+    assert!(english.contains(&format!("/approve {}", approval.code)));
+    assert!(english.contains(&format!("/deny {}", approval.code)));
+    assert!(chinese.contains(&format!("/approve {}", approval.code)));
+    assert!(chinese.contains(&format!("/deny {}", approval.code)));
     assert_eq!(
         approval.payload["binding"],
         serde_json::to_value(&binding).unwrap()
