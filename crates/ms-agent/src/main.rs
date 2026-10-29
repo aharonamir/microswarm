@@ -3,6 +3,7 @@ use ms_proto::AgentEventType;
 use serde_json::json;
 
 fn main() {
+    eprintln!("agent: booting");
     let mut context = match ms_agent::boot::boot() {
         Ok(context) => context,
         Err(error) => {
@@ -11,6 +12,7 @@ fn main() {
             std::process::exit(error.exit_code());
         }
     };
+    eprintln!("agent: boot complete; starting turn loop");
     let processor = match ModelClient::from_env(&context) {
         Ok(processor) => processor,
         Err(error) => {
@@ -27,7 +29,10 @@ fn main() {
             std::process::exit(75);
         });
     let code = match runtime.block_on(ms_agent::agent_loop::run(context, processor)) {
-        Ok(()) => 0,
+        Ok(()) => {
+            eprintln!("agent: turn loop returned successfully");
+            0
+        }
         Err(error) => {
             eprintln!("agent loop failed: {error}");
             error.exit_code()

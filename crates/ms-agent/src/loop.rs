@@ -99,6 +99,20 @@ pub async fn run<P: TurnProcessor>(
                     Some("user_message requires a string text field".to_owned())
                 }
                 InboundKind::UserMessage | InboundKind::Control => None,
+                InboundKind::ApprovalResult
+                    if message
+                        .body
+                        .get("approval_id")
+                        .is_some_and(|v| v.is_string())
+                        && matches!(
+                            message.body.get("decision").and_then(|v| v.as_str()),
+                            Some("approved" | "denied" | "timed_out" | "expired")
+                        )
+                        && message.body.get("binding").is_some_and(|v| v.is_object()) =>
+                {
+                    None
+                }
+                InboundKind::ApprovalResult => Some("approval_result is malformed".to_owned()),
                 InboundKind::Unknown(kind) => Some(format!("unknown inbound kind: {kind}")),
                 kind => Some(format!(
                     "inbound kind is not handled by this agent: {kind:?}"

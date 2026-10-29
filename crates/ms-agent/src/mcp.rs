@@ -163,6 +163,24 @@ impl McpClient {
         self.servers.keys().map(String::as_str)
     }
 
+    pub async fn model_tools(&mut self) -> Result<Vec<serde_json::Value>, McpError> {
+        let server_ids = self.server_ids().map(str::to_owned).collect::<Vec<_>>();
+        let mut tools = Vec::new();
+        for server in server_ids {
+            for tool in self.list_tools(&server).await? {
+                tools.push(serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": format!("{server}/{}", tool.name),
+                        "description": tool.description.as_deref().unwrap_or(""),
+                        "parameters": serde_json::Value::Object(tool.input_schema.as_ref().clone()),
+                    }
+                }));
+            }
+        }
+        Ok(tools)
+    }
+
     pub fn filter_tool_names<'a>(
         &self,
         server: &str,

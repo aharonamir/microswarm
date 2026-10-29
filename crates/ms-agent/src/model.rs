@@ -1,12 +1,16 @@
 use crate::agent_loop::{TurnError, TurnOutput, TurnProcessor};
 use crate::boot::AgentContext;
+use crate::{
+    mcp::McpClient,
+    permit::{PermitError, authorize_approved_tool, authorize_tool},
+};
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Bytes;
 use hyper::{Method, Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use ms_proto::{InboundKind, InboundMessage, OutboundKind, OutboundMessage};
+use ms_proto::{ApprovalBinding, InboundKind, InboundMessage, OutboundKind, OutboundMessage};
 use ms_store::HistoryEntry;
 use serde_json::{Value, json};
 use std::error::Error;
@@ -14,8 +18,10 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+static NEXT_APPROVAL_LOCAL_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ModelProvider {
@@ -51,6 +57,7 @@ pub struct ModelClient {
     provider: ModelProvider,
     model: String,
     credential_name: String,
+    mcp: Option<McpClient>,
 }
 
 #[derive(Debug)]
@@ -146,6 +153,7 @@ impl ModelClient {
             provider,
             model,
             credential_name,
+            mcp: None,
         })
     }
 
@@ -167,7 +175,12 @@ impl ModelClient {
                 "model credential name is outside the session scope".to_owned(),
             ));
         }
-        Self::new(proxy_url, provider, model, credential_name)
+        let mut client = Self::new(proxy_url, provider, model, credential_name)?;
+        client.mcp =
+            Some(McpClient::from_env(&context.scope).map_err(|error| {
+                ModelError::new(format!("cannot configure MCP clients: {error}"))
+            })?);
+        Ok(client)
     }
 
     pub async fn complete(
@@ -175,7 +188,17 @@ impl ModelClient {
         history: &[HistoryEntry],
         user_text: &str,
     ) -> Result<String, ModelError> {
-        let request_body = self.request_body(history, user_text);
+        let response = self.complete_raw(history, user_text, &[]).await?;
+        self.text_response(&response)
+    }
+
+    async fn complete_raw(
+        &self,
+        history: &[HistoryEntry],
+        user_text: &str,
+        tools: &[Value],
+    ) -> Result<Value, ModelError> {
+        let request_body = self.request_body(history, user_text, tools);
         let mut request = Request::builder()
             .method(Method::POST)
             .uri(self.endpoint.clone())
@@ -210,6 +233,10 @@ impl ModelClient {
         }
         let response: Value = serde_json::from_slice(&body)
             .map_err(|error| ModelError::new(format!("invalid model response JSON: {error}")))?;
+        Ok(response)
+    }
+
+    fn text_response(&self, response: &Value) -> Result<String, ModelError> {
         let content = match self.provider {
             ModelProvider::OpenAiCompatible => response
                 .pointer("/choices/0/message/content")
@@ -220,25 +247,121 @@ impl ModelClient {
         Ok(content.to_owned())
     }
 
-    fn request_body(&self, history: &[HistoryEntry], user_text: &str) -> Value {
+    fn request_body(&self, history: &[HistoryEntry], user_text: &str, tools: &[Value]) -> Value {
         let messages: Vec<Value> = history
             .iter()
-            .filter(|entry| matches!(entry.role.as_str(), "user" | "assistant"))
-            .map(|entry| json!({ "role": entry.role, "content": entry.content }))
-            .chain(std::iter::once(
-                json!({ "role": "user", "content": user_text }),
-            ))
+            .filter(|entry| matches!(entry.role.as_str(), "user" | "assistant" | "tool"))
+            .filter(|entry| entry.content.get("_ms_pending_approval").is_none())
+            .map(history_message)
+            .chain((!user_text.is_empty()).then(|| json!({ "role": "user", "content": user_text })))
             .collect();
         match self.provider {
             ModelProvider::OpenAiCompatible => json!({
                 "model": self.model,
                 "messages": messages,
+                "tools": tools,
             }),
             ModelProvider::Anthropic => json!({
                 "model": self.model,
                 "max_tokens": 4096,
                 "messages": messages,
+                "tools": tools,
             }),
+        }
+    }
+
+    async fn available_tools(&mut self) -> Result<Vec<Value>, String> {
+        let tools = match &mut self.mcp {
+            Some(mcp) => mcp.model_tools().await.map_err(|error| error.to_string()),
+            None => Ok(Vec::new()),
+        }?;
+        if self.provider == ModelProvider::Anthropic {
+            Ok(tools
+                .into_iter()
+                .filter_map(|tool| {
+                    let function = tool.get("function")?;
+                    Some(json!({
+                        "name":function.get("name")?,
+                        "description":function.get("description")?,
+                        "input_schema":function.get("parameters")?,
+                    }))
+                })
+                .collect())
+        } else {
+            Ok(tools)
+        }
+    }
+
+    async fn call_tool(
+        &mut self,
+        scope: &ms_proto::Scope,
+        server: &str,
+        tool: &str,
+        arguments: Value,
+        approved: Option<&ApprovalBinding>,
+    ) -> Result<Value, String> {
+        let args = arguments
+            .as_object()
+            .cloned()
+            .ok_or_else(|| "model tool arguments must be a JSON object".to_owned())?;
+        let permit = match approved {
+            Some(binding) => authorize_approved_tool(scope, server, tool, Some(args), binding),
+            None => authorize_tool(scope, server, tool, Some(args)),
+        };
+        let permit = permit.map_err(|error| error.to_string())?;
+        let mcp = self
+            .mcp
+            .as_mut()
+            .ok_or_else(|| "no MCP servers are configured".to_owned())?;
+        let result = mcp
+            .call_tool(permit)
+            .await
+            .map_err(|error| error.to_string())?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+}
+
+fn history_message(entry: &HistoryEntry) -> Value {
+    if entry.content.get("_ms_pending_approval").is_some() {
+        return Value::Null;
+    }
+    entry
+        .content
+        .get("_ms_message")
+        .cloned()
+        .unwrap_or_else(|| json!({ "role": entry.role, "content": entry.content }))
+}
+
+fn model_tool_call(
+    provider: ModelProvider,
+    response: &Value,
+) -> Option<(String, String, String, Value)> {
+    match provider {
+        ModelProvider::OpenAiCompatible => {
+            let call = response.pointer("/choices/0/message/tool_calls/0")?;
+            let id = call.get("id")?.as_str()?.to_owned();
+            let function = call.get("function")?;
+            let (server, tool) = function.get("name")?.as_str()?.split_once('/')?;
+            let arguments = function
+                .get("arguments")?
+                .as_str()
+                .and_then(|value| serde_json::from_str(value).ok())?;
+            Some((id, server.to_owned(), tool.to_owned(), arguments))
+        }
+        ModelProvider::Anthropic => {
+            let call = response
+                .get("content")?
+                .as_array()?
+                .iter()
+                .find(|item| item.get("type").and_then(Value::as_str) == Some("tool_use"))?;
+            let id = call.get("id")?.as_str()?.to_owned();
+            let (server, tool) = call.get("name")?.as_str()?.split_once('/')?;
+            Some((
+                id,
+                server.to_owned(),
+                tool.to_owned(),
+                call.get("input")?.clone(),
+            ))
         }
     }
 }
@@ -246,50 +369,274 @@ impl ModelClient {
 impl TurnProcessor for ModelClient {
     fn process<'a>(
         &'a mut self,
-        _context: &'a AgentContext,
+        context: &'a AgentContext,
         message: InboundMessage,
         history: Vec<HistoryEntry>,
     ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>> {
         Box::pin(async move {
-            if message.kind != InboundKind::UserMessage {
-                return Err(TurnError::Transient(format!(
-                    "unsupported inbound message kind: {:?}",
-                    message.kind
-                )));
-            }
-            let user_text = message
-                .body
-                .get("text")
-                .and_then(Value::as_str)
-                .ok_or_else(|| TurnError::Transient("user message is missing text".to_owned()))?;
-            let reply = self.complete(&history, user_text).await.map_err(|error| {
-                let message = error.to_string();
-                if error.is_configuration_failure() || !error.is_transient_failure() {
-                    TurnError::Config(message)
-                } else {
-                    TurnError::Transient(message)
+            match message.kind {
+                InboundKind::UserMessage => {
+                    let user_text = message
+                        .body
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| TurnError::Config("user message is missing text".into()))?;
+                    self.run_turn(context, history, user_text, message.id, true)
+                        .await
                 }
-            })?;
-            let new_history = vec![
+                InboundKind::ApprovalResult => {
+                    self.resume_approved(context, history, &message.body, message.id)
+                        .await
+                }
+                kind => Err(TurnError::Config(format!(
+                    "unsupported inbound message kind: {kind:?}"
+                ))),
+            }
+        })
+    }
+}
+
+impl ModelClient {
+    async fn run_turn(
+        &mut self,
+        context: &AgentContext,
+        original_history: Vec<HistoryEntry>,
+        user_text: &str,
+        in_reply_to: Option<i64>,
+        include_user: bool,
+    ) -> Result<TurnOutput, TurnError> {
+        let mut delta = Vec::new();
+        let mut conversation = original_history.clone();
+        let mut user_pending = include_user.then(|| HistoryEntry {
+            role: "user".into(),
+            content: json!(user_text),
+        });
+        if include_user {
+            delta.push(user_pending.clone().expect("user entry exists"));
+        }
+        for _ in 0..8 {
+            let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+            let request_text = if delta.len() == 1 && include_user {
+                user_text
+            } else {
+                ""
+            };
+            let response = self
+                .complete_raw(&conversation, request_text, &tools)
+                .await
+                .map_err(map_model_error)?;
+            if let Some((call_id, server, tool, arguments)) =
+                model_tool_call(self.provider, &response)
+            {
+                if let Some(user) = user_pending.take() {
+                    conversation.push(user);
+                }
+                let assistant_message = match self.provider {
+                    ModelProvider::OpenAiCompatible => response
+                        .pointer("/choices/0/message")
+                        .cloned()
+                        .unwrap_or(Value::Null),
+                    ModelProvider::Anthropic => {
+                        json!({"role":"assistant", "content":response.get("content").cloned().unwrap_or(Value::Null)})
+                    }
+                };
+                let assistant = HistoryEntry {
+                    role: "assistant".into(),
+                    content: json!({"_ms_message":assistant_message}),
+                };
+                conversation.push(assistant.clone());
+                delta.push(assistant);
+                let binding = ApprovalBinding::for_call(&server, &tool, Some(&arguments));
+                match self
+                    .call_tool(&context.scope, &server, &tool, arguments.clone(), None)
+                    .await
+                {
+                    Ok(result) => {
+                        let result_entry = tool_result_history(self.provider, &call_id, result);
+                        conversation.push(result_entry.clone());
+                        delta.push(result_entry);
+                    }
+                    Err(reason) if reason == PermitError::ApprovalRequired.to_string() => {
+                        let local_id = NEXT_APPROVAL_LOCAL_ID.fetch_add(1, Ordering::Relaxed);
+                        delta.push(HistoryEntry {
+                            role: "tool".into(),
+                            content: json!({"_ms_pending_approval":{"local_id":local_id,"call_id":call_id,"server":server,"tool":tool,"arguments":arguments,"binding":binding}}),
+                        });
+                        return Ok(TurnOutput {
+                            outbound: vec![OutboundMessage {
+                                id: None,
+                                kind: OutboundKind::ApprovalRequest,
+                                body: json!({"approval_local_id":local_id,"server":server,"tool":tool,"args":arguments,"binding":binding}),
+                                in_reply_to,
+                                created_at: None,
+                            }],
+                            history: delta,
+                        });
+                    }
+                    Err(reason)
+                        if reason == PermitError::Denied.to_string()
+                            || reason == PermitError::NotGranted.to_string() =>
+                    {
+                        let reply = format!("Tool call denied: {server}/{tool}.");
+                        return Ok(reply_output(reply, in_reply_to, delta));
+                    }
+                    Err(reason) => return Err(TurnError::Config(reason)),
+                }
+                continue;
+            }
+            let reply = self.text_response(&response).map_err(map_model_error)?;
+            delta.push(HistoryEntry {
+                role: "assistant".into(),
+                content: json!(reply),
+            });
+            return Ok(reply_output(reply, in_reply_to, delta));
+        }
+        Err(TurnError::Config(
+            "model exceeded the maximum of eight tool calls in one turn".into(),
+        ))
+    }
+
+    async fn resume_approved(
+        &mut self,
+        context: &AgentContext,
+        history: Vec<HistoryEntry>,
+        result: &Value,
+        in_reply_to: Option<i64>,
+    ) -> Result<TurnOutput, TurnError> {
+        let pending = history
+            .iter()
+            .rev()
+            .find_map(|entry| entry.content.get("_ms_pending_approval"))
+            .ok_or_else(|| TurnError::Config("approval_result has no pending tool call".into()))?;
+        let server = pending
+            .get("server")
+            .and_then(Value::as_str)
+            .ok_or_else(|| TurnError::Config("pending approval has no server".into()))?;
+        let tool = pending
+            .get("tool")
+            .and_then(Value::as_str)
+            .ok_or_else(|| TurnError::Config("pending approval has no tool".into()))?;
+        let call_id = pending
+            .get("call_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| TurnError::Config("pending approval has no call id".into()))?;
+        let arguments = pending
+            .get("arguments")
+            .cloned()
+            .ok_or_else(|| TurnError::Config("pending approval has no arguments".into()))?;
+        let stored_binding: ApprovalBinding = serde_json::from_value(
+            pending
+                .get("binding")
+                .cloned()
+                .ok_or_else(|| TurnError::Config("pending approval has no binding".into()))?,
+        )
+        .map_err(|error| TurnError::Config(error.to_string()))?;
+        let approved_binding: ApprovalBinding = serde_json::from_value(
+            result
+                .get("binding")
+                .cloned()
+                .ok_or_else(|| TurnError::Config("approval result has no binding".into()))?,
+        )
+        .map_err(|error| TurnError::Config(error.to_string()))?;
+        if stored_binding != approved_binding
+            || !stored_binding.matches_call(server, tool, Some(&arguments))
+        {
+            return Err(TurnError::Config(
+                "approval binding does not match the pending tool call".into(),
+            ));
+        }
+        if result.get("decision").and_then(Value::as_str) != Some("approved") {
+            let result_entry = tool_result_history(
+                self.provider,
+                call_id,
+                json!({"isError":true,"content":"approval denied"}),
+            );
+            let mut conversation = history;
+            conversation.push(result_entry.clone());
+            let mut delta = vec![result_entry];
+            let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+            let response = self
+                .complete_raw(&conversation, "", &tools)
+                .await
+                .map_err(map_model_error)?;
+            let reply = self.text_response(&response).map_err(map_model_error)?;
+            delta.push(HistoryEntry {
+                role: "assistant".into(),
+                content: json!(reply),
+            });
+            return Ok(reply_output(reply, in_reply_to, delta));
+        }
+        let result = self
+            .call_tool(
+                &context.scope,
+                server,
+                tool,
+                arguments,
+                Some(&approved_binding),
+            )
+            .await
+            .map_err(TurnError::Config)?;
+        let result_entry = tool_result_history(self.provider, call_id, result);
+        let mut conversation = history;
+        conversation.push(result_entry.clone());
+        let tools = self.available_tools().await.map_err(TurnError::Transient)?;
+        let response = self
+            .complete_raw(&conversation, "", &tools)
+            .await
+            .map_err(map_model_error)?;
+        if model_tool_call(self.provider, &response).is_some() {
+            return Err(TurnError::Config(
+                "additional tool calls after approval require another turn".into(),
+            ));
+        }
+        let reply = self.text_response(&response).map_err(map_model_error)?;
+        Ok(reply_output(
+            reply.clone(),
+            in_reply_to,
+            vec![
+                result_entry,
                 HistoryEntry {
-                    role: "user".to_owned(),
-                    content: json!(user_text),
-                },
-                HistoryEntry {
-                    role: "assistant".to_owned(),
+                    role: "assistant".into(),
                     content: json!(reply),
                 },
-            ];
-            Ok(TurnOutput {
-                outbound: vec![OutboundMessage {
-                    id: None,
-                    kind: OutboundKind::Reply,
-                    body: json!({ "text": reply }),
-                    in_reply_to: message.id,
-                    created_at: None,
-                }],
-                history: new_history,
-            })
-        })
+            ],
+        ))
+    }
+}
+
+fn tool_result_history(provider: ModelProvider, call_id: &str, result: Value) -> HistoryEntry {
+    let message = match provider {
+        ModelProvider::OpenAiCompatible => {
+            json!({"role":"tool","tool_call_id":call_id,"content":result.to_string()})
+        }
+        ModelProvider::Anthropic => {
+            json!({"role":"user","content":[{"type":"tool_result","tool_use_id":call_id,"content":result.to_string()}]})
+        }
+    };
+    HistoryEntry {
+        role: "tool".into(),
+        content: json!({"_ms_message":message}),
+    }
+}
+
+fn reply_output(reply: String, in_reply_to: Option<i64>, history: Vec<HistoryEntry>) -> TurnOutput {
+    TurnOutput {
+        outbound: vec![OutboundMessage {
+            id: None,
+            kind: OutboundKind::Reply,
+            body: json!({"text":reply}),
+            in_reply_to,
+            created_at: None,
+        }],
+        history,
+    }
+}
+
+fn map_model_error(error: ModelError) -> TurnError {
+    let message = error.to_string();
+    if error.is_configuration_failure() || !error.is_transient_failure() {
+        TurnError::Config(message)
+    } else {
+        TurnError::Transient(message)
     }
 }
