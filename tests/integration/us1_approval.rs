@@ -5,7 +5,6 @@ use harness::IntegrationHarness;
 use std::time::Duration;
 
 #[test]
-#[ignore = "red: T024 — approval flow acceptance test is not implemented yet"]
 fn ask_policy_waits_for_approval_before_running_tool() {
     let Some(harness) = IntegrationHarness::start_approval_test_or_skip() else {
         return;
