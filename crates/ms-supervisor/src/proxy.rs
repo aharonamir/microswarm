@@ -196,27 +196,30 @@ impl SessionProxy {
             }
         }
         if let Some(name) = credential_name {
-            let secret = credentials.resolve(name);
-            if let Some(secret) = secret {
-                let header_name =
-                    if routes.anthropic_model && path != "/fetch" && !path.starts_with("/mcp/") {
-                        "x-api-key"
-                    } else {
-                        "authorization"
-                    };
-                let value = if header_name == "authorization" {
-                    format!("Bearer {secret}")
+            let Some(secret) = credentials.resolve(name) else {
+                return response(
+                    StatusCode::BAD_GATEWAY,
+                    "configured credential is unavailable",
+                );
+            };
+            let header_name =
+                if routes.anthropic_model && path != "/fetch" && !path.starts_with("/mcp/") {
+                    "x-api-key"
                 } else {
-                    secret
+                    "authorization"
                 };
-                let Ok(value) = HeaderValue::from_str(&value) else {
-                    return response(
-                        StatusCode::BAD_GATEWAY,
-                        "credential cannot be represented as an HTTP header",
-                    );
-                };
-                builder = builder.header(header_name, value);
-            }
+            let value = if header_name == "authorization" {
+                format!("Bearer {secret}")
+            } else {
+                secret
+            };
+            let Ok(value) = HeaderValue::from_str(&value) else {
+                return response(
+                    StatusCode::BAD_GATEWAY,
+                    "credential cannot be represented as an HTTP header",
+                );
+            };
+            builder = builder.header(header_name, value);
         }
         let upstream_request = match builder.body(Full::new(outbound_body)) {
             Ok(request) => request,

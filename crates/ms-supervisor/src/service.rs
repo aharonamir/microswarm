@@ -225,13 +225,7 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
     let session_dir = home.join("sessions").join(&session_id);
     let session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
     let active_at = utc_now();
-    store
-        .connection()
-        .execute(
-            "UPDATE sessions SET status='busy', last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
-            [session_id.as_str(), active_at.as_str()],
-        )
-        .map_err(|error| error.to_string())?;
+    claim_session_busy(&store, &session_id, &active_at)?;
     let last_id: i64 = session
         .outbound()
         .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
@@ -300,6 +294,24 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
+}
+
+fn claim_session_busy(
+    store: &SupervisorStore,
+    session_id: &str,
+    active_at: &str,
+) -> Result<(), String> {
+    let claimed = store
+        .connection()
+        .execute(
+            "UPDATE sessions SET status='busy', last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
+            [session_id, active_at],
+        )
+        .map_err(|error| error.to_string())?;
+    if claimed == 0 {
+        return Err("session is no longer ready to accept a message".into());
+    }
+    Ok(())
 }
 
 async fn create_lead(
@@ -687,5 +699,53 @@ fn config_dir(home: &Path) -> PathBuf {
         nested
     } else {
         home.to_path_buf()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::claim_session_busy;
+    use ms_store::{SessionRecord, SupervisorStore};
+    use serde_json::json;
+    use std::{
+        fs,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn chat_claim_rejects_a_session_that_idle_shutdown_already_claimed() {
+        let dir = std::env::temp_dir().join(format!(
+            "ms-chat-claim-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let mut store = SupervisorStore::open(dir.join("supervisor.db")).unwrap();
+        store
+            .insert_session(&SessionRecord {
+                id: "01J00000000000000000000000".into(),
+                root_id: "01J00000000000000000000000".into(),
+                parent_id: None,
+                role: "lead".into(),
+                kind: "lead".into(),
+                channel: Some("cli".into()),
+                channel_thread: Some("default".into()),
+                status: "stopping".into(),
+                scope_hash: None,
+                scope: Some(json!({})),
+                created_at: "2026-10-29T00:00:00Z".into(),
+                last_active_at: "2026-10-29T00:00:00Z".into(),
+            })
+            .unwrap();
+
+        let result =
+            claim_session_busy(&store, "01J00000000000000000000000", "2026-10-29T00:00:01Z");
+        assert!(
+            result.is_err(),
+            "stopping session must not accept a chat turn"
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 }
