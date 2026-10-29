@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -13,6 +13,8 @@ const TOOL_RESPONSE: &str = r#"{"id":"chatcmpl-tool","object":"chat.completion",
 pub struct FakeModelServer {
     address: SocketAddr,
     shutdown: Arc<AtomicBool>,
+    requests: Arc<AtomicUsize>,
+    transient_failures: Arc<AtomicUsize>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -35,11 +37,21 @@ impl FakeModelServer {
         let address = listener.local_addr()?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let thread_shutdown = Arc::clone(&shutdown);
+        let requests = Arc::new(AtomicUsize::new(0));
+        let transient_failures = Arc::new(AtomicUsize::new(0));
+        let thread_requests = Arc::clone(&requests);
+        let thread_transient_failures = Arc::clone(&transient_failures);
         let thread = thread::spawn(move || {
             while !thread_shutdown.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _)) => {
-                        let _ = respond(stream, approval_tool, delegation_tools);
+                        let _ = respond(
+                            stream,
+                            approval_tool,
+                            delegation_tools,
+                            &thread_requests,
+                            &thread_transient_failures,
+                        );
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5));
@@ -51,12 +63,18 @@ impl FakeModelServer {
         Ok(Self {
             address,
             shutdown,
+            requests,
+            transient_failures,
             thread: Some(thread),
         })
     }
 
     pub fn base_url(&self) -> String {
         format!("http://{}/v1", self.address)
+    }
+
+    pub fn request_count(&self) -> usize {
+        self.requests.load(Ordering::Relaxed)
     }
 }
 
@@ -70,7 +88,13 @@ impl Drop for FakeModelServer {
     }
 }
 
-fn respond(stream: TcpStream, approval_tool: bool, delegation_tools: bool) -> std::io::Result<()> {
+fn respond(
+    stream: TcpStream,
+    approval_tool: bool,
+    delegation_tools: bool,
+    requests: &AtomicUsize,
+    transient_failures: &AtomicUsize,
+) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     let mut content_length = 0usize;
@@ -88,6 +112,13 @@ fn respond(stream: TcpStream, approval_tool: bool, delegation_tools: bool) -> st
     let mut request_body = vec![0; content_length];
     reader.read_exact(&mut request_body)?;
     let request_body = String::from_utf8_lossy(&request_body);
+    requests.fetch_add(1, Ordering::Relaxed);
+    if request_body.contains("transient always")
+        || (request_body.contains("transient once")
+            && transient_failures.fetch_add(1, Ordering::Relaxed) == 0)
+    {
+        return Ok(());
+    }
     let body = if delegation_tools
         && request_body.contains("\"hang\"")
         && !request_body.contains("microswarm-core/")

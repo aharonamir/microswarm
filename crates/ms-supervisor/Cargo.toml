@@ -133,6 +133,26 @@ name = "us2-narrowing"
 path = "../../tests/integration/us2_narrowing.rs"
 
 [[test]]
+name = "us3-transient"
+path = "../../tests/integration/us3_transient.rs"
+
+[[test]]
+name = "us3-safety"
+path = "../../tests/integration/us3_safety.rs"
+
+[[test]]
+name = "us3-timeout"
+path = "../../tests/integration/us3_timeout.rs"
+
+[[test]]
+name = "us3-spawn-error"
+path = "../../tests/integration/us3_spawn_error.rs"
+
+[[test]]
+name = "us3-lead-notice"
+path = "../../tests/integration/us3_lead_notice.rs"
+
+[[test]]
 name = "us2-dismiss"
 path = "../../tests/integration/us2_dismiss.rs"
 
