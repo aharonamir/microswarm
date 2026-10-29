@@ -163,6 +163,7 @@ async fn stop_idle_lead(
 
 async fn dispatch(home: &Path, request: &Value) -> Value {
     let result = match request.get("op").and_then(Value::as_str) {
+        Some("skills_install") => install_skill(home, request),
         Some("creds_set") => store_credential(home, request),
         Some("creds_list") => list_credentials(home),
         Some("approve") | Some("deny") => resolve_approval(home, request).await,
@@ -174,6 +175,22 @@ async fn dispatch(home: &Path, request: &Value) -> Value {
         Ok(value) => value,
         Err(error) => json!({"error":error}),
     }
+}
+
+fn install_skill(home: &Path, request: &Value) -> Result<Value, String> {
+    let source = request
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("skill directory path is missing")?;
+    let mut store =
+        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
+    let installed =
+        crate::skills::install_team_skill(&mut store, &home.join("skills"), Path::new(source))?;
+    Ok(json!({
+        "name":installed.name,
+        "version":installed.version,
+        "roles":installed.roles,
+    }))
 }
 
 async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {

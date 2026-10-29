@@ -304,6 +304,35 @@ impl SupervisorStore {
         Ok(())
     }
 
+    pub fn replace_team_roles(
+        &mut self,
+        skill: &str,
+        roles: &[TeamRoleRecord],
+    ) -> Result<(), StoreError> {
+        let transaction = self.connection.transaction()?;
+        transaction.execute("DELETE FROM team_roles WHERE skill=?1", [skill])?;
+        for role in roles {
+            if role.skill != skill {
+                return Err(StoreError::InvalidContract("team role skill mismatch"));
+            }
+            transaction.execute(
+                "INSERT INTO team_roles(skill, skill_version, skill_hash, role, spawn_policy, scope, instructions)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    role.skill,
+                    role.skill_version,
+                    role.skill_hash,
+                    role.role,
+                    role.spawn_policy,
+                    serde_json::to_string(&role.scope)?,
+                    role.instructions,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn upsert_tail_cursor(
         &mut self,
         session_id: &str,

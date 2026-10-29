@@ -32,6 +32,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "init" => init(&home),
         "doctor" => doctor(&home),
         "sessions" => sessions(&home),
+        "skills" => skills(&home, &args[1..]),
         "creds" => credentials(&home, &args[1..]),
         "approve" | "deny" => rpc(
             &home,
@@ -45,7 +46,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|sessions|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|sessions|skills|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  skills install <directory>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
@@ -201,6 +202,27 @@ fn sessions(home: &Path) -> Result<(), String> {
         println!("No active sessions.");
     }
     Ok(())
+}
+
+fn skills(home: &Path, args: &[String]) -> Result<(), String> {
+    match args.first().map(String::as_str) {
+        Some("install") => {
+            let source = args.get(1).ok_or("skill directory is required")?;
+            let installed = rpc(home, json!({"op":"skills_install", "path":source}))?;
+            println!(
+                "installed {}@{}",
+                installed["name"].as_str().unwrap_or("unknown"),
+                installed["version"].as_str().unwrap_or("unknown")
+            );
+            if let Some(roles) = installed["roles"].as_array() {
+                for role in roles.iter().filter_map(serde_json::Value::as_str) {
+                    println!("  role {role}");
+                }
+            }
+            Ok(())
+        }
+        _ => Err("usage: microswarm skills install <directory>".into()),
+    }
 }
 
 fn chat(home: &Path, args: &[String]) -> Result<(), String> {
