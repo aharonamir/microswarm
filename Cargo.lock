@@ -1174,6 +1174,12 @@ dependencies = [
 [[package]]
 name = "ms-cli"
 version = "0.1.0"
+dependencies = [
+ "ms-store",
+ "ms-supervisor",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "ms-proto"
@@ -1208,6 +1214,7 @@ dependencies = [
  "hyper-util",
  "ms-proto",
  "ms-store",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",

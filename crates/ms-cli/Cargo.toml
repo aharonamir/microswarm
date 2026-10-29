@@ -5,6 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+ms-store = { path = "../ms-store" }
+ms-supervisor = { path = "../ms-supervisor" }
+serde_json = "1.0.145"
+tokio = { version = "1.53.2", features = ["net", "rt", "time"] }
+
 [[bin]]
 name = "microswarm"
 path = "src/main.rs"
