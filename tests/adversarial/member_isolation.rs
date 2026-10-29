@@ -24,6 +24,33 @@ fn member_network_is_internal_and_credentials_are_limited_to_its_scope() {
         support::harness::Runtime::Docker => "docker",
         support::harness::Runtime::Podman => "podman",
     };
+    let session_ids = std::iter::once(lead_id.to_owned())
+        .chain(members.iter().map(|member| member.0.clone()))
+        .collect::<Vec<_>>();
+    for session_id in session_ids {
+        let containers = harness.containers_for(&session_id).unwrap();
+        assert_eq!(containers.len(), 1);
+        let output = std::process::Command::new(runtime)
+            .args([
+                "inspect",
+                "--format",
+                "{{json .NetworkSettings.Networks}}",
+                &containers[0],
+            ])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let attached: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("runtime network attachment JSON");
+        let names = attached
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let expected = format!("ms-net-{session_id}");
+        assert_eq!(names, [expected.as_str()]);
+    }
     let mut member_networks = Vec::new();
     for member in &members {
         let scope: serde_json::Value = serde_json::from_slice(
