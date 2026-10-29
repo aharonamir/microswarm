@@ -99,6 +99,14 @@ name = "us2-deny"
 path = "../../tests/integration/us2_deny.rs"
 
 [[test]]
+name = "us2-send"
+path = "../../tests/integration/us2_send.rs"
+
+[[test]]
+name = "us2-limit"
+path = "../../tests/integration/us2_limit.rs"
+
+[[test]]
 name = "us2-narrowing"
 path = "../../tests/integration/us2_narrowing.rs"
 

@@ -109,11 +109,11 @@
 ### Tests first
 
 - [x] T046 [P] [US2] Integration: `allow` role ⇒ second container, new session id, lead gets `member_id` — `tests/integration/us2_spawn.rs`
-- [x] T047 [P] [US2] Integration: `ask` ⇒ prompt shows role, task, mounts, creds, tools; no container before approval — `tests/integration/us2_ask.rs` (red, ignored)
-- [x] T048 [P] [US2] Integration: `deny` ⇒ `delegation.denied`, no container — `tests/integration/us2_deny.rs` (red, ignored)
-- [x] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs` (red, ignored)
-- [x] T050 [P] [US2] Integration: dismiss ⇒ in-flight reply delivered within grace, container gone, directory retained, only lead remains — `tests/integration/us2_dismiss.rs` (red, ignored)
-- [x] T051 [P] [US2] Integration: re-spawn same role ⇒ new id, empty history, fresh scope — `tests/integration/us2_clean_slate.rs` (red, ignored)
+- [x] T047 [P] [US2] Integration: `ask` ⇒ prompt shows role, task, mounts, creds, tools; no container before approval — `tests/integration/us2_ask.rs`
+- [x] T048 [P] [US2] Integration: `deny` ⇒ `delegation.denied`, no container — `tests/integration/us2_deny.rs`
+- [x] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs`
+- [x] T050 [P] [US2] Integration: dismiss ⇒ in-flight reply delivered within grace, container gone, directory retained, only lead remains — `tests/integration/us2_dismiss.rs`
+- [x] T051 [P] [US2] Integration: re-spawn same role ⇒ new id, fresh isolated history and scope — `tests/integration/us2_clean_slate.rs`
 - [x] T052 [P] [US2] Adversarial: member forges a `delegation_request` row ⇒ rejected by supervisor; members' tool list has no delegation tools — `tests/adversarial/member_cannot_delegate.rs` (red, ignored)
 - [x] T053 [P] [US2] Adversarial: member→member and member→lead network reach fails; member cannot use a credential name the lead holds but did not grant — `tests/adversarial/member_isolation.rs` (red, ignored)
 - [x] T054 [P] [US2] Adversarial: symlink in lead mount pointing outside it does not widen member scope — `tests/adversarial/symlink_scope.rs` (red, ignored)
@@ -125,9 +125,9 @@
 - [x] T057 [US2] Team-skill install/parse/register; hash recorded; role instructions path — `crates/ms-supervisor/src/skills.rs`
 - [x] T058 [US2] Spawn policy resolution: stricter of skill and `policy.toml`; `adhoc` default — `crates/ms-supervisor/src/policy.rs`
 - [x] T059 [US2] Member scope: lead-path → host-path translation; `request ∩ template ∩ lead ∩ ceiling`; reject `scope_empty`; persist authoritative scope; write `control/scope.json` — `crates/ms-supervisor/src/scope.rs`
-- [ ] T060 [US2] Delegation orchestration: requested → awaiting_approval → spawning → active; member limit; `delegation_result` to lead; `task` to member — `crates/ms-supervisor/src/delegation.rs`
-- [ ] T061 [US2] Routing: `send_to_member` ⇒ member inbound `task`; member `reply` ⇒ lead inbound `member_reply`; reject rows from wrong session kinds — `crates/ms-supervisor/src/router.rs`
-- [ ] T062 [US2] Dismissal: `control:shutdown`, grace window, force stop, `close_reason=dismissed`; not policy-gated — `crates/ms-supervisor/src/delegation.rs`
+- [x] T060 [US2] Delegation orchestration: requested → awaiting_approval → spawning → active; member limit; `delegation_result` to lead; `task` to member — `crates/ms-supervisor/src/delegation.rs`
+- [x] T061 [US2] Routing: `send_to_member` ⇒ member inbound `task`; member `reply` ⇒ lead inbound `member_reply`; reject rows from wrong session kinds — `crates/ms-supervisor/src/router.rs`
+- [x] T062 [US2] Dismissal: `control:shutdown`, grace window, force stop, `close_reason=dismissed`; not policy-gated — `crates/ms-supervisor/src/delegation.rs`
 - [ ] T063 [US2] Session end cascades: stop members first, then lead — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T064 [US2] Member idle timeout — `crates/ms-supervisor/src/sessions.rs`
 - [ ] T065 [US2] Member `ask` gates routed to root channel, prefixed with role + member id — `crates/ms-supervisor/src/approvals.rs`

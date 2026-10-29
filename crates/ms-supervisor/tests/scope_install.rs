@@ -159,6 +159,40 @@ fn member_scope_rejects_nonempty_requests_with_no_surviving_grants() {
     fs::remove_dir_all(home).unwrap();
 }
 
+#[test]
+fn member_scope_uses_the_most_specific_parent_mount() {
+    let home = temp_dir();
+    let work = home.join("work");
+    fs::create_dir_all(work.join("target")).unwrap();
+    let mut lead = lead_scope(&work, MountMode::ReadOnly);
+    lead.mounts.push(Mount {
+        host_path: work.join("target"),
+        container_path: PathBuf::from("/work/target"),
+        mode: MountMode::ReadWrite,
+    });
+    let template = serde_json::json!({
+        "mounts":[{"path":"/work","mode":"ro"},{"path":"/work/target","mode":"rw"}],
+        "credentials":["web-key"],
+        "tools":[{"server":"microswarm-tools","tools":["fs.read"]}]
+    });
+    let request = template.clone();
+    let scope = build_member_scope(
+        &lead,
+        &template,
+        &request,
+        "01J00000000000000000000001",
+        "01J00000000000000000000002",
+        &ScopeCeiling::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        scope.mounts[1].container_path,
+        PathBuf::from("/work/target")
+    );
+    assert_eq!(scope.mounts[1].mode, MountMode::ReadWrite);
+    fs::remove_dir_all(home).unwrap();
+}
+
 fn lead_scope(work: &std::path::Path, mode: MountMode) -> Scope {
     let mut scope = Scope {
         version: 1,

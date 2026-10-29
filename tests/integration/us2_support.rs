@@ -40,3 +40,15 @@ pub fn members(harness: &IntegrationHarness) -> Vec<(String, String, Option<Stri
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
 }
+
+pub fn has_supervisor_event(harness: &IntegrationHarness, event_type: &str) -> bool {
+    let store = SupervisorStore::open_readonly(harness.home.join("supervisor.db")).unwrap();
+    store
+        .connection()
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM supervisor_events WHERE type=?1)",
+            [event_type],
+            |row| row.get(0),
+        )
+        .unwrap()
+}

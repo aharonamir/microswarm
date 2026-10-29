@@ -65,6 +65,15 @@ pub struct TeamRoleRecord {
 }
 
 #[derive(Clone, Debug)]
+pub struct MemberRouteRecord {
+    pub parent_id: String,
+    pub kind: String,
+    pub status: String,
+    pub container_id: Option<String>,
+    pub delegation_id: Option<String>,
+}
+
+#[derive(Clone, Debug)]
 pub struct SessionLifecycleUpdate {
     pub session_id: String,
     pub status: String,
@@ -229,6 +238,41 @@ impl SupervisorStore {
                 |row| row.get::<_, i64>(0),
             )
             .map(|count| count.max(0) as u64)
+            .map_err(StoreError::from)
+    }
+
+    pub fn member_route(
+        &self,
+        lead_id: &str,
+        member_id: &str,
+    ) -> Result<Option<MemberRouteRecord>, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT s.parent_id, s.kind, s.status, s.container_id,
+                        (SELECT d.id FROM delegations d WHERE d.lead_id=s.parent_id
+                         AND d.member_id=s.id ORDER BY d.created_at DESC LIMIT 1)
+                 FROM sessions s WHERE s.id=?1 AND s.parent_id=?2",
+                [member_id, lead_id],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+            .map(
+                |(parent_id, kind, status, container_id, delegation_id)| MemberRouteRecord {
+                    parent_id,
+                    kind,
+                    status,
+                    container_id,
+                    delegation_id,
+                },
+            )
+            .optional()
             .map_err(StoreError::from)
     }
 

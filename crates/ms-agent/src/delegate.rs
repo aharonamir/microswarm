@@ -121,7 +121,7 @@ pub async fn wait_for_result(
     timeout: Duration,
 ) -> Result<InboundMessage, String> {
     let deadline = Instant::now() + timeout;
-    let cursor = after_id;
+    let cursor = after_id.max(store.cursor().map_err(|error| error.to_string())?);
     loop {
         if let Some(message) = store
             .next_inbound(cursor)

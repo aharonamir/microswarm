@@ -98,7 +98,10 @@ pub async fn run<P: TurnProcessor>(
                 {
                     Some("user_message requires a string text field".to_owned())
                 }
-                InboundKind::UserMessage | InboundKind::Control => None,
+                InboundKind::Task if !message.body.get("text").is_some_and(|v| v.is_string()) => {
+                    Some("task requires a string text field".to_owned())
+                }
+                InboundKind::UserMessage | InboundKind::Task | InboundKind::Control => None,
                 InboundKind::ApprovalResult
                     if message
                         .body

@@ -159,9 +159,14 @@ fn delegation_response(body: &str) -> String {
         return spawn_call("forbidden", "try a forbidden role", serde_json::json!({}));
     }
     if user_text.contains("tester") && count("microswarm-core/spawn_member") == 0 {
+        let task = if user_text.contains("run tests") {
+            "run tests"
+        } else {
+            "run cargo test for src/auth"
+        };
         return spawn_call(
             "tester",
-            "run cargo test for src/auth",
+            task,
             serde_json::json!({
                 "mounts":[{"path":"/work","mode":"ro"},{"path":"/work/target","mode":"rw"}],
                 "tools":[{"server":"microswarm-tools","tools":["shell.run","fs.read"]}]
@@ -177,6 +182,7 @@ fn delegation_response(body: &str) -> String {
             "/work"
         };
         if count("microswarm-core/spawn_member") == 0
+            || (user_text.contains("twice") && count("microswarm-core/spawn_member") == 1)
             || (user_text.contains("again") && count("microswarm-core/dismiss_member") > 0)
         {
             return spawn_call(
@@ -192,7 +198,7 @@ fn delegation_response(body: &str) -> String {
     {
         return tool_call(
             "send_to_member",
-            serde_json::json!({"member_id":member_id,"text":"run the auth test suite"}),
+            serde_json::json!({"member_id":member_id,"text":"run the auth test suite","timeout_s":10}),
         );
     }
     if user_text.contains("dismiss")

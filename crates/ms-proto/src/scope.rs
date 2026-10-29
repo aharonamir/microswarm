@@ -354,7 +354,7 @@ pub fn intersect_scope(
             });
             continue;
         }
-        let mut admitted = None;
+        let mut admitted: Option<(PathBuf, usize, MountMode)> = None;
         for parent in &lead.mounts {
             let parent_host = canonicalize(&parent.host_path)?;
             if !host.starts_with(&parent_host) {
@@ -368,7 +368,16 @@ pub fn intersect_scope(
             if requested_container != projected {
                 continue;
             }
-            let mode = requested.mode.min(parent.mode);
+            let specificity = parent_host.components().count();
+            if admitted
+                .as_ref()
+                .is_none_or(|(_, current_specificity, _)| specificity > *current_specificity)
+            {
+                admitted = Some((projected, specificity, parent.mode));
+            }
+        }
+        if let Some((projected, _, parent_mode)) = admitted {
+            let mode = requested.mode.min(parent_mode);
             if mode != requested.mode {
                 result.narrowed.push(NarrowedItem {
                     dimension: NarrowedDimension::Mode,
@@ -376,15 +385,11 @@ pub fn intersect_scope(
                     reason: NarrowedReason::ModeDowngraded,
                 });
             }
-            admitted = Some(Mount {
+            result.mounts.push(Mount {
                 host_path: host.clone(),
                 container_path: projected,
                 mode,
             });
-            break;
-        }
-        if let Some(mount) = admitted {
-            result.mounts.push(mount);
         } else {
             result.narrowed.push(NarrowedItem {
                 dimension: NarrowedDimension::Mount,

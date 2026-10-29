@@ -4,7 +4,10 @@ use crate::{
     runtime::{ContainerProfile, ContainerRuntime},
     scope::{build_lead_scope, install_lead_scope},
 };
-use ms_proto::{DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling};
+use ms_proto::{
+    DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEvent,
+    SupervisorEventType,
+};
 use ms_store::{
     DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
     open_session_dir,
@@ -320,7 +323,31 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
                 )
                 .await?
             {
-                return Ok(json!({"session_id":session_id,"pending":true,"prompt":prompt}));
+                return Ok(
+                    json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
+                );
+            }
+            if message.kind == OutboundKind::SendToMember {
+                handle_send_to_member(
+                    home,
+                    &config,
+                    &mut store,
+                    &session_dir,
+                    &session_id,
+                    &message.body,
+                )
+                .await?;
+            }
+            if message.kind == OutboundKind::Dismiss {
+                handle_dismiss_member(
+                    home,
+                    &config,
+                    &mut store,
+                    &session_dir,
+                    &session_id,
+                    &message.body,
+                )
+                .await?;
             }
         }
         if Instant::now() >= deadline {
@@ -715,6 +742,24 @@ async fn handle_delegation_request(
                     &utc_now(),
                 )
                 .map_err(|error| error.to_string())?;
+            emit_supervisor_event(
+                store,
+                lead_id,
+                lead_id,
+                role_name,
+                SupervisorEventType::DelegationSpawned,
+                json!({"delegation_id":delegation_id,"member_id":member_id,"role":role_name}),
+            )?;
+            if !scope.narrowed.is_empty() {
+                emit_supervisor_event(
+                    store,
+                    lead_id,
+                    lead_id,
+                    role_name,
+                    SupervisorEventType::ScopeNarrowed,
+                    json!({"delegation_id":delegation_id,"member_id":member_id,"narrowed":scope.narrowed}),
+                )?;
+            }
             open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed})).map_err(|error| error.to_string())?;
         }
         Err(error) => {
@@ -770,6 +815,18 @@ fn reject_delegation(
             updated_at: now,
         })
         .map_err(|error| error.to_string())?;
+    emit_supervisor_event(
+        store,
+        lead_id,
+        lead_id,
+        role,
+        if reason == "policy" {
+            SupervisorEventType::DelegationDenied
+        } else {
+            SupervisorEventType::DelegationFailed
+        },
+        json!({"delegation_id":delegation_id,"role":role,"reason":reason}),
+    )?;
     open_session_dir(lead_session_dir)
         .map_err(|error| error.to_string())?
         .append_inbound(
@@ -778,6 +835,36 @@ fn reject_delegation(
         )
         .map_err(|error| error.to_string())?;
     Ok(None)
+}
+
+fn emit_supervisor_event(
+    store: &mut SupervisorStore,
+    session_id: &str,
+    root_session_id: &str,
+    role: &str,
+    event_type: SupervisorEventType,
+    data: Value,
+) -> Result<(), String> {
+    let ts_mono = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        .try_into()
+        .unwrap_or(u64::MAX);
+    store
+        .append_supervisor_event(&SupervisorEvent {
+            seq: 0,
+            ts: utc_now(),
+            ts_mono,
+            session_id: session_id.into(),
+            root_session_id: root_session_id.into(),
+            agent_role: role.into(),
+            source: Default::default(),
+            event_type,
+            data,
+        })
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -901,6 +988,225 @@ async fn create_member(
         })
         .map_err(|error| error.to_string())?;
     wait_agent_ready(&mut session).await?;
+    Ok(())
+}
+
+async fn handle_send_to_member(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    lead_session_dir: &Path,
+    lead_id: &str,
+    body: &Value,
+) -> Result<(), String> {
+    let member_id = body
+        .get("member_id")
+        .and_then(Value::as_str)
+        .ok_or("send_to_member has no member_id")?;
+    let text = body
+        .get("text")
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+        .ok_or("send_to_member has no text")?;
+    let timeout_s = body.get("timeout_s").and_then(Value::as_u64).unwrap_or(300);
+    if !(10..=3600).contains(&timeout_s) {
+        return Err("send_to_member timeout_s must be between 10 and 3600".into());
+    }
+    let member = store
+        .member_route(lead_id, member_id)
+        .map_err(|error| error.to_string())?
+        .ok_or("unknown_member")?;
+    if member.parent_id != lead_id || member.kind != "member" {
+        return Err("member does not belong to this lead".into());
+    }
+    if !matches!(member.status.as_str(), "ready" | "busy") {
+        open_session_dir(lead_session_dir)
+            .map_err(|error| error.to_string())?
+            .append_inbound(
+                &InboundKind::MemberFailed,
+                &json!({"member_id":member_id,"reason":"crashed"}),
+            )
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    let container_id = member
+        .container_id
+        .clone()
+        .ok_or("member has no container")?;
+    let delegation_id = member
+        .delegation_id
+        .clone()
+        .ok_or("member has no delegation record")?;
+    let member_session = open_session_dir(home.join("sessions").join(member_id))
+        .map_err(|error| error.to_string())?;
+    let cursor: i64 = member_session
+        .outbound()
+        .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
+            row.get(0)
+        })
+        .map_err(|error| error.to_string())?;
+    let task_id = member_session
+        .append_inbound(
+            &InboundKind::Task,
+            &json!({"delegation_id":delegation_id,"from_lead":lead_id,"text":text}),
+        )
+        .map_err(|error| error.to_string())?;
+    let runtime = runtime_for(config)?;
+    runtime.signal(&container_id, "SIGUSR1").await?;
+    let deadline = Instant::now() + Duration::from_secs(timeout_s);
+    let mut after_id = cursor;
+    loop {
+        for reply in member_session
+            .outbound_after(after_id)
+            .map_err(|error| error.to_string())?
+        {
+            if let Some(id) = reply.id {
+                after_id = id;
+            }
+            if reply.kind != OutboundKind::Reply || reply.in_reply_to != Some(task_id) {
+                continue;
+            }
+            let response = reply.body.get("text").and_then(Value::as_str).unwrap_or("");
+            open_session_dir(lead_session_dir)
+                .map_err(|error| error.to_string())?
+                .append_inbound(
+                    &InboundKind::MemberReply,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"text":response}),
+                )
+                .map_err(|error| error.to_string())?;
+            emit_supervisor_event(
+                store,
+                member_id,
+                lead_id,
+                &member.kind,
+                SupervisorEventType::DelegationReply,
+                json!({"member_id":member_id,"delegation_id":delegation_id}),
+            )?;
+            return Ok(());
+        }
+        let status: String = store
+            .connection()
+            .query_row(
+                "SELECT status FROM sessions WHERE id=?1",
+                [member_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if matches!(status.as_str(), "crashed" | "closed" | "failed") {
+            open_session_dir(lead_session_dir)
+                .map_err(|error| error.to_string())?
+                .append_inbound(
+                    &InboundKind::MemberFailed,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"crashed"}),
+                )
+                .map_err(|error| error.to_string())?;
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            open_session_dir(lead_session_dir)
+                .map_err(|error| error.to_string())?
+                .append_inbound(
+                    &InboundKind::MemberFailed,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"timeout"}),
+                )
+                .map_err(|error| error.to_string())?;
+            emit_supervisor_event(
+                store,
+                member_id,
+                lead_id,
+                &member.kind,
+                SupervisorEventType::DelegationTimeout,
+                json!({"member_id":member_id,"delegation_id":delegation_id}),
+            )?;
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn handle_dismiss_member(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    lead_session_dir: &Path,
+    lead_id: &str,
+    body: &Value,
+) -> Result<(), String> {
+    let member_id = body
+        .get("member_id")
+        .and_then(Value::as_str)
+        .ok_or("dismiss has no member_id")?;
+    let lead = open_session_dir(lead_session_dir).map_err(|error| error.to_string())?;
+    let Some(member) = store
+        .member_route(lead_id, member_id)
+        .map_err(|error| error.to_string())?
+    else {
+        lead.append_inbound(
+            &InboundKind::DelegationResult,
+            &json!({"status":"unknown_member","member_id":member_id}),
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(());
+    };
+    if member.kind != "member" {
+        return Err("dismiss target is not a member".into());
+    }
+    if matches!(member.status.as_str(), "closed" | "failed") {
+        lead.append_inbound(
+            &InboundKind::DelegationResult,
+            &json!({"status":"already_closed","member_id":member_id}),
+        )
+        .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    let container_id = member.container_id.ok_or("member has no container")?;
+    let member_session = open_session_dir(home.join("sessions").join(member_id))
+        .map_err(|error| error.to_string())?;
+    member_session
+        .append_inbound(
+            &InboundKind::Control,
+            &json!({"op":"shutdown","grace_ms":config.microswarm.limits.grace_ms}),
+        )
+        .map_err(|error| error.to_string())?;
+    let runtime = runtime_for(config)?;
+    runtime.signal(&container_id, "SIGUSR1").await?;
+    let grace = Duration::from_millis(config.microswarm.limits.grace_ms);
+    let deadline = Instant::now() + grace;
+    while runtime.is_running(&container_id).await? && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    if runtime.is_running(&container_id).await? {
+        runtime.stop(&container_id, grace).await?;
+    }
+    let now = utc_now();
+    store
+        .connection()
+        .execute(
+            "UPDATE sessions SET status='closed', close_reason='dismissed', closed_at=?2,
+             last_active_at=?2 WHERE id=?1 AND parent_id=?3 AND kind='member'",
+            [member_id, now.as_str(), lead_id],
+        )
+        .map_err(|error| error.to_string())?;
+    store
+        .connection()
+        .execute(
+            "UPDATE delegations SET status='dismissed', updated_at=?2 WHERE member_id=?1 AND lead_id=?3",
+            [member_id, now.as_str(), lead_id],
+        )
+        .map_err(|error| error.to_string())?;
+    emit_supervisor_event(
+        store,
+        member_id,
+        lead_id,
+        &member.kind,
+        SupervisorEventType::DelegationDismissed,
+        json!({"member_id":member_id}),
+    )?;
+    lead.append_inbound(
+        &InboundKind::DelegationResult,
+        &json!({"status":"dismissed","member_id":member_id}),
+    )
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 

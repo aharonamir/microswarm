@@ -128,3 +128,41 @@ async fn delegation_turn_waits_for_result_and_acknowledges_that_result() {
     drop(supervisor);
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[tokio::test]
+async fn next_delegation_wait_starts_after_the_acknowledged_cursor() {
+    let directory = std::env::temp_dir().join(format!(
+        "ms-delegation-cursor-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let supervisor = ms_store::open_session_dir(&directory).unwrap();
+    let mut agent = ms_store::SessionStore::open_dir(&directory).unwrap();
+    supervisor.inbound().execute(
+        "INSERT INTO inbound(kind, body) VALUES ('delegation_result', '{\"status\":\"spawned\"}')",
+        [],
+    ).unwrap();
+    agent.acknowledge_inbound(1).unwrap();
+    supervisor
+        .inbound()
+        .execute(
+            "INSERT INTO inbound(kind, body) VALUES ('member_reply', '{\"text\":\"done\"}')",
+            [],
+        )
+        .unwrap();
+    let reply = ms_agent::delegate::wait_for_result(
+        &mut agent,
+        0,
+        vec![ms_proto::InboundKind::MemberReply],
+        std::time::Duration::from_millis(100),
+    )
+    .await;
+    assert_eq!(reply.unwrap().body["text"], "done");
+    drop(agent);
+    drop(supervisor);
+    std::fs::remove_dir_all(directory).unwrap();
+}

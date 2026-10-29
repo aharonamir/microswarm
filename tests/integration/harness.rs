@@ -76,7 +76,7 @@ impl IntegrationHarness {
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
-        fs::create_dir_all(home.join("work"))?;
+        fs::create_dir_all(home.join("work/target"))?;
         create_synthetic_model_credential(&home)?;
         let model = if swarm {
             FakeModelServer::start_for_swarm()?
@@ -235,6 +235,27 @@ impl IntegrationHarness {
             .lines()
             .map(str::to_owned)
             .collect())
+    }
+
+    pub fn container_running(
+        &self,
+        container_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let program = match self.runtime {
+            Runtime::Docker => "docker",
+            Runtime::Podman => "podman",
+        };
+        let output = Command::new(program)
+            .args(["inspect", "--format", "{{.State.Running}}", container_id])
+            .output()?;
+        if !output.status.success() {
+            return Err(format!(
+                "{program} inspect failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
+        }
+        Ok(String::from_utf8(output.stdout)?.trim() == "true")
     }
 }
 

@@ -2,7 +2,6 @@
 mod support;
 
 #[test]
-#[ignore = "red: T049 — member request must be intersected with lead scope"]
 fn request_outside_lead_scope_is_narrowed_and_not_mounted() {
     let Some(harness) = support::start_with_skill() else {
         return;
@@ -21,6 +20,18 @@ fn request_outside_lead_scope_is_narrowed_and_not_mounted() {
             .join("control/scope.json"),
     )
     .unwrap();
-    assert!(!scope.contains("/outside"));
-    assert!(scope.contains("not_in_lead_scope") || scope.contains("ceiling"));
+    let scope: serde_json::Value = serde_json::from_str(&scope).unwrap();
+    let mounts = scope["mounts"].as_array().unwrap();
+    assert!(mounts.iter().all(|mount| {
+        mount["container_path"] != "/outside"
+            && !mount["host_path"]
+                .as_str()
+                .unwrap_or_default()
+                .ends_with("/outside")
+    }));
+    assert!(
+        scope["narrowed"].to_string().contains("not_in_lead_scope")
+            || scope["narrowed"].to_string().contains("ceiling")
+    );
+    assert!(support::has_supervisor_event(&harness, "scope.narrowed"));
 }

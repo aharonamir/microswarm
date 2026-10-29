@@ -428,7 +428,7 @@ impl TurnProcessor for ModelClient {
     ) -> Pin<Box<dyn Future<Output = Result<TurnOutput, TurnError>> + 'a>> {
         Box::pin(async move {
             match message.kind {
-                InboundKind::UserMessage => {
+                InboundKind::UserMessage | InboundKind::Task => {
                     let user_text = message
                         .body
                         .get("text")

@@ -82,3 +82,33 @@ fn router_reuses_channel_thread_appends_inbound_and_tails_new_replies() {
     drop(store);
     fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn member_route_only_returns_members_owned_by_the_requested_lead() {
+    let home = temp_dir();
+    let mut store = SupervisorStore::open(home.join("supervisor.db")).unwrap();
+    store.insert_session(&record("lead-a")).unwrap();
+    let mut lead_b = record("lead-b");
+    lead_b.root_id = "lead-b".into();
+    store.insert_session(&lead_b).unwrap();
+    store
+        .insert_session(&SessionRecord {
+            id: "member-a".into(),
+            root_id: "lead-a".into(),
+            parent_id: Some("lead-a".into()),
+            role: "researcher".into(),
+            kind: "member".into(),
+            channel: None,
+            channel_thread: None,
+            status: "ready".into(),
+            scope_hash: None,
+            scope: None,
+            created_at: "2026-10-19T00:00:00Z".into(),
+            last_active_at: "2026-10-19T00:00:00Z".into(),
+        })
+        .unwrap();
+    assert!(store.member_route("lead-a", "member-a").unwrap().is_some());
+    assert!(store.member_route("lead-b", "member-a").unwrap().is_none());
+    drop(store);
+    fs::remove_dir_all(home).unwrap();
+}
