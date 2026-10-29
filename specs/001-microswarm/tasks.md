@@ -108,7 +108,7 @@
 
 ### Tests first
 
-- [x] T046 [P] [US2] Integration: `allow` role ⇒ second container, new session id, lead gets `member_id` — `tests/integration/us2_spawn.rs` (red, ignored)
+- [x] T046 [P] [US2] Integration: `allow` role ⇒ second container, new session id, lead gets `member_id` — `tests/integration/us2_spawn.rs`
 - [x] T047 [P] [US2] Integration: `ask` ⇒ prompt shows role, task, mounts, creds, tools; no container before approval — `tests/integration/us2_ask.rs` (red, ignored)
 - [x] T048 [P] [US2] Integration: `deny` ⇒ `delegation.denied`, no container — `tests/integration/us2_deny.rs` (red, ignored)
 - [x] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs` (red, ignored)

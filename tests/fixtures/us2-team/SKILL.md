@@ -10,7 +10,7 @@ roles:
     scope:
       mounts:
         - { path: /work, mode: ro }
-      credentials: []
+      credentials: [fixture-model-key]
       tools:
         - { server: microswarm-tools, tools: [fs.read, fs.list] }
     limits: { max_turns: 30, memory_mb: 256 }
@@ -21,7 +21,7 @@ roles:
       mounts:
         - { path: /work, mode: ro }
         - { path: /work/target, mode: rw }
-      credentials: []
+      credentials: [fixture-model-key]
       tools:
         - { server: microswarm-tools, tools: [shell.run, fs.read] }
   forbidden:
@@ -29,7 +29,7 @@ roles:
     instructions: roles/forbidden.md
     scope:
       mounts: []
-      credentials: []
+      credentials: [fixture-model-key]
       tools: []
 ---
 Test-only role definitions for MicroSwarm's US2 runtime tests.

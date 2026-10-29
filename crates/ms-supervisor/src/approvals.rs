@@ -43,6 +43,38 @@ pub fn request_tool_approval(
     Ok(approval)
 }
 
+pub fn request_spawn_approval(
+    store: &mut SupervisorStore,
+    root_session_id: &str,
+    payload: Value,
+    timeout: Duration,
+) -> Result<ApprovalRecord, StoreError> {
+    let mut random = [0u8; 16];
+    File::open("/dev/urandom")?.read_exact(&mut random)?;
+    let id = random
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let code = random[..4]
+        .iter()
+        .map(|byte| APPROVAL_ALPHABET[usize::from(byte & 31)] as char)
+        .collect::<String>();
+    let created_at = utc_timestamp();
+    let approval = ApprovalRecord {
+        id,
+        code,
+        root_session_id: root_session_id.into(),
+        requesting_session_id: root_session_id.into(),
+        kind: "spawn".into(),
+        payload,
+        status: "pending".into(),
+        expires_at: utc_after(timeout),
+        created_at,
+    };
+    store.insert_approval(&approval)?;
+    Ok(approval)
+}
+
 pub fn resolve_by_code(
     store: &mut SupervisorStore,
     session: &SessionConnections,

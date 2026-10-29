@@ -8,7 +8,7 @@ use ms_store::SupervisorStore;
 use std::path::PathBuf;
 
 pub fn start_with_skill() -> Option<IntegrationHarness> {
-    let harness = IntegrationHarness::start_or_skip()?;
+    let harness = IntegrationHarness::start_swarm_or_skip()?;
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/us2-team");
     let path = fixture.to_str().expect("fixture path is UTF-8");
     let output = harness

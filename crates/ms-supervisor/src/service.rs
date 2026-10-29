@@ -1,12 +1,13 @@
 use crate::{
-    config::{ConfigSet, ToolTransport, load_config_dir},
+    config::{ConfigSet, SpawnPolicy, ToolTransport, load_config_dir},
     proxy::{CredentialProvider, ProxyRoutes, SessionProxy},
     runtime::{ContainerProfile, ContainerRuntime},
     scope::{build_lead_scope, install_lead_scope},
 };
-use ms_proto::{InboundKind, OutboundKind};
+use ms_proto::{DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling};
 use ms_store::{
-    SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore, open_session_dir,
+    DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
+    open_session_dir,
 };
 use serde_json::{Value, json};
 use std::{
@@ -243,7 +244,7 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
     let session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
     let active_at = utc_now();
     claim_session_busy(&store, &session_id, &active_at)?;
-    let last_id: i64 = session
+    let mut last_id: i64 = session
         .outbound()
         .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
             row.get(0)
@@ -260,6 +261,9 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
             .outbound_after(last_id)
             .map_err(|error| error.to_string())?
         {
+            if let Some(id) = message.id {
+                last_id = id;
+            }
             if message.in_reply_to == Some(inbound_id) && message.kind == OutboundKind::Reply {
                 let active_at = utc_now();
                 store
@@ -304,6 +308,19 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
                 return Ok(
                     json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
                 );
+            }
+            if message.kind == OutboundKind::DelegationRequest
+                && let Some(prompt) = handle_delegation_request(
+                    home,
+                    &config,
+                    &mut store,
+                    &session_dir,
+                    &session_id,
+                    &message.body,
+                )
+                .await?
+            {
+                return Ok(json!({"session_id":session_id,"pending":true,"prompt":prompt}));
             }
         }
         if Instant::now() >= deadline {
@@ -454,6 +471,437 @@ async fn create_lead(
     }
     drop(session);
     Ok(id)
+}
+
+async fn handle_delegation_request(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    lead_session_dir: &Path,
+    lead_id: &str,
+    body: &Value,
+) -> Result<Option<String>, String> {
+    if body.get("op").and_then(Value::as_str) == Some("list_members") {
+        let mut statement = store
+            .connection()
+            .prepare(
+                "SELECT id, role, status, scope_json FROM sessions
+             WHERE parent_id=?1 AND kind='member' ORDER BY created_at",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([lead_id], |row| {
+                let scope: Option<String> = row.get(3)?;
+                Ok(json!({
+                    "member_id":row.get::<_, String>(0)?,
+                    "role":row.get::<_, String>(1)?,
+                    "status":row.get::<_, String>(2)?,
+                    "scope":scope.and_then(|scope| serde_json::from_str::<Value>(&scope).ok()),
+                }))
+            })
+            .map_err(|error| error.to_string())?;
+        let members = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        open_session_dir(lead_session_dir)
+            .map_err(|error| error.to_string())?
+            .append_inbound(
+                &InboundKind::DelegationResult,
+                &json!({"status":"listed","members":members}),
+            )
+            .map_err(|error| error.to_string())?;
+        return Ok(None);
+    }
+    let role_name = body
+        .get("role")
+        .and_then(Value::as_str)
+        .ok_or("spawn request role is missing")?;
+    let task = body
+        .get("task")
+        .and_then(Value::as_str)
+        .ok_or("spawn request task is missing")?;
+    let request = body.get("scope").cloned().unwrap_or_else(|| json!({}));
+    let timeout_s = body.get("timeout_s").and_then(Value::as_u64).unwrap_or(300);
+    let (lead_hash, lead_scope) = store
+        .session_scope(lead_id)
+        .map_err(|error| error.to_string())?
+        .ok_or("lead has no authoritative scope")?;
+    let lead_scope: Scope =
+        serde_json::from_value(lead_scope).map_err(|error| error.to_string())?;
+    if lead_scope.hash != lead_hash || lead_scope.derived_from != DerivedFrom::Config {
+        return Err("lead authoritative scope failed validation".into());
+    }
+    let delegation_id = new_id()?;
+    let member_id = new_id()?;
+    let roles = store
+        .team_roles_named(role_name)
+        .map_err(|error| error.to_string())?;
+    let role = if roles.len() == 1 {
+        Some(roles[0].clone())
+    } else {
+        None
+    };
+    let Some(role) = role else {
+        return reject_delegation(
+            store,
+            lead_session_dir,
+            &delegation_id,
+            lead_id,
+            role_name,
+            task,
+            &request,
+            "spawn_error",
+            timeout_s,
+        );
+    };
+    let skill_policy = parse_spawn_policy(&role.spawn_policy)?;
+    let explicit_policy = config.policy.spawn.roles.get(role_name).copied();
+    let policy = crate::policy::resolve_spawn_policy(
+        Some(skill_policy),
+        explicit_policy,
+        config.policy.spawn.default,
+    );
+    let max_members = lead_scope
+        .delegation
+        .as_ref()
+        .filter(|delegation| delegation.enabled)
+        .map(|delegation| u64::from(delegation.max_members))
+        .unwrap_or(0);
+    let active = store
+        .active_member_count(lead_id)
+        .map_err(|error| error.to_string())?;
+    if active >= max_members {
+        return reject_delegation(
+            store,
+            lead_session_dir,
+            &delegation_id,
+            lead_id,
+            role_name,
+            task,
+            &request,
+            "limit",
+            timeout_s,
+        );
+    }
+    if policy == SpawnPolicy::Deny {
+        return reject_delegation(
+            store,
+            lead_session_dir,
+            &delegation_id,
+            lead_id,
+            role_name,
+            task,
+            &request,
+            "policy",
+            timeout_s,
+        );
+    }
+    let ceiling = ScopeCeiling {
+        paths: config.ceiling.paths.clone(),
+        credentials: config.ceiling.credentials.clone(),
+        tools: config.ceiling.tools.clone(),
+        limits: None,
+    };
+    let scope = match crate::scope::build_member_scope(
+        &lead_scope,
+        &role.scope,
+        &request,
+        &member_id,
+        &delegation_id,
+        &ceiling,
+    ) {
+        Ok(scope) => scope,
+        Err(error) if error.contains("scope_empty") => {
+            return reject_delegation(
+                store,
+                lead_session_dir,
+                &delegation_id,
+                lead_id,
+                role_name,
+                task,
+                &request,
+                "scope_empty",
+                timeout_s,
+            );
+        }
+        Err(error) => return Err(error),
+    };
+    let timestamp = utc_now();
+    let mut delegation = DelegationRecord {
+        id: delegation_id.clone(),
+        lead_id: lead_id.into(),
+        member_id: None,
+        role: role_name.into(),
+        task: task.into(),
+        scope_request: request.clone(),
+        policy: match policy {
+            SpawnPolicy::Allow => "allow",
+            SpawnPolicy::Ask => "ask",
+            SpawnPolicy::Deny => "deny",
+        }
+        .into(),
+        approval_id: None,
+        timeout_s,
+        status: "requested".into(),
+        created_at: timestamp.clone(),
+        updated_at: timestamp.clone(),
+    };
+    if policy == SpawnPolicy::Ask {
+        let approval_payload = json!({
+            "delegation_id":delegation_id,"member_id":member_id,"lead_id":lead_id,
+            "role":role_name,"task":task,"scope_request":request,"scope":scope,
+            "instructions":role.instructions,"timeout_s":timeout_s,
+        });
+        let approval = crate::approvals::request_spawn_approval(
+            store,
+            lead_id,
+            approval_payload,
+            Duration::from_secs(config.microswarm.limits.approval_timeout_s),
+        )
+        .map_err(|error| error.to_string())?;
+        delegation.approval_id = Some(approval.id.clone());
+        delegation.status = "awaiting_approval".into();
+        delegation.updated_at = utc_now();
+        store
+            .insert_delegation(&delegation)
+            .map_err(|error| error.to_string())?;
+        return Ok(Some(format!(
+            "[lead] wants to start a member '{role_name}'\n  task:   {task}\n  mounts: {}\n  tools:  {}\n  credentials: {}\n  /approve {}   /deny {}",
+            scope
+                .mounts
+                .iter()
+                .map(|mount| format!("{} {:?}", mount.container_path.display(), mount.mode))
+                .collect::<Vec<_>>()
+                .join(" · "),
+            scope
+                .tools
+                .iter()
+                .map(|grant| format!("{} {:?}", grant.server, grant.tools))
+                .collect::<Vec<_>>()
+                .join(", "),
+            scope.credentials.join(", "),
+            approval.code,
+            approval.code,
+        )));
+    }
+    store
+        .insert_delegation(&delegation)
+        .map_err(|error| error.to_string())?;
+    store
+        .update_delegation_status(&delegation_id, "spawning", None, None, &utc_now())
+        .map_err(|error| error.to_string())?;
+    match create_member(
+        home,
+        config,
+        store,
+        lead_id,
+        &delegation_id,
+        &member_id,
+        role_name,
+        task,
+        timeout_s,
+        &role.instructions,
+        scope.clone(),
+    )
+    .await
+    {
+        Ok(()) => {
+            store
+                .update_delegation_status(
+                    &delegation_id,
+                    "active",
+                    Some(&member_id),
+                    None,
+                    &utc_now(),
+                )
+                .map_err(|error| error.to_string())?;
+            open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed})).map_err(|error| error.to_string())?;
+        }
+        Err(error) => {
+            store
+                .update_delegation_status(&delegation_id, "failed", None, None, &utc_now())
+                .map_err(|store_error| store_error.to_string())?;
+            open_session_dir(lead_session_dir).map_err(|store_error| store_error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|store_error| store_error.to_string())?;
+        }
+    }
+    Ok(None)
+}
+
+fn parse_spawn_policy(value: &str) -> Result<SpawnPolicy, String> {
+    match value {
+        "allow" => Ok(SpawnPolicy::Allow),
+        "ask" => Ok(SpawnPolicy::Ask),
+        "deny" => Ok(SpawnPolicy::Deny),
+        _ => Err(format!("invalid stored spawn policy {value:?}")),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn reject_delegation(
+    store: &mut SupervisorStore,
+    lead_session_dir: &Path,
+    delegation_id: &str,
+    lead_id: &str,
+    role: &str,
+    task: &str,
+    request: &Value,
+    reason: &str,
+    timeout_s: u64,
+) -> Result<Option<String>, String> {
+    let now = utc_now();
+    store
+        .insert_delegation(&DelegationRecord {
+            id: delegation_id.into(),
+            lead_id: lead_id.into(),
+            member_id: None,
+            role: role.into(),
+            task: task.into(),
+            scope_request: request.clone(),
+            policy: "deny".into(),
+            approval_id: None,
+            timeout_s,
+            status: if reason == "policy" {
+                "denied"
+            } else {
+                "failed"
+            }
+            .into(),
+            created_at: now.clone(),
+            updated_at: now,
+        })
+        .map_err(|error| error.to_string())?;
+    open_session_dir(lead_session_dir)
+        .map_err(|error| error.to_string())?
+        .append_inbound(
+            &InboundKind::DelegationResult,
+            &json!({"delegation_id":delegation_id,"status":"denied","reason":reason}),
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(None)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn create_member(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    lead_id: &str,
+    delegation_id: &str,
+    member_id: &str,
+    role: &str,
+    task: &str,
+    _timeout_s: u64,
+    _instructions: &str,
+    scope: Scope,
+) -> Result<(), String> {
+    let session_dir = home.join("sessions").join(member_id);
+    fs::create_dir_all(&session_dir).map_err(|error| error.to_string())?;
+    let mut session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
+    let record = SessionRecord {
+        id: member_id.into(),
+        root_id: lead_id.into(),
+        parent_id: Some(lead_id.into()),
+        role: role.into(),
+        kind: "member".into(),
+        channel: None,
+        channel_thread: None,
+        status: "pending".into(),
+        scope_hash: None,
+        scope: None,
+        created_at: utc_now(),
+        last_active_at: utc_now(),
+    };
+    crate::scope::install_member_scope(store, record, &session_dir, &scope)?;
+    session
+        .append_inbound(
+            &InboundKind::Task,
+            &json!({"delegation_id":delegation_id,"from_lead":lead_id,"text":task}),
+        )
+        .map_err(|error| error.to_string())?;
+    let runtime = runtime_for(config)?;
+    let network = format!("ms-net-{member_id}");
+    let network_id = runtime.create_network(&network).await?;
+    let host_gateway = runtime.network_gateway(&network_id).await?;
+    let container_user = runtime.container_user(&session_dir)?;
+    let listener = TcpListener::bind("0.0.0.0:0")
+        .await
+        .map_err(|error| error.to_string())?;
+    let proxy_addr = listener.local_addr().map_err(|error| error.to_string())?;
+    let proxy = SessionProxy::from_store(store, member_id).map_err(|error| error.to_string())?;
+    let routes = proxy_routes(config);
+    let credentials = Arc::new(HomeCredentials {
+        home: home.to_path_buf(),
+    });
+    tokio::spawn(async move {
+        if let Err(error) = proxy.serve(listener, routes, credentials).await {
+            eprintln!("member session proxy listener stopped: {error}");
+        }
+    });
+    let mut env = vec![
+        format!("MS_SESSION_ID={member_id}"),
+        format!("MS_ROOT_SESSION_ID={lead_id}"),
+        "MS_KIND=member".into(),
+        format!("MS_ROLE={role}"),
+        "MS_SESSION_DIR=/session".into(),
+        format!(
+            "MS_PROXY_URL=http://host.docker.internal:{}",
+            proxy_addr.port()
+        ),
+        format!(
+            "MS_WORK_DIR={}",
+            scope.mounts.first().map_or("/work".into(), |mount| mount
+                .container_path
+                .to_string_lossy()
+                .into_owned())
+        ),
+    ];
+    if let Some(model) = &config.microswarm.model {
+        env.extend([
+            format!("MS_MODEL_PROVIDER={}", model.provider),
+            format!("MS_MODEL_NAME={}", model.model),
+        ]);
+        if scope.credentials.contains(&model.credential) {
+            env.push(format!("MS_MODEL_CREDENTIAL={}", model.credential));
+        }
+    }
+    env.push(format!(
+        "MS_MCP_SERVERS={}",
+        serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
+    ));
+    let profile = ContainerProfile::for_session(
+        &scope,
+        &config.microswarm.runtime.image,
+        &session_dir,
+        &network_id,
+        &host_gateway,
+        &container_user,
+    )?;
+    let container_id = runtime.create_container(&profile, &env).await?;
+    store
+        .update_session_lifecycle(&SessionLifecycleUpdate {
+            session_id: member_id.into(),
+            status: "starting".into(),
+            container_id: Some(container_id.clone()),
+            restart_count: 0,
+            last_active_at: utc_now(),
+            closed_at: None,
+            close_reason: None,
+        })
+        .map_err(|error| error.to_string())?;
+    runtime.start(&container_id).await?;
+    store
+        .update_session_lifecycle(&SessionLifecycleUpdate {
+            session_id: member_id.into(),
+            status: "ready".into(),
+            container_id: Some(container_id),
+            restart_count: 0,
+            last_active_at: utc_now(),
+            closed_at: None,
+            close_reason: None,
+        })
+        .map_err(|error| error.to_string())?;
+    wait_agent_ready(&mut session).await?;
+    Ok(())
 }
 
 async fn wait_agent_ready(session: &mut SessionConnections) -> Result<(), String> {
@@ -647,6 +1095,112 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
         .map_err(|error| error.to_string())?;
     let session_dir = home.join("sessions").join(&approval.requesting_session_id);
     let session = open_session_dir(session_dir).map_err(|error| error.to_string())?;
+    if approval.kind == "spawn" {
+        let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
+        let now = utc_now();
+        let timed_out = approval.expires_at <= now;
+        let decision = if timed_out {
+            "timed_out"
+        } else if approve {
+            "approved"
+        } else {
+            "denied"
+        };
+        if !store
+            .resolve_approval(&approval.id, decision, &now)
+            .map_err(|error| error.to_string())?
+        {
+            return Err("approval was already resolved".into());
+        }
+        let delegation_id = approval
+            .payload
+            .get("delegation_id")
+            .and_then(Value::as_str)
+            .ok_or("spawn approval has no delegation id")?;
+        let member_id = approval
+            .payload
+            .get("member_id")
+            .and_then(Value::as_str)
+            .ok_or("spawn approval has no member id")?;
+        let role = approval
+            .payload
+            .get("role")
+            .and_then(Value::as_str)
+            .ok_or("spawn approval has no role")?;
+        let task = approval
+            .payload
+            .get("task")
+            .and_then(Value::as_str)
+            .ok_or("spawn approval has no task")?;
+        let scope: Scope = serde_json::from_value(
+            approval
+                .payload
+                .get("scope")
+                .cloned()
+                .ok_or("spawn approval has no scope")?,
+        )
+        .map_err(|error| error.to_string())?;
+        let timeout_s = approval
+            .payload
+            .get("timeout_s")
+            .and_then(Value::as_u64)
+            .unwrap_or(300);
+        let lead_id = approval.requesting_session_id.as_str();
+        if decision != "approved" {
+            store
+                .update_delegation_status(delegation_id, "denied", None, None, &now)
+                .map_err(|error| error.to_string())?;
+            session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":if decision == "timed_out" {"approval_timeout"} else {"user_denied"}})).map_err(|error| error.to_string())?;
+        } else {
+            store
+                .update_delegation_status(delegation_id, "spawning", None, None, &now)
+                .map_err(|error| error.to_string())?;
+            match create_member(
+                home,
+                &config,
+                &mut store,
+                lead_id,
+                delegation_id,
+                member_id,
+                role,
+                task,
+                timeout_s,
+                approval
+                    .payload
+                    .get("instructions")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
+                scope.clone(),
+            )
+            .await
+            {
+                Ok(()) => {
+                    store
+                        .update_delegation_status(
+                            delegation_id,
+                            "active",
+                            Some(member_id),
+                            None,
+                            &utc_now(),
+                        )
+                        .map_err(|error| error.to_string())?;
+                    session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed})).map_err(|error| error.to_string())?;
+                }
+                Err(error) => {
+                    store
+                        .update_delegation_status(delegation_id, "failed", None, None, &utc_now())
+                        .map_err(|error| error.to_string())?;
+                    session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|error| error.to_string())?;
+                }
+            }
+        }
+        if let Some(container_id) = container_id {
+            runtime_for(&config)?
+                .signal(&container_id, "SIGUSR1")
+                .await?;
+        }
+        return Ok(json!({"ok":true,"approval_id":approval.id,"decision":decision}));
+    }
     crate::approvals::resolve_by_code(&mut store, &session, code, approve)
         .map_err(|error| error.to_string())?;
     if let Some(container_id) = container_id {

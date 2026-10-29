@@ -2,7 +2,6 @@
 mod support;
 
 #[test]
-#[ignore = "red: T046 — allow policy must spawn an isolated member session"]
 fn allow_role_spawns_a_second_container_and_returns_member_id() {
     let Some(harness) = support::start_with_skill() else {
         return;

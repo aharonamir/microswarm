@@ -35,7 +35,15 @@ impl IntegrationHarness {
         Self::start_or_skip_with_approval_tool(true)
     }
 
+    pub fn start_swarm_or_skip() -> Option<Self> {
+        Self::start_or_skip_with_options(false, true)
+    }
+
     fn start_or_skip_with_approval_tool(approval_tool: bool) -> Option<Self> {
+        Self::start_or_skip_with_options(approval_tool, false)
+    }
+
+    fn start_or_skip_with_options(approval_tool: bool, swarm: bool) -> Option<Self> {
         if let Err(error) = runtime_prerequisite_error() {
             runtime_unavailable(
                 &error,
@@ -44,7 +52,7 @@ impl IntegrationHarness {
             return None;
         }
         Some(
-            Self::start_with_approval_tool(approval_tool)
+            Self::start_with_options(approval_tool, swarm)
                 .expect("integration harness should start when a runtime is reachable"),
         )
     }
@@ -58,18 +66,29 @@ impl IntegrationHarness {
     }
 
     fn start_with_approval_tool(approval_tool: bool) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_with_options(approval_tool, false)
+    }
+
+    fn start_with_options(
+        approval_tool: bool,
+        swarm: bool,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
         fs::create_dir_all(home.join("work"))?;
         create_synthetic_model_credential(&home)?;
-        let model = FakeModelServer::start_with_approval_tool(approval_tool)?;
+        let model = if swarm {
+            FakeModelServer::start_for_swarm()?
+        } else {
+            FakeModelServer::start_with_approval_tool(approval_tool)?
+        };
         let runtime = detect_runtime()?;
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
             .unwrap_or_else(|_| "microswarm-agent:dev".to_owned());
         verify_agent_image(runtime, &agent_image)
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::NotFound, error))?;
-        write_test_config(&home, &model, runtime, &agent_image, approval_tool)?;
+        write_test_config(&home, &model, runtime, &agent_image, approval_tool, swarm)?;
         let mut supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
             .env("MS_HOME", &home)
             .env("MS_MODEL_BASE_URL", model.base_url())
@@ -386,6 +405,7 @@ fn write_test_config(
     runtime: Runtime,
     image: &str,
     approval_tool: bool,
+    swarm: bool,
 ) -> std::io::Result<()> {
     let socket = match runtime {
         Runtime::Docker => std::env::var("DOCKER_HOST")
@@ -408,7 +428,12 @@ fn write_test_config(
     let scope_tools = if approval_tool {
         "[{ server = \"first-party\", tools = [\"fs.write\"], policy = \"ask\" }]"
     } else {
-        "[]"
+        "[{ server = \"microswarm-tools\", tools = \"*\", policy = \"allow\" }]"
+    };
+    let delegation = if swarm {
+        "delegation = { enabled = true, max_members = 4 }"
+    } else {
+        ""
     };
     let config = format!(
         r#"[runtime]
@@ -425,6 +450,7 @@ credential = "fixture-model-key"
 mounts = [{{ host = {:?}, path = "/work", mode = "rw" }}]
 credentials = ["fixture-model-key"]
 tools = {scope_tools}
+{delegation}
 
 [[channels]]
 kind = "cli"

@@ -174,6 +174,64 @@ impl SupervisorStore {
         Ok(())
     }
 
+    pub fn update_delegation_status(
+        &self,
+        id: &str,
+        status: &str,
+        member_id: Option<&str>,
+        approval_id: Option<&str>,
+        updated_at: &str,
+    ) -> Result<bool, StoreError> {
+        Ok(self.connection.execute(
+            "UPDATE delegations SET status=?2, member_id=COALESCE(?3, member_id),
+             approval_id=COALESCE(?4, approval_id), updated_at=?5 WHERE id=?1",
+            params![id, status, member_id, approval_id, updated_at],
+        )? == 1)
+    }
+
+    pub fn team_roles_named(&self, role: &str) -> Result<Vec<TeamRoleRecord>, StoreError> {
+        let mut statement = self.connection.prepare(
+            "SELECT skill, skill_version, skill_hash, role, spawn_policy, scope, instructions
+             FROM team_roles WHERE role=?1 ORDER BY skill",
+        )?;
+        let rows = statement.query_map([role], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })?;
+        rows.map(|row| {
+            let (skill, skill_version, skill_hash, role, spawn_policy, scope, instructions) = row?;
+            Ok(TeamRoleRecord {
+                skill,
+                skill_version,
+                skill_hash,
+                role,
+                spawn_policy,
+                scope: serde_json::from_str(&scope)?,
+                instructions,
+            })
+        })
+        .collect()
+    }
+
+    pub fn active_member_count(&self, lead_id: &str) -> Result<u64, StoreError> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*) FROM sessions WHERE parent_id=?1 AND kind='member'
+                 AND status NOT IN ('closed','failed')",
+                [lead_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count.max(0) as u64)
+            .map_err(StoreError::from)
+    }
+
     pub fn insert_approval(&mut self, approval: &ApprovalRecord) -> Result<(), StoreError> {
         self.connection.execute(
             "INSERT INTO approvals(id, code, root_session_id, requesting_session_id, kind, payload, status, expires_at, created_at)
