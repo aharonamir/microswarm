@@ -62,6 +62,7 @@ impl IntegrationHarness {
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
         fs::create_dir_all(home.join("work"))?;
+        create_synthetic_model_credential(&home)?;
         let model = FakeModelServer::start_with_approval_tool(approval_tool)?;
         let runtime = detect_runtime()?;
         let agent_image = std::env::var("MS_TEST_AGENT_IMAGE")
@@ -158,6 +159,13 @@ impl IntegrationHarness {
             }
         }
         Ok(child.wait_with_output()?)
+    }
+
+    pub fn run_cli(&self, args: &[&str]) -> Result<Output, Box<dyn std::error::Error>> {
+        Ok(Command::new(cli_binary()?)
+            .env("MS_HOME", &self.home)
+            .args(args)
+            .output()?)
     }
 
     pub fn session_dirs(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
@@ -299,6 +307,22 @@ fn unique_home() -> std::io::Result<PathBuf> {
         "microswarm-test-{}-{timestamp}",
         std::process::id()
     )))
+}
+
+fn create_synthetic_model_credential(home: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = home.join("credentials");
+    fs::create_dir_all(&directory)?;
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let value = format!("synthetic-local-test-{}-{nonce}", std::process::id());
+    let path = directory.join("fixture-model-key");
+    fs::write(&path, value)?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
 fn detect_runtime() -> Result<Runtime, std::io::Error> {
