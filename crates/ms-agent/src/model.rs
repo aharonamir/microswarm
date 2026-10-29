@@ -57,6 +57,7 @@ pub struct ModelClient {
     provider: ModelProvider,
     model: String,
     credential_name: String,
+    system_instruction: Option<String>,
     mcp: Option<McpClient>,
 }
 
@@ -153,6 +154,7 @@ impl ModelClient {
             provider,
             model,
             credential_name,
+            system_instruction: None,
             mcp: None,
         })
     }
@@ -176,6 +178,11 @@ impl ModelClient {
             ));
         }
         let mut client = Self::new(proxy_url, provider, model, credential_name)?;
+        client.system_instruction = std::env::var("MS_ROLE_INSTRUCTIONS")
+            .ok()
+            .map(std::fs::read_to_string)
+            .transpose()
+            .map_err(|error| ModelError::new(format!("cannot read role instructions: {error}")))?;
         client.mcp =
             Some(McpClient::from_env(&context.scope).map_err(|error| {
                 ModelError::new(format!("cannot configure MCP clients: {error}"))
@@ -256,14 +263,24 @@ impl ModelClient {
             .chain((!user_text.is_empty()).then(|| json!({ "role": "user", "content": user_text })))
             .collect();
         match self.provider {
-            ModelProvider::OpenAiCompatible => json!({
-                "model": self.model,
-                "messages": messages,
-                "tools": tools,
-            }),
+            ModelProvider::OpenAiCompatible => {
+                let messages = if let Some(instruction) = &self.system_instruction {
+                    std::iter::once(json!({"role":"system","content":instruction}))
+                        .chain(messages)
+                        .collect::<Vec<_>>()
+                } else {
+                    messages
+                };
+                json!({
+                    "model": self.model,
+                    "messages": messages,
+                    "tools": tools,
+                })
+            }
             ModelProvider::Anthropic => json!({
                 "model": self.model,
                 "max_tokens": 4096,
+                "system": self.system_instruction,
                 "messages": messages,
                 "tools": tools,
             }),

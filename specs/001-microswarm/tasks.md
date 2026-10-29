@@ -135,6 +135,13 @@
 
 **Checkpoint:** quickstart §2 passes; T046–T055 green.
 
+### US2 review follow-up
+
+- [x] T101 [US2] Regression: role instructions are mounted read-only and prepended to member model requests — `tests/integration/us2_review_regressions.rs`
+- [x] T102 [US2] Regression: initial member task replies and approvals are routed to the lead — same file
+- [x] T103 [US2] Regression: `adhoc` role uses default spawn policy without an installed skill — same file
+- [x] T104 [US2] Regression: member is stopped and marked failed when `send_to_member` deadline expires — same file
+
 ---
 
 ## Phase 5 — US3: Failures contained and visible (P2)

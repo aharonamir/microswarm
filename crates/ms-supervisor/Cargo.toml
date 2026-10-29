@@ -125,6 +125,10 @@ name = "us2-quickstart"
 path = "../../tests/integration/us2_quickstart.rs"
 
 [[test]]
+name = "us2-review-regressions"
+path = "../../tests/integration/us2_review_regressions.rs"
+
+[[test]]
 name = "us2-narrowing"
 path = "../../tests/integration/us2_narrowing.rs"
 

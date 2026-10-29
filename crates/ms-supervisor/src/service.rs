@@ -681,7 +681,7 @@ async fn handle_delegation_request(
     } else {
         None
     };
-    let Some(role) = role else {
+    if role.is_none() && role_name != "adhoc" {
         return reject_delegation(
             store,
             lead_session_dir,
@@ -693,11 +693,14 @@ async fn handle_delegation_request(
             "spawn_error",
             timeout_s,
         );
-    };
-    let skill_policy = parse_spawn_policy(&role.spawn_policy)?;
+    }
+    let skill_policy = role
+        .as_ref()
+        .map(|role| parse_spawn_policy(&role.spawn_policy))
+        .transpose()?;
     let explicit_policy = config.policy.spawn.roles.get(role_name).copied();
     let policy = crate::policy::resolve_spawn_policy(
-        Some(skill_policy),
+        skill_policy,
         explicit_policy,
         config.policy.spawn.default,
     );
@@ -742,9 +745,13 @@ async fn handle_delegation_request(
         tools: config.ceiling.tools.clone(),
         limits: None,
     };
+    let role_scope = role
+        .as_ref()
+        .map(|role| role.scope.clone())
+        .unwrap_or_else(|| request.clone());
     let scope = match crate::scope::build_member_scope(
         &lead_scope,
-        &role.scope,
+        &role_scope,
         &request,
         &member_id,
         &delegation_id,
@@ -790,7 +797,9 @@ async fn handle_delegation_request(
         let approval_payload = json!({
             "delegation_id":delegation_id,"member_id":member_id,"lead_id":lead_id,
             "role":role_name,"task":task,"scope_request":request,"scope":scope,
-            "instructions":role.instructions,"timeout_s":timeout_s,
+            "skill":role.as_ref().map(|role| &role.skill),
+            "instructions":role.as_ref().map(|role| role.instructions.as_str()).unwrap_or(""),
+            "timeout_s":timeout_s,
         });
         let approval = crate::approvals::request_spawn_approval(
             store,
@@ -830,6 +839,7 @@ async fn handle_delegation_request(
     store
         .update_delegation_status(&delegation_id, "spawning", None, None, &utc_now())
         .map_err(|error| error.to_string())?;
+    let mut startup = MemberStartup::default();
     match create_member(
         home,
         config,
@@ -838,23 +848,29 @@ async fn handle_delegation_request(
         &delegation_id,
         &member_id,
         role_name,
+        role.as_ref().map(|role| role.skill.as_str()),
         task,
         timeout_s,
-        &role.instructions,
+        role.as_ref()
+            .map(|role| role.instructions.as_str())
+            .unwrap_or(""),
         scope.clone(),
     )
     .await
     {
-        Ok(()) => {
-            store
-                .update_delegation_status(
-                    &delegation_id,
-                    "active",
-                    Some(&member_id),
-                    None,
-                    &utc_now(),
-                )
-                .map_err(|error| error.to_string())?;
+        Ok(result) => {
+            if result.prompt.is_none() {
+                store
+                    .update_delegation_status(
+                        &delegation_id,
+                        "active",
+                        Some(&member_id),
+                        None,
+                        &utc_now(),
+                    )
+                    .map_err(|error| error.to_string())?;
+            }
+            startup = result;
             emit_supervisor_event(
                 store,
                 lead_id,
@@ -873,7 +889,7 @@ async fn handle_delegation_request(
                     json!({"delegation_id":delegation_id,"member_id":member_id,"narrowed":scope.narrowed}),
                 )?;
             }
-            open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed})).map_err(|error| error.to_string())?;
+            open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
         }
         Err(error) => {
             store
@@ -882,7 +898,7 @@ async fn handle_delegation_request(
             open_session_dir(lead_session_dir).map_err(|store_error| store_error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|store_error| store_error.to_string())?;
         }
     }
-    Ok(None)
+    Ok(startup.prompt)
 }
 
 fn parse_spawn_policy(value: &str) -> Result<SpawnPolicy, String> {
@@ -980,6 +996,12 @@ fn emit_supervisor_event(
     Ok(())
 }
 
+#[derive(Default)]
+struct MemberStartup {
+    prompt: Option<String>,
+    reply: Option<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn create_member(
     home: &Path,
@@ -989,11 +1011,12 @@ async fn create_member(
     delegation_id: &str,
     member_id: &str,
     role: &str,
+    skill: Option<&str>,
     task: &str,
-    _timeout_s: u64,
-    _instructions: &str,
+    timeout_s: u64,
+    instructions: &str,
     scope: Scope,
-) -> Result<(), String> {
+) -> Result<MemberStartup, String> {
     let session_dir = home.join("sessions").join(member_id);
     fs::create_dir_all(&session_dir).map_err(|error| error.to_string())?;
     let mut session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
@@ -1012,7 +1035,7 @@ async fn create_member(
         last_active_at: utc_now(),
     };
     crate::scope::install_member_scope(store, record, &session_dir, &scope)?;
-    session
+    let task_id = session
         .append_inbound(
             &InboundKind::Task,
             &json!({"delegation_id":delegation_id,"from_lead":lead_id,"text":task}),
@@ -1068,7 +1091,7 @@ async fn create_member(
         "MS_MCP_SERVERS={}",
         serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
     ));
-    let profile = ContainerProfile::for_session(
+    let mut profile = ContainerProfile::for_session(
         &scope,
         &config.microswarm.runtime.image,
         &session_dir,
@@ -1076,6 +1099,19 @@ async fn create_member(
         &host_gateway,
         &container_user,
     )?;
+    if let Some(skill) = skill {
+        let instruction_path = fs::canonicalize(instructions)
+            .map_err(|error| format!("cannot resolve role instructions: {error}"))?;
+        if !instruction_path.is_file() {
+            return Err("role instructions are not a file".into());
+        }
+        profile.mounts.push(crate::runtime::MountSpec {
+            source: instruction_path.display().to_string(),
+            target: format!("/skills/{skill}/role.md"),
+            read_only: true,
+        });
+        env.push(format!("MS_ROLE_INSTRUCTIONS=/skills/{skill}/role.md"));
+    }
     let container_id = runtime.create_container(&profile, &env).await?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {
@@ -1101,7 +1137,72 @@ async fn create_member(
         })
         .map_err(|error| error.to_string())?;
     wait_agent_ready(&mut session).await?;
-    Ok(())
+    let deadline = Instant::now() + Duration::from_secs(timeout_s);
+    let mut after_id = 0;
+    loop {
+        for reply in session
+            .outbound_after(after_id)
+            .map_err(|error| error.to_string())?
+        {
+            if let Some(id) = reply.id {
+                after_id = id;
+            }
+            if reply.kind == OutboundKind::ApprovalRequest {
+                let binding: ms_proto::ApprovalBinding = serde_json::from_value(
+                    reply
+                        .body
+                        .get("binding")
+                        .cloned()
+                        .ok_or("member approval has no binding")?,
+                )
+                .map_err(|error| error.to_string())?;
+                let arguments = reply.body.get("args").cloned().unwrap_or(Value::Null);
+                let approval = crate::approvals::request_tool_approval(
+                    store,
+                    member_id,
+                    lead_id,
+                    &binding,
+                    &arguments,
+                    Duration::from_secs(config.microswarm.limits.approval_timeout_s),
+                )
+                .map_err(|error| error.to_string())?;
+                store.connection().execute(
+                    "UPDATE delegations SET status='waiting_reply',waiting_since=?2,updated_at=?2 WHERE id=?1",
+                    [delegation_id,utc_now_precise().as_str()],
+                ).map_err(|error| error.to_string())?;
+                let rendered = crate::approvals::render_prompt(
+                    config.microswarm.home.lang,
+                    &approval.code,
+                    &binding.server,
+                    &binding.tool,
+                    &arguments,
+                );
+                return Ok(MemberStartup {
+                    prompt: Some(format!("[{role} {member_id}] {rendered}")),
+                    reply: None,
+                });
+            }
+            if reply.kind == OutboundKind::Reply && reply.in_reply_to == Some(task_id) {
+                let response = reply.body.get("text").and_then(Value::as_str).unwrap_or("");
+                emit_supervisor_event(
+                    store,
+                    member_id,
+                    lead_id,
+                    role,
+                    SupervisorEventType::DelegationReply,
+                    json!({"member_id":member_id,"delegation_id":delegation_id}),
+                )?;
+                return Ok(MemberStartup {
+                    prompt: None,
+                    reply: Some(response.to_owned()),
+                });
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err("member did not finish its initial task before timeout".into());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 async fn handle_send_to_member(
@@ -1173,10 +1274,41 @@ async fn handle_send_to_member(
     let deadline = Instant::now() + Duration::from_secs(timeout_s);
     let mut after_id = cursor;
     loop {
+        if Instant::now() >= deadline {
+            graceful_stop_session(home, config, member_id, &container_id).await?;
+            let now = utc_now();
+            store.connection().execute(
+                "UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status IN ('busy','ready')",
+                [member_id, now.as_str()],
+            ).map_err(|error| error.to_string())?;
+            store.connection().execute(
+                "UPDATE delegations SET status='failed',waiting_since=NULL,updated_at=?2 WHERE id=?1",
+                [&delegation_id, now.as_str()],
+            ).map_err(|error| error.to_string())?;
+            open_session_dir(lead_session_dir)
+                .map_err(|error| error.to_string())?
+                .append_inbound(
+                    &InboundKind::MemberFailed,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"timeout"}),
+                )
+                .map_err(|error| error.to_string())?;
+            emit_supervisor_event(
+                store,
+                member_id,
+                lead_id,
+                &member.kind,
+                SupervisorEventType::DelegationTimeout,
+                json!({"member_id":member_id,"delegation_id":delegation_id}),
+            )?;
+            return Ok(None);
+        }
         for reply in member_session
             .outbound_after(after_id)
             .map_err(|error| error.to_string())?
         {
+            if Instant::now() >= deadline {
+                break;
+            }
             if let Some(id) = reply.id {
                 after_id = id;
             }
@@ -1257,28 +1389,6 @@ async fn handle_send_to_member(
                     &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"crashed"}),
                 )
                 .map_err(|error| error.to_string())?;
-            return Ok(None);
-        }
-        if Instant::now() >= deadline {
-            open_session_dir(lead_session_dir)
-                .map_err(|error| error.to_string())?
-                .append_inbound(
-                    &InboundKind::MemberFailed,
-                    &json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"timeout"}),
-                )
-                .map_err(|error| error.to_string())?;
-            store.connection().execute(
-                "UPDATE sessions SET status='ready',last_active_at=?2 WHERE id=?1 AND status='busy'",
-                [member_id,utc_now().as_str()],
-            ).map_err(|error|error.to_string())?;
-            emit_supervisor_event(
-                store,
-                member_id,
-                lead_id,
-                &member.kind,
-                SupervisorEventType::DelegationTimeout,
-                json!({"member_id":member_id,"delegation_id":delegation_id}),
-            )?;
             return Ok(None);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1608,6 +1718,7 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
             .and_then(Value::as_u64)
             .unwrap_or(300);
         let lead_id = approval.requesting_session_id.as_str();
+        let mut prompt_for_lead = None;
         if decision != "approved" {
             store
                 .update_delegation_status(delegation_id, "denied", None, None, &now)
@@ -1625,6 +1736,7 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
                 delegation_id,
                 member_id,
                 role,
+                approval.payload.get("skill").and_then(Value::as_str),
                 task,
                 timeout_s,
                 approval
@@ -1636,17 +1748,20 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
             )
             .await
             {
-                Ok(()) => {
-                    store
-                        .update_delegation_status(
-                            delegation_id,
-                            "active",
-                            Some(member_id),
-                            None,
-                            &utc_now(),
-                        )
-                        .map_err(|error| error.to_string())?;
-                    session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed})).map_err(|error| error.to_string())?;
+                Ok(startup) => {
+                    if startup.prompt.is_none() {
+                        store
+                            .update_delegation_status(
+                                delegation_id,
+                                "active",
+                                Some(member_id),
+                                None,
+                                &utc_now(),
+                            )
+                            .map_err(|error| error.to_string())?;
+                    }
+                    session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
+                    prompt_for_lead = startup.prompt;
                 }
                 Err(error) => {
                     store
@@ -1661,7 +1776,9 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
                 .signal(&container_id, "SIGUSR1")
                 .await?;
         }
-        return Ok(json!({"ok":true,"approval_id":approval.id,"decision":decision}));
+        return Ok(
+            json!({"ok":true,"approval_id":approval.id,"decision":decision,"prompt":prompt_for_lead}),
+        );
     }
     crate::approvals::resolve_by_code(&mut store, &session, code, approve)
         .map_err(|error| error.to_string())?;

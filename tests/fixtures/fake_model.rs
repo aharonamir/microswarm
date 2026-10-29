@@ -88,7 +88,13 @@ fn respond(stream: TcpStream, approval_tool: bool, delegation_tools: bool) -> st
     let mut request_body = vec![0; content_length];
     reader.read_exact(&mut request_body)?;
     let request_body = String::from_utf8_lossy(&request_body);
-    let body = if delegation_tools {
+    let body = if delegation_tools
+        && request_body.contains("\"hang\"")
+        && !request_body.contains("microswarm-core/")
+    {
+        thread::sleep(Duration::from_secs(12));
+        RESPONSE.to_owned()
+    } else if delegation_tools {
         delegation_response(&request_body)
     } else if approval_tool
         && request_body.contains("run approval tool")
@@ -115,6 +121,13 @@ fn delegation_response(body: &str) -> String {
         Err(_) => return RESPONSE.into(),
     };
     let messages = request["messages"].as_array().cloned().unwrap_or_default();
+    let system_text = messages
+        .iter()
+        .filter(|message| message["role"] == "system")
+        .filter_map(|message| message["content"].as_str())
+        .chain(request["system"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     let user_text = messages
         .iter()
         .filter(|message| message["role"] == "user")
@@ -131,6 +144,20 @@ fn delegation_response(body: &str) -> String {
                 .and_then(serde_json::Value::as_str)
         })
         .collect::<Vec<_>>();
+    if system_text.contains("Research the requested files and report concise findings.")
+        && user_text.contains("read file")
+        && names.contains(&"microswarm-tools/fs.read")
+    {
+        return external_tool_call(
+            "microswarm-tools/fs.read",
+            serde_json::json!({"path":"/work/approval-target"}),
+        );
+    }
+    if system_text.contains("Research the requested files and report concise findings.")
+        && !user_text.contains("read file")
+    {
+        return response_with_text("role instructions reached model");
+    }
     if !names
         .iter()
         .any(|name| name.starts_with("microswarm-core/"))
@@ -175,8 +202,21 @@ fn delegation_response(body: &str) -> String {
     if user_text.contains("forbidden") && count("microswarm-core/spawn_member") == 0 {
         return spawn_call("forbidden", "try a forbidden role", serde_json::json!({}));
     }
+    if user_text.contains("adhoc") && count("microswarm-core/spawn_member") == 0 {
+        return spawn_call(
+            "adhoc",
+            "handle an ad hoc task",
+            serde_json::json!({
+                "mounts":[{"path":"/work","mode":"ro"}],
+                "credentials":["fixture-model-key"],
+                "tools":[]
+            }),
+        );
+    }
     if user_text.contains("tester") && count("microswarm-core/spawn_member") == 0 {
-        let task = if user_text.contains("run tests") {
+        let task = if user_text.contains("read file") {
+            "read file"
+        } else if user_text.contains("run tests") {
             "run tests"
         } else {
             "run cargo test for src/auth"
@@ -204,7 +244,11 @@ fn delegation_response(body: &str) -> String {
         {
             return spawn_call(
                 "researcher",
-                "review the auth module",
+                if user_text.contains("read file") {
+                    "read file"
+                } else {
+                    "review the auth module"
+                },
                 serde_json::json!({"mounts":[{"path":path,"mode":"ro"}]}),
             );
         }
@@ -213,7 +257,9 @@ fn delegation_response(body: &str) -> String {
         && count("microswarm-core/send_to_member") == 0
         && let Some(member_id) = &member_id
     {
-        let text = if user_text.contains("read file") {
+        let text = if user_text.contains("hang") {
+            "hang"
+        } else if user_text.contains("read file") {
             "read file"
         } else {
             "run the auth test suite"
