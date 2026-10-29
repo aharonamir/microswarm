@@ -124,7 +124,7 @@
 - [x] T056 [US2] Delegation tools in core, lead-only, validated against `delegation-tools.json`; write outbound rows; block turn on result — `crates/ms-agent/src/delegate.rs`
 - [x] T057 [US2] Team-skill install/parse/register; hash recorded; role instructions path — `crates/ms-supervisor/src/skills.rs`
 - [x] T058 [US2] Spawn policy resolution: stricter of skill and `policy.toml`; `adhoc` default — `crates/ms-supervisor/src/policy.rs`
-- [ ] T059 [US2] Member scope: lead-path → host-path translation; `request ∩ template ∩ lead ∩ ceiling`; reject `scope_empty`; persist authoritative scope; write `control/scope.json` — `crates/ms-supervisor/src/scope.rs`
+- [x] T059 [US2] Member scope: lead-path → host-path translation; `request ∩ template ∩ lead ∩ ceiling`; reject `scope_empty`; persist authoritative scope; write `control/scope.json` — `crates/ms-supervisor/src/scope.rs`
 - [ ] T060 [US2] Delegation orchestration: requested → awaiting_approval → spawning → active; member limit; `delegation_result` to lead; `task` to member — `crates/ms-supervisor/src/delegation.rs`
 - [ ] T061 [US2] Routing: `send_to_member` ⇒ member inbound `task`; member `reply` ⇒ lead inbound `member_reply`; reject rows from wrong session kinds — `crates/ms-supervisor/src/router.rs`
 - [ ] T062 [US2] Dismissal: `control:shutdown`, grace window, force stop, `close_reason=dismissed`; not policy-gated — `crates/ms-supervisor/src/delegation.rs`
