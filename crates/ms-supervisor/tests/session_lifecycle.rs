@@ -157,3 +157,35 @@ fn lifecycle_status_and_restart_count_are_persisted_to_supervisor_db() {
     drop(store);
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+#[ignore = "red: T072 — exit classification must cross-check the last agent.exit event"]
+fn exit_classification_uses_the_stricter_runtime_or_agent_reason() {
+    use ms_proto::ExitReason;
+    use ms_supervisor::sessions::classify_exit_with_agent_reason;
+
+    assert_eq!(
+        classify_exit_with_agent_reason(75, false, Some("safety")),
+        ExitReason::Safety
+    );
+    assert_eq!(
+        classify_exit_with_agent_reason(78, false, Some("transient")),
+        ExitReason::Config
+    );
+    assert_eq!(
+        classify_exit_with_agent_reason(75, false, Some("ok")),
+        ExitReason::Transient
+    );
+    assert_eq!(
+        classify_exit_with_agent_reason(0, false, Some("safety")),
+        ExitReason::Safety
+    );
+    assert_eq!(
+        classify_exit_with_agent_reason(42, false, Some("ok")),
+        ExitReason::Safety
+    );
+    assert_eq!(
+        classify_exit_with_agent_reason(75, false, Some("future_reason")),
+        ExitReason::Safety
+    );
+}

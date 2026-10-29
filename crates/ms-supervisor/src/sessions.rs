@@ -182,3 +182,11 @@ pub const fn classify_exit(code: i32, oom_killed: bool) -> ExitReason {
         _ => ExitReason::Safety,
     }
 }
+
+pub fn classify_exit_with_agent_reason(
+    _code: i32,
+    _oom_killed: bool,
+    _agent_reason: Option<&str>,
+) -> ExitReason {
+    todo!("T072: cross-check the agent exit event with the runtime result")
+}
