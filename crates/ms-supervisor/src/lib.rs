@@ -7,3 +7,4 @@ pub mod runtime;
 pub mod scope;
 pub mod service;
 pub mod sessions;
+pub mod skills;

@@ -108,16 +108,16 @@
 
 ### Tests first
 
-- [ ] T046 [P] [US2] Integration: `allow` role ⇒ second container, new session id, lead gets `member_id` — `tests/integration/us2_spawn.rs`
-- [ ] T047 [P] [US2] Integration: `ask` ⇒ prompt shows role, task, mounts, creds, tools; no container before approval — `tests/integration/us2_ask.rs`
-- [ ] T048 [P] [US2] Integration: `deny` ⇒ `delegation.denied`, no container — `tests/integration/us2_deny.rs`
-- [ ] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs`
-- [ ] T050 [P] [US2] Integration: dismiss ⇒ in-flight reply delivered within grace, container gone, directory retained, only lead remains — `tests/integration/us2_dismiss.rs`
-- [ ] T051 [P] [US2] Integration: re-spawn same role ⇒ new id, empty history, fresh scope — `tests/integration/us2_clean_slate.rs`
-- [ ] T052 [P] [US2] Adversarial: member forges a `delegation_request` row ⇒ rejected by supervisor; members' tool list has no delegation tools — `tests/adversarial/member_cannot_delegate.rs`
-- [ ] T053 [P] [US2] Adversarial: member→member and member→lead network reach fails; member cannot use a credential name the lead holds but did not grant — `tests/adversarial/member_isolation.rs`
-- [ ] T054 [P] [US2] Adversarial: symlink in lead mount pointing outside it does not widen member scope — `tests/adversarial/symlink_scope.rs`
-- [ ] T055 [P] [US2] Contract: team-skill parser accepts the example, rejects invalid front-matter atomically — `tests/contract/team_skill.rs`
+- [x] T046 [P] [US2] Integration: `allow` role ⇒ second container, new session id, lead gets `member_id` — `tests/integration/us2_spawn.rs` (red, ignored)
+- [x] T047 [P] [US2] Integration: `ask` ⇒ prompt shows role, task, mounts, creds, tools; no container before approval — `tests/integration/us2_ask.rs` (red, ignored)
+- [x] T048 [P] [US2] Integration: `deny` ⇒ `delegation.denied`, no container — `tests/integration/us2_deny.rs` (red, ignored)
+- [x] T049 [P] [US2] Integration: request outside lead scope ⇒ narrowed, `scope.narrowed` event, member cannot read the path — `tests/integration/us2_narrowing.rs` (red, ignored)
+- [x] T050 [P] [US2] Integration: dismiss ⇒ in-flight reply delivered within grace, container gone, directory retained, only lead remains — `tests/integration/us2_dismiss.rs` (red, ignored)
+- [x] T051 [P] [US2] Integration: re-spawn same role ⇒ new id, empty history, fresh scope — `tests/integration/us2_clean_slate.rs` (red, ignored)
+- [x] T052 [P] [US2] Adversarial: member forges a `delegation_request` row ⇒ rejected by supervisor; members' tool list has no delegation tools — `tests/adversarial/member_cannot_delegate.rs` (red, ignored)
+- [x] T053 [P] [US2] Adversarial: member→member and member→lead network reach fails; member cannot use a credential name the lead holds but did not grant — `tests/adversarial/member_isolation.rs` (red, ignored)
+- [x] T054 [P] [US2] Adversarial: symlink in lead mount pointing outside it does not widen member scope — `tests/adversarial/symlink_scope.rs` (red, ignored)
+- [x] T055 [P] [US2] Contract: team-skill parser accepts the example, rejects invalid front-matter atomically — `tests/contract/team_skill.rs`
 
 ### Implementation
 

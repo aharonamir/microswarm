@@ -17,6 +17,7 @@ hyper-rustls = { version = "0.27.10", default-features = false, features = ["htt
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "server", "service", "http1", "tokio"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde-saphyr = { version = "=2.0.0", default-features = false, features = ["deserialize"] }
 serde_json = "1.0.145"
 tokio = { version = "1.53.2", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "1.1.6"
@@ -79,3 +80,43 @@ path = "tests/proxy.rs"
 [[test]]
 name = "approvals"
 path = "tests/approvals.rs"
+
+[[test]]
+name = "team-skill-contract"
+path = "../../tests/contract/team_skill.rs"
+
+[[test]]
+name = "us2-spawn"
+path = "../../tests/integration/us2_spawn.rs"
+
+[[test]]
+name = "us2-ask"
+path = "../../tests/integration/us2_ask.rs"
+
+[[test]]
+name = "us2-deny"
+path = "../../tests/integration/us2_deny.rs"
+
+[[test]]
+name = "us2-narrowing"
+path = "../../tests/integration/us2_narrowing.rs"
+
+[[test]]
+name = "us2-dismiss"
+path = "../../tests/integration/us2_dismiss.rs"
+
+[[test]]
+name = "us2-clean-slate"
+path = "../../tests/integration/us2_clean_slate.rs"
+
+[[test]]
+name = "member-cannot-delegate"
+path = "../../tests/adversarial/member_cannot_delegate.rs"
+
+[[test]]
+name = "member-isolation"
+path = "../../tests/adversarial/member_isolation.rs"
+
+[[test]]
+name = "symlink-scope"
+path = "../../tests/adversarial/symlink_scope.rs"
