@@ -3,12 +3,60 @@ use futures_util::{StreamExt, stream::Stream};
 use ms_proto::{MountMode, Scope};
 use std::{
     collections::{BTreeMap, HashMap},
+    fs,
     os::unix::fs::MetadataExt,
-    path::Path,
-    time::Duration,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 pub mod lifecycle;
+pub mod recovery;
+pub mod router;
+
+pub trait CredentialProvider: Send + Sync + 'static {
+    fn resolve(&self, name: &str) -> Option<String>;
+}
+
+pub struct FileCredentials {
+    pub home: PathBuf,
+}
+
+impl CredentialProvider for FileCredentials {
+    fn resolve(&self, name: &str) -> Option<String> {
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        {
+            return None;
+        }
+        fs::read_to_string(self.home.join("credentials").join(name)).ok()
+    }
+}
+
+pub fn utc_now() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let days = (elapsed.as_secs() / 86_400) as i64;
+    let sec = elapsed.as_secs() % 86_400;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        sec / 3600,
+        (sec % 3600) / 60,
+        sec % 60
+    )
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MountSpec {
@@ -325,6 +373,38 @@ impl ContainerRuntime {
         Ok(exits)
     }
 
+    pub async fn managed_containers(&self) -> Result<Vec<ManagedContainer>, String> {
+        let filters = HashMap::from([("label", vec!["ms.managed=true"])]);
+        let options = bollard::query_parameters::ListContainersOptionsBuilder::default()
+            .all(true)
+            .filters(&filters)
+            .build();
+        self.docker
+            .list_containers(Some(options))
+            .await
+            .map_err(|error| format!("cannot list managed containers: {error}"))?
+            .into_iter()
+            .map(|container| {
+                let labels = container.labels.unwrap_or_default();
+                Ok(ManagedContainer {
+                    id: container.id.ok_or("managed container has no id")?,
+                    session_id: labels.get("ms.session").cloned(),
+                    running: container.state == Some(models::ContainerSummaryStateEnum::RUNNING),
+                })
+            })
+            .collect()
+    }
+
+    pub async fn environment(&self, container_id: &str) -> Result<Vec<String>, String> {
+        self.docker
+            .inspect_container(container_id, None)
+            .await
+            .map_err(|error| format!("cannot inspect agent environment: {error}"))?
+            .config
+            .and_then(|config| config.env)
+            .ok_or_else(|| "agent container has no environment".into())
+    }
+
     pub async fn kill(&self, container_id: &str) -> Result<(), String> {
         self.docker
             .kill_container(container_id, None)
@@ -412,6 +492,13 @@ pub struct ContainerExitEvent {
     pub container_id: String,
     pub session_id: String,
     pub exit_code: Option<i32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManagedContainer {
+    pub id: String,
+    pub session_id: Option<String>,
+    pub running: bool,
 }
 
 pub fn exit_event_from(event: &models::EventMessage) -> Option<ContainerExitEvent> {

@@ -1262,6 +1262,9 @@ dependencies = [
  "futures-util",
  "ms-proto",
  "ms-store",
+ "rusqlite",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

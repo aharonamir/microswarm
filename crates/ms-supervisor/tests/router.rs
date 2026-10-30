@@ -77,8 +77,20 @@ fn router_reuses_channel_thread_appends_inbound_and_tails_new_replies() {
     assert_eq!(replies.len(), 1);
     assert_eq!(replies[0].kind, OutboundKind::Reply);
     assert_eq!(replies[0].body["text"], "hello back");
+    ms_supervisor::router::persist_tail_cursor(&mut store, &first, replies[0].id.unwrap(), 7)
+        .unwrap();
+    assert_eq!(
+        ms_supervisor::router::tail_cursor(&store, &first).unwrap(),
+        (1, 7)
+    );
     drop(agent_session);
     drop(supervisor_session);
+    drop(store);
+    let store = SupervisorStore::open(home.join("supervisor.db")).unwrap();
+    assert_eq!(
+        ms_supervisor::router::tail_cursor(&store, &first).unwrap(),
+        (1, 7)
+    );
     drop(store);
     fs::remove_dir_all(home).unwrap();
 }

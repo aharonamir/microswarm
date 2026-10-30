@@ -80,7 +80,7 @@ fn supervisor_reconciles_an_exit_that_occurred_while_disconnected() {
 }
 
 #[test]
-fn supervisor_reconciles_a_missing_container_after_restart() {
+fn supervisor_restarts_a_missing_container_transiently_after_restart() {
     let Some(mut harness) = support::start() else {
         return;
     };
@@ -95,5 +95,17 @@ fn supervisor_reconciles_a_missing_container_after_restart() {
         .unwrap();
     assert!(output.status.success());
     harness.restart_supervisor().unwrap();
-    support::wait_for_status(&harness.home, &lead, "failed", Duration::from_secs(5));
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let (status, restarts, _) = support::session_state(&harness.home, &lead);
+        if restarts > 0 {
+            assert_ne!(status, "failed");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "missing container was not restarted transiently"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }

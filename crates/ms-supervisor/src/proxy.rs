@@ -9,6 +9,7 @@ use hyper_util::{
     rt::{TokioExecutor, TokioIo},
 };
 use ms_proto::Scope;
+pub use ms_runtime::CredentialProvider;
 use ms_store::{StoreError, SupervisorStore};
 use serde::Deserialize;
 use std::{collections::BTreeMap, sync::Arc};
@@ -16,10 +17,6 @@ use tokio::net::TcpListener;
 
 const MAX_REQUEST_BYTES: usize = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
-
-pub trait CredentialProvider: Send + Sync + 'static {
-    fn resolve(&self, name: &str) -> Option<String>;
-}
 
 pub trait ProxyEventObserver: Send + Sync + 'static {
     fn record(&self, session_id: &str, status: StatusCode);

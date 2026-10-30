@@ -38,7 +38,7 @@ impl IntegrationHarness {
             child.kill()?;
             child.wait()?;
         }
-        let child = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
             .env("MS_HOME", &self.home)
             .env("MS_MODEL_BASE_URL", self.model.base_url())
             .stdout(Stdio::null())
@@ -49,6 +49,13 @@ impl IntegrationHarness {
         loop {
             if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
                 break;
+            }
+            if let Some(status) = child.try_wait()? {
+                let mut stderr = String::new();
+                if let Some(mut pipe) = child.stderr.take() {
+                    let _ = pipe.read_to_string(&mut stderr);
+                }
+                panic!("supervisor exited during restart ({status}): {stderr}");
             }
             assert!(Instant::now() < deadline, "supervisor did not restart");
             thread::sleep(Duration::from_millis(20));

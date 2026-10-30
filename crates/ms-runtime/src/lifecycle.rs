@@ -1,4 +1,5 @@
 use ms_proto::ExitReason;
+use ms_store::{SessionLifecycleUpdate, StoreError, SupervisorStore};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionStatus {
@@ -62,6 +63,31 @@ impl SessionLifecycle {
 
     pub fn failure_reason(&self) -> Option<ExitReason> {
         self.failure_reason
+    }
+
+    pub fn persist(
+        &self,
+        store: &mut SupervisorStore,
+        session_id: &str,
+        container_id: Option<&str>,
+        timestamp: &str,
+    ) -> Result<(), StoreError> {
+        let terminal = matches!(self.status, SessionStatus::Closed | SessionStatus::Failed);
+        let close_reason = match (self.status, self.failure_reason) {
+            (SessionStatus::Closed, _) => Some("session_end"),
+            (SessionStatus::Failed, Some(ExitReason::Safety)) => Some("safety"),
+            (SessionStatus::Failed, _) => Some("failed"),
+            _ => None,
+        };
+        store.update_session_lifecycle(&SessionLifecycleUpdate {
+            session_id: session_id.to_owned(),
+            status: self.status.as_str().to_owned(),
+            container_id: container_id.map(str::to_owned),
+            restart_count: self.restart_count,
+            last_active_at: timestamp.to_owned(),
+            closed_at: terminal.then(|| timestamp.to_owned()),
+            close_reason: close_reason.map(str::to_owned),
+        })
     }
 
     pub fn apply(&mut self, event: SessionEvent) -> Result<SessionStatus, String> {

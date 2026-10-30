@@ -181,10 +181,10 @@
 
 ### Implementation
 
-- [ ] T081 [US4] Reconciliation per plan "Supervisor restart" steps 1–7 — `crates/ms-supervisor/src/recover.rs`
-- [ ] T082 [US4] Tail-cursor persistence and resume — `crates/ms-supervisor/src/router.rs`
-- [ ] T083 [US4] Approval expiry + re-issue on boot — `crates/ms-supervisor/src/approvals.rs`
-- [ ] T084 [US4] Deadline re-arm on boot — `crates/ms-supervisor/src/deadlines.rs`
+- [x] T081 [US4] Reconciliation per plan "Supervisor restart" steps 1–7 — `crates/ms-supervisor/src/recover.rs`
+- [x] T082 [US4] Tail-cursor persistence and resume — `crates/ms-supervisor/src/router.rs`
+- [x] T083 [US4] Approval expiry + re-issue on boot — `crates/ms-supervisor/src/approvals.rs`
+- [x] T084 [US4] Deadline re-arm on boot — `crates/ms-supervisor/src/deadlines.rs`
 
 **Checkpoint:** quickstart §4 passes.
 

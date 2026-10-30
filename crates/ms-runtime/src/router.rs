@@ -1,4 +1,4 @@
-use crate::runtime::ContainerRuntime;
+use crate::ContainerRuntime;
 use ms_proto::{InboundKind, OutboundMessage};
 use ms_store::{SessionConnections, SessionRecord, StoreError, SupervisorStore};
 
@@ -43,6 +43,19 @@ pub fn outbound_after(
 
 pub fn outbound_data_version(session: &SessionConnections) -> Result<i64, StoreError> {
     session.outbound_data_version()
+}
+
+pub fn tail_cursor(store: &SupervisorStore, session_id: &str) -> Result<(i64, i64), StoreError> {
+    Ok(store.tail_cursor(session_id)?.unwrap_or_default())
+}
+
+pub fn persist_tail_cursor(
+    store: &mut SupervisorStore,
+    session_id: &str,
+    outbound_last_id: i64,
+    events_last_seq: i64,
+) -> Result<(), StoreError> {
+    store.upsert_tail_cursor(session_id, outbound_last_id, events_last_seq)
 }
 
 pub async fn signal_agent(runtime: &ContainerRuntime, container_id: &str) -> Result<(), String> {

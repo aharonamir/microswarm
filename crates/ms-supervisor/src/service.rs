@@ -1,13 +1,14 @@
 use crate::{
     config::{ConfigSet, SpawnPolicy, ToolTransport, load_config_dir},
-    proxy::{CredentialProvider, ProxyRoutes, SessionProxy},
-    runtime::{ContainerProfile, ContainerRuntime},
+    proxy::{ProxyRoutes, SessionProxy},
+    runtime::{ContainerProfile, ContainerRuntime, FileCredentials},
     scope::{build_lead_scope, install_lead_scope},
 };
 use ms_proto::{
     DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEvent,
     SupervisorEventType,
 };
+pub(crate) use ms_runtime::utc_now;
 use ms_store::{
     DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
     open_session_dir,
@@ -39,6 +40,8 @@ pub async fn serve(home: impl AsRef<Path>) -> Result<(), String> {
     let listener = UnixListener::bind(&socket_path).map_err(|error| error.to_string())?;
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|error| error.to_string())?;
+    let config = load_config_dir(config_dir(&home)).map_err(|error| error.to_string())?;
+    crate::recover::boot(&home, &config).await?;
     let idle_home = home.clone();
     tokio::spawn(async move { idle_session_watcher(idle_home).await });
     tokio::spawn(crate::exit_watcher::watch(home.clone()));
@@ -362,11 +365,19 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
     let session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
     let active_at = utc_now();
     claim_session_busy(&store, &session_id, &active_at)?;
-    let mut last_id: i64 = session
-        .outbound()
-        .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
-            row.get(0)
-        })
+    let (stored_outbound, events_last_seq) =
+        crate::router::tail_cursor(&store, &session_id).map_err(|error| error.to_string())?;
+    let mut last_id = if stored_outbound == 0 {
+        session
+            .outbound()
+            .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
+                row.get(0)
+            })
+            .map_err(|error| error.to_string())?
+    } else {
+        stored_outbound
+    };
+    crate::router::persist_tail_cursor(&mut store, &session_id, last_id, events_last_seq)
         .map_err(|error| error.to_string())?;
     let inbound_id = session
         .append_inbound(&InboundKind::UserMessage, &json!({"text":text}))
@@ -414,6 +425,13 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
         {
             if let Some(id) = message.id {
                 last_id = id;
+                crate::router::persist_tail_cursor(
+                    &mut store,
+                    &session_id,
+                    last_id,
+                    events_last_seq,
+                )
+                .map_err(|error| error.to_string())?;
             }
             if message.in_reply_to == Some(inbound_id) && message.kind == OutboundKind::Reply {
                 let active_at = utc_now();
@@ -563,7 +581,7 @@ async fn create_lead(
     let proxy_addr = listener.local_addr().map_err(|error| error.to_string())?;
     let proxy = SessionProxy::from_store(store, &id).map_err(|error| error.to_string())?;
     let routes = proxy_routes(config);
-    let credentials = Arc::new(HomeCredentials {
+    let credentials = Arc::new(FileCredentials {
         home: home.to_path_buf(),
     });
     tokio::spawn(async move {
@@ -1100,7 +1118,7 @@ async fn create_member(
     let proxy_addr = listener.local_addr().map_err(|error| error.to_string())?;
     let proxy = SessionProxy::from_store(store, member_id).map_err(|error| error.to_string())?;
     let routes = proxy_routes(config);
-    let credentials = Arc::new(HomeCredentials {
+    let credentials = Arc::new(FileCredentials {
         home: home.to_path_buf(),
     });
     tokio::spawn(async move {
@@ -1186,7 +1204,10 @@ async fn create_member(
         .map_err(|error| error.to_string())?;
     wait_agent_ready(&mut session).await?;
     let deadline = Instant::now() + Duration::from_secs(timeout_s);
-    let mut after_id = 0;
+    let (mut after_id, events_last_seq) =
+        crate::router::tail_cursor(store, member_id).map_err(|error| error.to_string())?;
+    crate::router::persist_tail_cursor(store, member_id, after_id, events_last_seq)
+        .map_err(|error| error.to_string())?;
     loop {
         for reply in session
             .outbound_after(after_id)
@@ -1194,6 +1215,8 @@ async fn create_member(
         {
             if let Some(id) = reply.id {
                 after_id = id;
+                crate::router::persist_tail_cursor(store, member_id, after_id, events_last_seq)
+                    .map_err(|error| error.to_string())?;
             }
             if reply.kind == OutboundKind::ApprovalRequest {
                 let binding: ms_proto::ApprovalBinding = serde_json::from_value(
@@ -1301,11 +1324,16 @@ async fn handle_send_to_member(
         .ok_or("member has no delegation record")?;
     let member_session = open_session_dir(home.join("sessions").join(member_id))
         .map_err(|error| error.to_string())?;
-    let cursor: i64 = member_session
+    let current_outbound: i64 = member_session
         .outbound()
         .query_row("SELECT COALESCE(MAX(id),0) FROM outbound", [], |row| {
             row.get(0)
         })
+        .map_err(|error| error.to_string())?;
+    let (_, events_last_seq) =
+        crate::router::tail_cursor(store, member_id).map_err(|error| error.to_string())?;
+    let cursor = current_outbound;
+    crate::router::persist_tail_cursor(store, member_id, cursor, events_last_seq)
         .map_err(|error| error.to_string())?;
     let task_id = member_session
         .append_inbound(
@@ -1340,6 +1368,8 @@ async fn handle_send_to_member(
             }
             if let Some(id) = reply.id {
                 after_id = id;
+                crate::router::persist_tail_cursor(store, member_id, after_id, events_last_seq)
+                    .map_err(|error| error.to_string())?;
             }
             if reply.kind == OutboundKind::ApprovalRequest {
                 let binding: ms_proto::ApprovalBinding = serde_json::from_value(
@@ -1524,11 +1554,11 @@ async fn wait_agent_ready(session: &mut SessionConnections) -> Result<(), String
     }
 }
 
-fn runtime_for(config: &ConfigSet) -> Result<ContainerRuntime, String> {
+pub(super) fn runtime_for(config: &ConfigSet) -> Result<ContainerRuntime, String> {
     ContainerRuntime::connect(&config.microswarm.runtime.socket)
 }
 
-fn proxy_routes(config: &ConfigSet) -> ProxyRoutes {
+pub(super) fn proxy_routes(config: &ConfigSet) -> ProxyRoutes {
     let model = config.microswarm.model.as_ref();
     ProxyRoutes {
         model_upstream: model.map(|model| model.base_url.clone()),
@@ -1548,7 +1578,7 @@ fn proxy_routes(config: &ConfigSet) -> ProxyRoutes {
     }
 }
 
-fn mcp_descriptors(config: &ConfigSet) -> Vec<Value> {
+pub(super) fn mcp_descriptors(config: &ConfigSet) -> Vec<Value> {
     config.tools.servers.iter().map(|server| json!({
         "id":server.id,
         "transport":match server.transport { ToolTransport::Stdio => "stdio", ToolTransport::StreamableHttp => "streamable_http" },
@@ -1559,23 +1589,6 @@ fn mcp_descriptors(config: &ConfigSet) -> Vec<Value> {
     })).collect()
 }
 
-struct HomeCredentials {
-    home: PathBuf,
-}
-
-impl CredentialProvider for HomeCredentials {
-    fn resolve(&self, name: &str) -> Option<String> {
-        if name.is_empty()
-            || !name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-        {
-            return None;
-        }
-        fs::read_to_string(self.home.join("credentials").join(name)).ok()
-    }
-}
-
 fn new_id() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     use std::io::Read;
@@ -1583,30 +1596,6 @@ fn new_id() -> Result<String, String> {
         .and_then(|mut file| file.read_exact(&mut bytes))
         .map_err(|error| error.to_string())?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
-}
-
-pub(crate) fn utc_now() -> String {
-    let elapsed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let days = (elapsed.as_secs() / 86_400) as i64;
-    let sec = elapsed.as_secs() % 86_400;
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let mut year = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = mp + if mp < 10 { 3 } else { -9 };
-    year += i64::from(month <= 2);
-    format!(
-        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
-        sec / 3600,
-        (sec % 3600) / 60,
-        sec % 60
-    )
 }
 
 fn utc_now_precise() -> String {
