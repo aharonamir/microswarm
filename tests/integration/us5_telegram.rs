@@ -69,12 +69,20 @@ fn telegram_updates_create_channel_scoped_sessions_and_deliver_replies() {
         .unwrap();
     assert_eq!(channel, "telegram");
     assert_eq!(thread, "777");
-    assert_eq!(
-        fs::read_to_string(harness.home.join("telegram-offset-telegram-token"))
-            .unwrap()
-            .trim(),
-        "42"
-    );
+    let offset_path = harness.home.join("telegram-offset-telegram-token");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while fs::read_to_string(&offset_path)
+        .ok()
+        .as_deref()
+        .map(str::trim)
+        != Some("42")
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Telegram update offset was not persisted"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
     harness.restart_supervisor().unwrap();
     assert!(
         messages.recv_timeout(Duration::from_millis(600)).is_err(),
