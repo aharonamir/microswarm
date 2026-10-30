@@ -4,6 +4,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -26,7 +27,7 @@ pub fn emit_supervisor_event(
     store
         .append_supervisor_event(&SupervisorEvent {
             seq: 0,
-            ts: crate::utc_now(),
+            ts: crate::utc_now_precise(),
             ts_mono,
             session_id: session_id.into(),
             root_session_id: root_session_id.into(),
@@ -41,7 +42,7 @@ pub fn emit_supervisor_event(
 
 #[derive(Clone)]
 struct EventRow {
-    ts_mono: i64,
+    order_time: f64,
     source: &'static str,
     source_seq: i64,
     value: Value,
@@ -121,7 +122,7 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             let (seq, ts, ts_mono, session, root, role, kind, data) =
                 row.map_err(|error| error.to_string())?;
             rows.push(EventRow {
-                ts_mono,
+                order_time: wall_time(&database, &ts)?,
                 source: "supervisor",
                 source_seq: seq,
                 value: json!({"seq":seq,"ts":ts,"ts_mono":ts_mono,"session_id":session,
@@ -130,18 +131,23 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             });
         }
     }
-    let mut sessions = {
+    let sessions = {
         let mut statement = database
-            .prepare("SELECT id FROM sessions ORDER BY id")
+            .prepare("SELECT id,root_id,role FROM sessions ORDER BY id")
             .map_err(|error| error.to_string())?;
         statement
-            .query_map([], |row| row.get::<_, String>(0))
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
             .map_err(|error| error.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| error.to_string())?
     };
-    sessions.sort();
-    for session in sessions {
+    for (session, root, role) in sessions {
         let path: PathBuf = home.join("sessions").join(&session).join("out/events.db");
         if !path.is_file() {
             continue;
@@ -170,10 +176,16 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             })
             .map_err(|error| error.to_string())?;
         for row in events {
-            let (seq, ts, ts_mono, session, root, role, kind, data) =
+            let (seq, ts, ts_mono, claimed_session, claimed_root, claimed_role, kind, data) =
                 row.map_err(|error| error.to_string())?;
+            if claimed_session != session || claimed_root != root || claimed_role != role {
+                continue;
+            }
+            let Ok(order_time) = wall_time(&database, &ts) else {
+                continue;
+            };
             rows.push(EventRow {
-                ts_mono,
+                order_time,
                 source: "agent",
                 source_seq: seq,
                 value: json!({"seq":seq,"ts":ts,"ts_mono":ts_mono,"session_id":session,
@@ -183,8 +195,8 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
         }
     }
     rows.sort_by(|left, right| {
-        left.ts_mono
-            .cmp(&right.ts_mono)
+        left.order_time
+            .total_cmp(&right.order_time)
             .then(left.source.cmp(right.source))
             .then(left.source_seq.cmp(&right.source_seq))
             .then(
@@ -193,19 +205,59 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
                     .cmp(&right.value["session_id"].as_str()),
             )
     });
+    let ledger_path = home.join("event-stream.db");
+    let mut ledger = Connection::open(&ledger_path).map_err(|error| error.to_string())?;
+    std::fs::set_permissions(&ledger_path, std::fs::Permissions::from_mode(0o600))
+        .map_err(|error| error.to_string())?;
+    ledger
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| error.to_string())?;
+    ledger.execute_batch("CREATE TABLE IF NOT EXISTS merged_events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, source TEXT NOT NULL, source_seq INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(session_id,seq), UNIQUE(session_id,source,source_seq));")
+        .map_err(|error| error.to_string())?;
+    let transaction = ledger.transaction().map_err(|error| error.to_string())?;
     let mut sequence = BTreeMap::<String, i64>::new();
-    let events = rows
-        .into_iter()
-        .map(|mut row| {
-            let session = row.value["session_id"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
-            let seq = sequence.entry(session).or_default();
-            *seq += 1;
-            row.value["seq"] = json!(*seq);
-            row.value
+    for mut row in rows {
+        let session = row.value["session_id"]
+            .as_str()
+            .ok_or("event has no session_id")?
+            .to_owned();
+        let next = if let Some(last) = sequence.get(&session) {
+            *last
+        } else {
+            transaction
+                .query_row(
+                    "SELECT COALESCE(MAX(seq),0) FROM merged_events WHERE session_id=?1",
+                    [&session],
+                    |row| row.get(0),
+                )
+                .map_err(|error| error.to_string())?
+        };
+        let exists: bool = transaction.query_row("SELECT EXISTS(SELECT 1 FROM merged_events WHERE session_id=?1 AND source=?2 AND source_seq=?3)", rusqlite::params![session,row.source,row.source_seq], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if exists {
+            sequence.insert(session, next);
+            continue;
+        }
+        row.value["seq"] = json!(next + 1);
+        transaction.execute("INSERT INTO merged_events(session_id,seq,source,source_seq,body) VALUES (?1,?2,?3,?4,?5)", rusqlite::params![session,next+1,row.source,row.source_seq,row.value.to_string()])
+            .map_err(|error| error.to_string())?;
+        sequence.insert(session, next + 1);
+    }
+    transaction.commit().map_err(|error| error.to_string())?;
+    let mut statement = ledger
+        .prepare("SELECT body FROM merged_events ORDER BY id")
+        .map_err(|error| error.to_string())?;
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?
+        .map(|row| {
+            serde_json::from_str(&row.map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())
         })
-        .collect::<Vec<_>>();
-    Ok(events)
+        .collect()
+}
+
+fn wall_time(db: &Connection, ts: &str) -> Result<f64, String> {
+    db.query_row("SELECT julianday(?1)", [ts], |row| row.get(0))
+        .map_err(|error| error.to_string())
 }
