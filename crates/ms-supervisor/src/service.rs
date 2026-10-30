@@ -40,6 +40,25 @@ pub async fn serve(home: impl AsRef<Path>) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let config = load_config_dir(config_dir(&home)).map_err(|error| error.to_string())?;
     crate::recover::boot(&home, &config).await?;
+    let retention_days = config.microswarm.home.retention_days;
+    if let Err(error) =
+        ms_runtime::retention::purge_expired_sessions(&home, retention_days, &utc_now())
+    {
+        eprintln!("session retention cleanup failed: {error}");
+    }
+    let retention_home = home.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            if let Err(error) = ms_runtime::retention::purge_expired_sessions(
+                &retention_home,
+                retention_days,
+                &ms_runtime::utc_now(),
+            ) {
+                eprintln!("session retention cleanup failed: {error}");
+            }
+        }
+    });
     let channels =
         serde_json::to_value(&config.microswarm.channels).map_err(|error| error.to_string())?;
     ms_channels::spawn_from_config(home.clone(), socket_path.clone(), channels);

@@ -220,7 +220,7 @@
 ## Phase 9 — Polish & cross-cutting
 
 - [ ] T095 [P] Benchmarks for SC-001…SC-004; CI job on reference runner fails on regression > 20% — `crates/ms-bench/`
-- [ ] T096 [P] Retention: delete session dirs older than `retention_days` — `crates/ms-supervisor/src/sessions.rs`
+- [x] T096 [P] Retention: delete session dirs older than `retention_days` — `crates/ms-runtime/src/retention.rs`, started by `crates/ms-supervisor/src/service.rs`
 - [ ] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
 - [ ] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
 - [ ] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`

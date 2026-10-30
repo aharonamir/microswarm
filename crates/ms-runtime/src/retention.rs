@@ -1,12 +1,49 @@
-use std::path::Path;
+use rusqlite::{Connection, OpenFlags};
+use std::{fs, io::ErrorKind, path::Path};
 
 /// Remove expired terminal session directories while retaining supervisor.db records.
 pub fn purge_expired_sessions(
-    _home: &Path,
-    _retention_days: u32,
-    _now: &str,
+    home: &Path,
+    retention_days: u32,
+    now: &str,
 ) -> Result<usize, String> {
-    Err("session retention is not implemented".into())
+    let db = Connection::open_with_flags(
+        home.join("supervisor.db"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|error| error.to_string())?;
+    let mut statement = db
+        .prepare("SELECT id FROM sessions WHERE status IN ('closed','failed') AND julianday(COALESCE(closed_at,last_active_at)) <= julianday(?1) - ?2 ORDER BY id")
+        .map_err(|error| error.to_string())?;
+    let expired = statement
+        .query_map(rusqlite::params![now, retention_days], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    drop(statement);
+    drop(db);
+
+    let mut removed = 0;
+    for id in expired {
+        if id.is_empty() || id.contains('/') || id == "." || id == ".." {
+            return Err(format!("invalid session id in supervisor database: {id:?}"));
+        }
+        let path = home.join("sessions").join(id);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == ErrorKind::NotFound => continue,
+            Err(error) => return Err(format!("{}: {error}", path.display())),
+        };
+        if metadata.file_type().is_dir() {
+            fs::remove_dir_all(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+        } else {
+            fs::remove_file(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+        }
+        removed += 1;
+    }
+    Ok(removed)
 }
 
 #[cfg(test)]
@@ -41,7 +78,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "red: T096 — session retention is not implemented"]
     fn deletes_only_expired_terminal_session_directories() {
         let home = home();
         let db = open_supervisor_db(home.join("supervisor.db")).unwrap();
@@ -76,7 +112,6 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    #[ignore = "red: T096 — safe session directory retention is not implemented"]
     fn removes_expired_session_symlink_without_following_it() {
         use std::os::unix::fs::symlink;
 
