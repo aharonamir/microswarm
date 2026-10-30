@@ -4,11 +4,9 @@ use crate::{
     runtime::{ContainerProfile, ContainerRuntime, FileCredentials},
     scope::{build_lead_scope, install_lead_scope},
 };
-use ms_proto::{
-    DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEvent,
-    SupervisorEventType,
-};
-pub(crate) use ms_runtime::utc_now;
+use ms_proto::{DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEventType};
+pub(crate) use ms_runtime::events::emit_supervisor_event;
+pub(crate) use ms_runtime::{new_id, utc_now, utc_now_precise};
 use ms_store::{
     DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
     open_session_dir,
@@ -20,7 +18,7 @@ use std::{
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -42,6 +40,9 @@ pub async fn serve(home: impl AsRef<Path>) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let config = load_config_dir(config_dir(&home)).map_err(|error| error.to_string())?;
     crate::recover::boot(&home, &config).await?;
+    let channels =
+        serde_json::to_value(&config.microswarm.channels).map_err(|error| error.to_string())?;
+    ms_channels::spawn_from_config(home.clone(), socket_path.clone(), channels);
     let idle_home = home.clone();
     tokio::spawn(async move { idle_session_watcher(idle_home).await });
     tokio::spawn(crate::exit_watcher::watch(home.clone()));
@@ -70,6 +71,10 @@ async fn handle_connection(home: PathBuf, stream: UnixStream) -> Result<(), Stri
             return Ok(());
         }
         let response = match serde_json::from_str::<Value>(&line) {
+            Ok(request) if request.get("op").and_then(Value::as_str) == Some("event_stream") => {
+                crate::events::stream(&home, &request, &mut write).await?;
+                return Ok(());
+            }
             Ok(request) => dispatch(&home, &request).await,
             Err(error) => json!({"error":format!("invalid request: {error}")}),
         };
@@ -290,6 +295,7 @@ async fn dispatch(home: &Path, request: &Value) -> Value {
         Some("creds_list") => list_credentials(home),
         Some("approve") | Some("deny") => resolve_approval(home, request).await,
         Some("chat") => chat_message(home, request).await,
+        Some("channel_message") => chat_message(home, request).await,
         Some("wait") => wait_for_reply(home, request).await,
         _ => Err("unknown supervisor request".to_owned()),
     };
@@ -347,14 +353,22 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
         .ok_or("[model] must be configured before chat")?;
     let mut store =
         SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
+    let channel = request
+        .get("channel")
+        .and_then(Value::as_str)
+        .unwrap_or("cli");
+    let channel_thread = request
+        .get("thread_id")
+        .and_then(Value::as_str)
+        .unwrap_or("default");
     let session_id = match request.get("session_id").and_then(Value::as_str) {
         Some(id) => id.to_owned(),
         None => match store
-            .active_lead_for_thread("cli", "default")
+            .active_lead_for_thread(channel, channel_thread)
             .map_err(|error| error.to_string())?
         {
             Some(id) => id,
-            None => create_lead(home, &config, &mut store).await?,
+            None => create_lead(home, &config, &mut store, channel, channel_thread).await?,
         },
     };
     let container_id = store
@@ -549,6 +563,8 @@ async fn create_lead(
     home: &Path,
     config: &ConfigSet,
     store: &mut SupervisorStore,
+    channel: &str,
+    channel_thread: &str,
 ) -> Result<String, String> {
     let id = new_id()?;
     let session_dir = home.join("sessions").join(&id);
@@ -561,8 +577,8 @@ async fn create_lead(
         parent_id: None,
         role: "lead".into(),
         kind: "lead".into(),
-        channel: Some("cli".into()),
-        channel_thread: Some("default".into()),
+        channel: Some(channel.into()),
+        channel_thread: Some(channel_thread.into()),
         status: "pending".into(),
         scope_hash: None,
         scope: None,
@@ -570,6 +586,14 @@ async fn create_lead(
         last_active_at: utc_now(),
     };
     install_lead_scope(store, record, &session_dir, &scope)?;
+    emit_supervisor_event(
+        store,
+        &id,
+        &id,
+        "lead",
+        SupervisorEventType::SessionCreated,
+        json!({"channel":channel,"thread_id":channel_thread}),
+    )?;
     let runtime = runtime_for(config)?;
     let network = format!("ms-net-{id}");
     let network_id = runtime.create_network(&network).await?;
@@ -625,6 +649,14 @@ async fn create_lead(
         &container_user,
     )?;
     let container_id = runtime.create_container(&profile, &env).await?;
+    emit_supervisor_event(
+        store,
+        &id,
+        &id,
+        "lead",
+        SupervisorEventType::ContainerCreated,
+        json!({"container_id":container_id}),
+    )?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {
             session_id: id.clone(),
@@ -637,6 +669,14 @@ async fn create_lead(
         })
         .map_err(|error| error.to_string())?;
     runtime.start(&container_id).await?;
+    emit_supervisor_event(
+        store,
+        &id,
+        &id,
+        "lead",
+        SupervisorEventType::ContainerStarted,
+        json!({"container_id":container_id}),
+    )?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {
             session_id: id.clone(),
@@ -1030,36 +1070,6 @@ fn reject_delegation(
         )
         .map_err(|error| error.to_string())?;
     Ok(None)
-}
-
-pub(crate) fn emit_supervisor_event(
-    store: &mut SupervisorStore,
-    session_id: &str,
-    root_session_id: &str,
-    role: &str,
-    event_type: SupervisorEventType,
-    data: Value,
-) -> Result<(), String> {
-    let ts_mono = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()
-        .try_into()
-        .unwrap_or(u64::MAX);
-    store
-        .append_supervisor_event(&SupervisorEvent {
-            seq: 0,
-            ts: utc_now(),
-            ts_mono,
-            session_id: session_id.into(),
-            root_session_id: root_session_id.into(),
-            agent_role: role.into(),
-            source: Default::default(),
-            event_type,
-            data,
-        })
-        .map_err(|error| error.to_string())?;
-    Ok(())
 }
 
 #[derive(Default)]
@@ -1587,27 +1597,6 @@ pub(super) fn mcp_descriptors(config: &ConfigSet) -> Vec<Value> {
         "url":server.url,
         "credential":server.credential,
     })).collect()
-}
-
-fn new_id() -> Result<String, String> {
-    let mut bytes = [0u8; 16];
-    use std::io::Read;
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut file| file.read_exact(&mut bytes))
-        .map_err(|error| error.to_string())?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
-}
-
-fn utc_now_precise() -> String {
-    let elapsed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let second = utc_now();
-    format!(
-        "{}.{:03}Z",
-        second.trim_end_matches('Z'),
-        elapsed.subsec_millis()
-    )
 }
 
 fn store_credential(home: &Path, request: &Value) -> Result<Value, String> {

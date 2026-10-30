@@ -114,9 +114,28 @@ $ # grant it in [lead.scope].tools, then:
 $ microswarm chat
 you › what's the weather in Herzliya?
 agent › 27°C, clear.
+$ microswarm tools list
+weather  stdio  python3 /opt/tools/weather_mcp.py
+$ microswarm tools remove weather
 ```
 
 No `cargo` command was run.
+
+Telegram and webhook channels can be enabled in `microswarm.toml`:
+
+```toml
+[[channels]]
+kind = "telegram"
+token = "telegram-bot"          # credential name; set with microswarm creds
+
+[[channels]]
+kind = "webhook"
+listen = "127.0.0.1:8788"
+```
+
+Webhook clients `POST /messages` with `{"thread_id":"build-42","text":"hello"}`;
+the response contains the agent reply. The listener stays on loopback, so use a
+TLS reverse proxy for external delivery.
 
 ## 6 · Trace (US6)
 

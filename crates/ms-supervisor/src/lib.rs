@@ -6,6 +6,7 @@ pub mod proxy;
 pub use ms_runtime as runtime;
 pub use ms_runtime::router;
 pub mod deadlines;
+pub mod events;
 pub mod exit_watcher;
 pub mod recover;
 pub mod scope;

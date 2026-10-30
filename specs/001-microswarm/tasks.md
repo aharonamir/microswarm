@@ -194,16 +194,16 @@
 
 ### Tests first
 
-- [ ] T085 [P] [US5] Integration: `tools add` stdio Python MCP server, grant in scope, agent calls it; no rebuild — `tests/integration/us5_add_tool.rs`
-- [ ] T086 [P] [US5] Integration: HTTP MCP server reached only through proxy — `tests/integration/us5_http_tool.rs`
-- [ ] T087 [P] [US5] Integration: host-plane consumer receives all events, per-session `seq` gapless, merged order stable — `tests/integration/us5_event_stream.rs`
+- [x] T085 [P] [US5] Integration: `tools add` stdio Python MCP server, grant in scope, agent calls it; no rebuild — `tests/integration/us5_add_tool.rs`
+- [x] T086 [P] [US5] Integration: HTTP MCP server reached only through proxy — `tests/integration/us5_http_tool.rs`
+- [x] T087 [P] [US5] Integration: host-plane consumer receives all events, per-session `seq` gapless, merged order stable — `tests/integration/us5_event_stream.rs`
 
 ### Implementation
 
-- [ ] T088 [US5] `microswarm tools add|list|remove` writing `tools.toml` — `crates/ms-cli/src/tools.rs`
-- [ ] T089 [US5] Tail `events.db` per session + `supervisor_events`; merged stream over local Unix socket (NDJSON) — `crates/ms-supervisor/src/events.rs`
-- [ ] T090 [P] [US5] Telegram channel adapter (second channel proves the channel boundary) — `crates/ms-channels/src/telegram.rs`
-- [ ] T091 [P] [US5] Generic webhook channel adapter — `crates/ms-channels/src/webhook.rs`
+- [x] T088 [US5] `microswarm tools add|list|remove` writing `tools.toml` — `crates/ms-cli/src/tools.rs`
+- [x] T089 [US5] Tail `events.db` per session + `supervisor_events`; merged stream over local Unix socket (NDJSON) — `crates/ms-supervisor/src/events.rs`
+- [x] T090 [P] [US5] Telegram channel adapter (second channel proves the channel boundary) — `crates/ms-channels/src/telegram.rs`
+- [x] T091 [P] [US5] Generic webhook channel adapter — `crates/ms-channels/src/webhook.rs`
 
 ---
 

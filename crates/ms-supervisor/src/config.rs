@@ -1,5 +1,5 @@
 use ms_proto::{MountMode, Permission, ToolNames};
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -192,10 +192,14 @@ pub struct DelegationConfig {
     pub max_members: u8,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChannelConfig {
     pub kind: String,
     pub token: Option<String>,
+    #[serde(default)]
+    pub api_base: Option<String>,
+    #[serde(default)]
+    pub listen: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -377,8 +381,8 @@ impl ConfigSet {
                     model.provider
                 )));
             }
-            validate_url(&model.base_url, "model.base_url")?;
-            if !valid_name(&model.credential)
+            ms_channels::validate_url(&model.base_url, "model.base_url").map_err(ConfigError)?;
+            if !ms_channels::valid_credential_name(&model.credential)
                 || !app.lead.scope.credentials.contains(&model.credential)
             {
                 return Err(ConfigError(
@@ -405,7 +409,7 @@ impl ConfigSet {
             }
         }
         for credential in &app.lead.scope.credentials {
-            if !valid_name(credential) {
+            if !ms_channels::valid_credential_name(credential) {
                 return Err(ConfigError(format!(
                     "invalid credential name {credential:?}"
                 )));
@@ -419,21 +423,13 @@ impl ConfigSet {
             }
         }
         for channel in &app.channels {
-            if !matches!(channel.kind.as_str(), "cli" | "telegram" | "webhook") {
-                return Err(ConfigError(format!(
-                    "unsupported channel kind {:?}",
-                    channel.kind
-                )));
-            }
-            if channel
-                .token
-                .as_ref()
-                .is_some_and(|token| !valid_name(token))
-            {
-                return Err(ConfigError(
-                    "channel token must be a credential name, never a secret value".into(),
-                ));
-            }
+            ms_channels::validate_config(
+                &channel.kind,
+                channel.token.as_deref(),
+                channel.api_base.as_deref(),
+                channel.listen.as_deref(),
+            )
+            .map_err(ConfigError)?;
         }
         for path in &self.ceiling.paths {
             if !path.is_absolute()
@@ -464,10 +460,9 @@ impl ConfigSet {
                         && server.credential.is_none() => {}
                 ToolTransport::StreamableHttp
                     if server.command.is_none()
-                        && server
-                            .url
-                            .as_deref()
-                            .is_some_and(|url| validate_url(url, "tools server URL").is_ok()) => {}
+                        && server.url.as_deref().is_some_and(|url| {
+                            ms_channels::validate_url(url, "tools server URL").is_ok()
+                        }) => {}
                 _ => {
                     return Err(ConfigError(format!(
                         "tools server {:?} has fields that do not match its transport",
@@ -476,7 +471,7 @@ impl ConfigSet {
                 }
             }
             if let Some(credential) = &server.credential
-                && (!valid_name(credential)
+                && (!ms_channels::valid_credential_name(credential)
                     || !self.microswarm.lead.scope.credentials.contains(credential))
             {
                 return Err(ConfigError(format!(
@@ -489,16 +484,6 @@ impl ConfigSet {
     }
 }
 
-fn valid_name(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    !bytes.is_empty()
-        && bytes.len() <= 64
-        && (bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
-        && bytes
-            .iter()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.-".contains(byte))
-}
-
 fn valid_server_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     !bytes.is_empty()
@@ -507,17 +492,6 @@ fn valid_server_id(value: &str) -> bool {
         && bytes
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(byte))
-}
-
-fn validate_url(value: &str, field: &str) -> Result<(), ConfigError> {
-    let local_http = value.starts_with("http://localhost") || value.starts_with("http://127.0.0.1");
-    if value.starts_with("https://") || local_http {
-        Ok(())
-    } else {
-        Err(ConfigError(format!(
-            "{field} must use HTTPS (HTTP is allowed for loopback only)"
-        )))
-    }
 }
 
 #[cfg(test)]

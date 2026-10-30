@@ -177,6 +177,20 @@ fn delegation_response(body: &str) -> String {
                 .and_then(serde_json::Value::as_str)
         })
         .collect::<Vec<_>>();
+    if user_text.contains("call fixture-python/weather")
+        && names.contains(&"fixture-python/weather")
+    {
+        if messages.iter().any(|message| message["role"] == "tool") {
+            return response_with_text("27 C and clear");
+        }
+        return external_tool_call("fixture-python/weather", serde_json::json!({}));
+    }
+    if user_text.contains("call fixture-http/weather") && names.contains(&"fixture-http/weather") {
+        if messages.iter().any(|message| message["role"] == "tool") {
+            return response_with_text("HTTP weather result");
+        }
+        return external_tool_call("fixture-http/weather", serde_json::json!({}));
+    }
     if system_text.contains("Research the requested files and report concise findings.")
         && user_text.contains("read file")
         && names.contains(&"microswarm-tools/fs.read")

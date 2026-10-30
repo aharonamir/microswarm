@@ -85,7 +85,29 @@ kind = "cli"
 [[channels]]
 kind  = "telegram"
 token = "telegram-bot"            # credential name
+
+[[channels]]
+kind   = "webhook"
+listen = "127.0.0.1:8788"
+token  = "webhook-secret"          # optional credential name; Bearer token
 ```
+
+Telegram uses the Bot API `getUpdates` and `sendMessage` methods. Its `token` is
+a name in the supervisor credential store, never the token value. Webhook accepts
+`POST /messages` with `{"thread_id":"…","text":"…"}` and returns the reply as
+JSON. It binds to loopback; expose it externally only behind a TLS-terminating
+reverse proxy. If configured, `token` requires `Authorization: Bearer <secret>`.
+
+Host-plane consumers connect to `supervisor.sock` and send one JSON line:
+
+```json
+{"op":"event_stream","follow":true,"after":{"01JB…":12}}
+```
+
+The daemon streams one event per NDJSON line. `after` maps session ids to the
+last merged sequence already consumed for that session. Set `follow` to `false`
+for a finite snapshot. Events are globally ordered by monotonic timestamp,
+source, then source sequence, and have a gapless merged `seq` per session.
 
 ## `policy.toml`
 

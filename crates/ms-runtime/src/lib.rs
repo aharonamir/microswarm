@@ -9,6 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+pub mod events;
 pub mod lifecycle;
 pub mod recovery;
 pub mod router;
@@ -56,6 +57,26 @@ pub fn utc_now() -> String {
         (sec % 3600) / 60,
         sec % 60
     )
+}
+
+pub fn utc_now_precise() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    format!(
+        "{}.{:03}Z",
+        utc_now().trim_end_matches('Z'),
+        elapsed.subsec_millis()
+    )
+}
+
+pub fn new_id() -> Result<String, String> {
+    let mut bytes = [0u8; 16];
+    use std::io::Read;
+    fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .map_err(|error| error.to_string())?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

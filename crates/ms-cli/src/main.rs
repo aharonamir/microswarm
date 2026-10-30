@@ -8,6 +8,8 @@ use std::{
     process::ExitCode,
 };
 
+mod tools;
+
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
         Ok(()) => ExitCode::SUCCESS,
@@ -33,6 +35,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "doctor" => doctor(&home),
         "sessions" => sessions(&home),
         "skills" => skills(&home, &args[1..]),
+        "tools" => tools::run(&home, &args[1..]),
         "creds" => credentials(&home, &args[1..]),
         "approve" | "deny" => rpc(
             &home,
@@ -46,7 +49,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|sessions|skills|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  skills install <directory>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|sessions|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
