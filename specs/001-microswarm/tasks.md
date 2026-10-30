@@ -221,8 +221,8 @@
 
 - [ ] T095 [P] Benchmarks for SC-001…SC-004; CI job on reference runner fails on regression > 20% — `crates/ms-bench/`
 - [x] T096 [P] Retention: delete session dirs older than `retention_days` — `crates/ms-runtime/src/retention.rs`, started by `crates/ms-supervisor/src/service.rs`
-- [ ] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
-- [ ] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
+- [x] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
+- [x] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
 - [ ] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`
 - [ ] T100 Run quickstart §0–§6 on a clean host; fix drift — `specs/001-microswarm/quickstart.md`
 
