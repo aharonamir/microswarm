@@ -43,3 +43,73 @@ jobs:
           MS_REQUIRE_RUNTIME: "1"
           MS_TEST_AGENT_IMAGE: microswarm-agent-python:dev
         run: cargo test --workspace --all-targets
+
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install musl linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+      - name: Check dependency policy
+        run: scripts/dep-gate.sh
+      - name: Resolve comparison revision
+        id: baseline
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+          elif [[ '${{ github.event.before }}' != '0000000000000000000000000000000000000000' ]]; then
+            BASE_SHA='${{ github.event.before }}'
+          else
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          git fetch --no-tags origin "$BASE_SHA"
+          git worktree add --detach /tmp/microswarm-benchmark-baseline "$BASE_SHA"
+          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+      - name: Build baseline binaries and image
+        working-directory: /tmp/microswarm-benchmark-baseline
+        run: |
+          cargo build --locked --release --workspace --bins
+          cargo build --locked --release --target x86_64-unknown-linux-musl -p ms-agent -p ms-tools
+          docker build --tag microswarm-agent:baseline --file images/agent.Containerfile .
+      - name: Build current binaries and image
+        run: |
+          cargo build --locked --release --workspace --bins
+          cargo build --locked --release --target x86_64-unknown-linux-musl -p ms-agent -p ms-tools
+          docker build --tag microswarm-agent:current --file images/agent.Containerfile .
+      - name: Measure baseline commit
+        env:
+          MS_REQUIRE_RUNTIME: "1"
+          MS_TEST_RUNTIME: docker
+          MS_TEST_AGENT_IMAGE: microswarm-agent:baseline
+          MS_TEST_SUPERVISORD: /tmp/microswarm-benchmark-baseline/target/release/microswarmd
+          MS_BENCH_RUNNER: ubuntu-latest
+          MS_BENCH_REVISION: ${{ steps.baseline.outputs.sha }}
+          MS_BENCH_AGENT_IMAGE: microswarm-agent:baseline
+          MS_BENCH_AGENT_BINARY: /tmp/microswarm-benchmark-baseline/target/x86_64-unknown-linux-musl/release/microswarm-agent
+          MS_BENCH_OUTPUT: ${{ github.workspace }}/benchmark-baseline.json
+        run: cargo test --locked --release -p ms-bench --features measure --test performance collect_phase9_performance_report -- --exact --nocapture
+      - name: Measure current commit
+        env:
+          MS_REQUIRE_RUNTIME: "1"
+          MS_TEST_RUNTIME: docker
+          MS_TEST_AGENT_IMAGE: microswarm-agent:current
+          MS_TEST_SUPERVISORD: ${{ github.workspace }}/target/release/microswarmd
+          MS_BENCH_RUNNER: ubuntu-latest
+          MS_BENCH_REVISION: ${{ github.sha }}
+          MS_BENCH_AGENT_IMAGE: microswarm-agent:current
+          MS_BENCH_AGENT_BINARY: ${{ github.workspace }}/target/x86_64-unknown-linux-musl/release/microswarm-agent
+          MS_BENCH_OUTPUT: ${{ github.workspace }}/benchmark-current.json
+        run: cargo test --locked --release -p ms-bench --features measure --test performance collect_phase9_performance_report -- --exact --nocapture
+      - name: Fail on performance regression above 20 percent
+        run: target/release/ms-bench compare benchmark-baseline.json benchmark-current.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: microswarm-performance-${{ github.sha }}
+          path: |
+            benchmark-baseline.json
+            benchmark-current.json
+          if-no-files-found: ignore
