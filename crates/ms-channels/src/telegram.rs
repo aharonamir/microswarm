@@ -3,6 +3,7 @@ use ms_proto::{InboundKind, InboundMessage};
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
+#[derive(Clone)]
 pub struct TelegramAdapter {
     token: String,
     api_base: String,
@@ -134,7 +135,10 @@ impl ChannelAdapter for TelegramAdapter {
 }
 
 pub async fn run(home: PathBuf, socket: PathBuf, credential: String, api_base: String) {
-    let mut offset = None;
+    let offset_path = home.join(format!("telegram-offset-{credential}"));
+    let mut offset = std::fs::read_to_string(&offset_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<i64>().ok());
     let mut missing_credential_reported = false;
     loop {
         let token = match read_credential(&home, &credential) {
@@ -159,12 +163,19 @@ pub async fn run(home: PathBuf, socket: PathBuf, credential: String, api_base: S
                     continue;
                 }
                 for update in updates {
-                    if let Some(update_id) = update.get("update_id").and_then(Value::as_i64) {
-                        offset = Some(update_id + 1);
-                    }
+                    let next_offset = update
+                        .get("update_id")
+                        .and_then(Value::as_i64)
+                        .map(|id| id + 1);
                     let inbound = match adapter.parse_inbound(&update) {
                         Ok(Some(inbound)) => inbound,
-                        Ok(None) => continue,
+                        Ok(None) => {
+                            if let Some(next) = next_offset {
+                                persist_offset(&offset_path, next);
+                                offset = Some(next);
+                            }
+                            continue;
+                        }
                         Err(error) => {
                             eprintln!("Telegram update was rejected: {error}");
                             continue;
@@ -185,8 +196,26 @@ pub async fn run(home: PathBuf, socket: PathBuf, credential: String, api_base: S
                             if let Err(error) = adapter.send_message(&inbound.thread_id, reply).await {
                                 eprintln!("Telegram reply delivery failed: {error}");
                             }
+                            if response["pending"] == true
+                                && let (Some(session_id), Some(after_id)) = (response["session_id"].as_str(), response["after_id"].as_i64()) {
+                                    let adapter = adapter.clone();
+                                    let socket = socket.clone();
+                                    let thread_id = inbound.thread_id.clone();
+                                    let session_id = session_id.to_owned();
+                                    tokio::spawn(async move {
+                                        match supervisor_rpc(&socket, json!({"op":"wait","session_id":session_id,"after_id":after_id})).await {
+                                            Ok(reply) => if let Some(text) = reply["text"].as_str()
+                                                && let Err(error) = adapter.send_message(&thread_id, text).await { eprintln!("Telegram final reply delivery failed: {error}"); },
+                                            Err(error) => eprintln!("Telegram pending reply failed: {error}"),
+                                        }
+                                    });
+                            }
                         }
                         Err(error) => eprintln!("Telegram message routing failed: {error}"),
+                    }
+                    if let Some(next) = next_offset {
+                        persist_offset(&offset_path, next);
+                        offset = Some(next);
                     }
                 }
             }
@@ -195,6 +224,21 @@ pub async fn run(home: PathBuf, socket: PathBuf, credential: String, api_base: S
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
         }
+    }
+}
+
+fn persist_offset(path: &std::path::Path, offset: i64) {
+    let temporary = path.with_extension("tmp");
+    let result = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&temporary)?;
+        writeln!(file, "{offset}")?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, path)?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        eprintln!("Telegram update offset was not saved: {error}");
     }
 }
 

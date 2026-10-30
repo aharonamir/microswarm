@@ -5,7 +5,12 @@ use hyper::body::{Bytes, Incoming};
 use hyper_util::rt::TokioIo;
 use ms_proto::{InboundKind, InboundMessage};
 use serde_json::{Value, json};
-use std::{path::PathBuf, time::Duration};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::net::TcpListener;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -73,21 +78,30 @@ pub async fn run(home: PathBuf, socket: PathBuf, listen: String, credential: Opt
             return;
         }
     };
+    let pending = Arc::new(Mutex::new(HashMap::<String, (String, i64)>::new()));
     loop {
         match listener.accept().await {
             Ok((stream, _)) => {
                 let home = home.clone();
                 let socket = socket.clone();
                 let credential = credential.clone();
+                let pending = Arc::clone(&pending);
                 tokio::spawn(async move {
                     let service = hyper::service::service_fn(move |request| {
                         let home = home.clone();
                         let socket = socket.clone();
                         let credential = credential.clone();
+                        let pending = Arc::clone(&pending);
                         async move {
                             Ok::<_, std::convert::Infallible>(
-                                handle_request(&home, &socket, credential.as_deref(), request)
-                                    .await,
+                                handle_request(
+                                    &home,
+                                    &socket,
+                                    credential.as_deref(),
+                                    &pending,
+                                    request,
+                                )
+                                .await,
                             )
                         }
                     });
@@ -111,6 +125,7 @@ async fn handle_request(
     home: &std::path::Path,
     socket: &std::path::Path,
     credential: Option<&str>,
+    pending: &Mutex<HashMap<String, (String, i64)>>,
     request: Request<Incoming>,
 ) -> Response<Full<Bytes>> {
     if request.method() != Method::POST || request.uri().path() != "/messages" {
@@ -160,7 +175,20 @@ async fn handle_request(
     };
     let text = inbound.message.body["text"].as_str().unwrap_or_default();
     match supervisor_rpc(socket, json!({"op":"channel_message","channel":"webhook","thread_id":inbound.thread_id,"text":text})).await {
-        Ok(result) => {
+        Ok(mut result) => {
+            if result["pending"] == true {
+                if let (Some(session), Some(after)) = (result["session_id"].as_str(), result["after_id"].as_i64()) {
+                    pending.lock().expect("pending lock").insert(inbound.thread_id.clone(), (session.to_owned(), after));
+                }
+            } else if text.starts_with("/approve ") || text.starts_with("/deny ") {
+                let wait = pending.lock().expect("pending lock").remove(&inbound.thread_id);
+                if let Some((session_id, after_id)) = wait {
+                    match supervisor_rpc(socket, json!({"op":"wait","session_id":session_id,"after_id":after_id})).await {
+                        Ok(reply) => result = reply,
+                        Err(error) => return response(StatusCode::SERVICE_UNAVAILABLE, json!({"error":error})),
+                    }
+                }
+            }
             let reply = result["prompt"].as_str().or_else(|| result["text"].as_str()).unwrap_or("The message was processed.");
             let mut body = WebhookAdapter::new().reply_payload(&inbound.thread_id, reply);
             if let Some(pending) = result.get("pending") { body["pending"] = pending.clone(); }
