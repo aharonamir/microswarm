@@ -5,7 +5,7 @@ mod fake_model;
 
 use fake_model::FakeModelServer;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Output, Stdio};
@@ -47,7 +47,7 @@ impl IntegrationHarness {
         let socket = self.home.join("supervisor.sock");
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
+            if supervisor_ready(&socket) {
                 break;
             }
             if let Some(status) = child.try_wait()? {
@@ -133,7 +133,7 @@ impl IntegrationHarness {
             .spawn()?;
         let socket = home.join("supervisor.sock");
         let deadline = Instant::now() + Duration::from_secs(5);
-        while !socket.exists() {
+        while !supervisor_ready(&socket) {
             if let Some(status) = supervisor.try_wait()? {
                 let mut stderr = String::new();
                 if let Some(mut pipe) = supervisor.stderr.take() {
@@ -293,6 +293,21 @@ impl IntegrationHarness {
         }
         Ok(String::from_utf8(output.stdout)?.trim() == "true")
     }
+}
+
+fn supervisor_ready(socket: &Path) -> bool {
+    let Ok(mut stream) = std::os::unix::net::UnixStream::connect(socket) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(50)));
+    if writeln!(stream, r#"{{"op":"__ready_probe"}}"#).is_err() {
+        return false;
+    }
+    let mut response = String::new();
+    std::io::BufReader::new(stream)
+        .read_line(&mut response)
+        .is_ok()
+        && response.contains("unknown supervisor request")
 }
 
 fn runtime_unavailable(reason: &str, required: bool) {
