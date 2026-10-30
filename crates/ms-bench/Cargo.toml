@@ -5,6 +5,19 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+measure = []
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+
+[[test]]
+name = "performance"
+path = "tests/performance.rs"
+required-features = ["measure"]
+
 [[bin]]
 name = "ms-bench"
 path = "src/main.rs"

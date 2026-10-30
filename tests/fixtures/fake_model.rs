@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -14,6 +14,7 @@ pub struct FakeModelServer {
     address: SocketAddr,
     shutdown: Arc<AtomicBool>,
     requests: Arc<AtomicUsize>,
+    elapsed_ns: Arc<AtomicU64>,
     transient_failures: Arc<AtomicUsize>,
     thread: Option<JoinHandle<()>>,
 }
@@ -28,18 +29,32 @@ impl FakeModelServer {
     }
 
     pub fn start_for_swarm() -> std::io::Result<Self> {
-        Self::start_with_options(false, true)
+        Self::start_with_options_and_benchmark(false, true, false)
+    }
+
+    pub fn start_for_benchmark() -> std::io::Result<Self> {
+        Self::start_with_options_and_benchmark(false, true, true)
     }
 
     fn start_with_options(approval_tool: bool, delegation_tools: bool) -> std::io::Result<Self> {
+        Self::start_with_options_and_benchmark(approval_tool, delegation_tools, false)
+    }
+
+    fn start_with_options_and_benchmark(
+        approval_tool: bool,
+        delegation_tools: bool,
+        benchmark_fanout: bool,
+    ) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
         let shutdown = Arc::new(AtomicBool::new(false));
         let thread_shutdown = Arc::clone(&shutdown);
         let requests = Arc::new(AtomicUsize::new(0));
+        let elapsed_ns = Arc::new(AtomicU64::new(0));
         let transient_failures = Arc::new(AtomicUsize::new(0));
         let thread_requests = Arc::clone(&requests);
+        let thread_elapsed_ns = Arc::clone(&elapsed_ns);
         let thread_transient_failures = Arc::clone(&transient_failures);
         let thread = thread::spawn(move || {
             while !thread_shutdown.load(Ordering::Acquire) {
@@ -49,7 +64,9 @@ impl FakeModelServer {
                             stream,
                             approval_tool,
                             delegation_tools,
+                            benchmark_fanout,
                             &thread_requests,
+                            &thread_elapsed_ns,
                             &thread_transient_failures,
                         );
                     }
@@ -64,6 +81,7 @@ impl FakeModelServer {
             address,
             shutdown,
             requests,
+            elapsed_ns,
             transient_failures,
             thread: Some(thread),
         })
@@ -75,6 +93,10 @@ impl FakeModelServer {
 
     pub fn request_count(&self) -> usize {
         self.requests.load(Ordering::Relaxed)
+    }
+
+    pub fn elapsed_model_time(&self) -> Duration {
+        Duration::from_nanos(self.elapsed_ns.load(Ordering::Relaxed))
     }
 }
 
@@ -92,7 +114,9 @@ fn respond(
     stream: TcpStream,
     approval_tool: bool,
     delegation_tools: bool,
+    benchmark_fanout: bool,
     requests: &AtomicUsize,
+    elapsed_ns: &AtomicU64,
     transient_failures: &AtomicUsize,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream);
@@ -121,7 +145,10 @@ fn respond(
     {
         return Ok(());
     }
-    let body = if delegation_tools
+    let started = std::time::Instant::now();
+    let body = if benchmark_fanout && delegation_tools {
+        benchmark_response(&request_body)
+    } else if delegation_tools
         && request_body.contains("\"hang\"")
         && !request_body.contains("microswarm-core/")
     {
@@ -134,9 +161,15 @@ fn respond(
         && !request_body.contains("\"role\":\"tool\"")
     {
         TOOL_RESPONSE.to_owned()
+    } else if request_body.contains("single-benchmark-turn") {
+        response_with_text("single turn complete")
     } else {
         RESPONSE.to_owned()
     };
+    elapsed_ns.fetch_add(
+        started.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+        Ordering::Relaxed,
+    );
 
     let stream = reader.get_mut();
     write!(
@@ -146,6 +179,87 @@ fn respond(
         body
     )?;
     stream.flush()
+}
+
+fn benchmark_response(body: &str) -> String {
+    let Ok(request) = serde_json::from_str::<serde_json::Value>(body) else {
+        return RESPONSE.into();
+    };
+    let messages = request["messages"].as_array().cloned().unwrap_or_default();
+    let user_text = messages
+        .iter()
+        .filter(|message| message["role"] == "user")
+        .filter_map(|message| message["content"].as_str())
+        .next_back()
+        .unwrap_or("")
+        .to_lowercase();
+    let names = request["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tool| {
+            tool.pointer("/function/name")
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect::<Vec<_>>();
+    if !user_text.contains("benchmark-four-members")
+        && !user_text.contains("benchmark-prepare-four-members")
+    {
+        return delegation_response(body);
+    }
+    if !names.contains(&"microswarm-core/spawn_member") {
+        return delegation_response(body);
+    }
+    let called = |name: &str| {
+        messages
+            .iter()
+            .flat_map(|message| message["tool_calls"].as_array().into_iter().flatten())
+            .filter(|call| {
+                call.pointer("/function/name")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(name)
+            })
+            .count()
+    };
+    let spawned = called("microswarm-core/spawn_member");
+    if spawned < 4 {
+        return spawn_call(
+            "adhoc",
+            "benchmark member prep task",
+            serde_json::json!({
+                "mounts":[{"path":"/work","mode":"ro"}],
+                "credentials":["fixture-model-key"],
+                "tools":[]
+            }),
+        );
+    }
+    if user_text.contains("benchmark-prepare-four-members") {
+        return response_with_text("four members ready");
+    }
+    let member_ids = messages
+        .iter()
+        .filter(|message| message["role"] == "tool")
+        .filter_map(|message| message["content"].as_str())
+        .filter_map(|content| serde_json::from_str::<serde_json::Value>(content).ok())
+        .filter_map(|result| result["member_id"].as_str().map(str::to_owned))
+        .collect::<Vec<_>>();
+    let sent = called("microswarm-core/send_to_member");
+    if sent < 4 {
+        return member_ids.get(sent).map_or_else(
+            || RESPONSE.into(),
+            |member_id| {
+                tool_call(
+                    "send_to_member",
+                    serde_json::json!({
+                        "member_id":member_id,
+                        "text":"benchmark task",
+                        "timeout_s":30
+                    }),
+                )
+            },
+        );
+    }
+    response_with_text("four member benchmark complete")
 }
 
 fn delegation_response(body: &str) -> String {

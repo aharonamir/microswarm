@@ -1224,6 +1224,11 @@ dependencies = [
 [[package]]
 name = "ms-bench"
 version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "ms-channels"

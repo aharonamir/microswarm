@@ -38,7 +38,7 @@ impl IntegrationHarness {
             child.kill()?;
             child.wait()?;
         }
-        let mut child = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
+        let mut child = Command::new(supervisor_binary())
             .env("MS_HOME", &self.home)
             .env("MS_MODEL_BASE_URL", self.model.base_url())
             .stdout(Stdio::null())
@@ -72,14 +72,22 @@ impl IntegrationHarness {
     }
 
     pub fn start_swarm_or_skip() -> Option<Self> {
-        Self::start_or_skip_with_options(false, true)
+        Self::start_or_skip_with_options(false, true, false)
+    }
+
+    pub fn start_benchmark_swarm_or_skip() -> Option<Self> {
+        Self::start_or_skip_with_options(false, true, true)
     }
 
     fn start_or_skip_with_approval_tool(approval_tool: bool) -> Option<Self> {
-        Self::start_or_skip_with_options(approval_tool, false)
+        Self::start_or_skip_with_options(approval_tool, false, false)
     }
 
-    fn start_or_skip_with_options(approval_tool: bool, swarm: bool) -> Option<Self> {
+    fn start_or_skip_with_options(
+        approval_tool: bool,
+        swarm: bool,
+        benchmark_fanout: bool,
+    ) -> Option<Self> {
         if let Err(error) = runtime_prerequisite_error() {
             runtime_unavailable(
                 &error,
@@ -88,7 +96,7 @@ impl IntegrationHarness {
             return None;
         }
         Some(
-            Self::start_with_options(approval_tool, swarm)
+            Self::start_with_options(approval_tool, swarm, benchmark_fanout)
                 .expect("integration harness should start when a runtime is reachable"),
         )
     }
@@ -102,19 +110,22 @@ impl IntegrationHarness {
     }
 
     fn start_with_approval_tool(approval_tool: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::start_with_options(approval_tool, false)
+        Self::start_with_options(approval_tool, false, false)
     }
 
     fn start_with_options(
         approval_tool: bool,
         swarm: bool,
+        benchmark_fanout: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
         fs::create_dir_all(home.join("work/target"))?;
         create_synthetic_model_credential(&home)?;
-        let model = if swarm {
+        let model = if benchmark_fanout {
+            FakeModelServer::start_for_benchmark()?
+        } else if swarm {
             FakeModelServer::start_for_swarm()?
         } else {
             FakeModelServer::start_with_approval_tool(approval_tool)?
@@ -125,7 +136,13 @@ impl IntegrationHarness {
         verify_agent_image(runtime, &agent_image)
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::NotFound, error))?;
         write_test_config(&home, &model, runtime, &agent_image, approval_tool, swarm)?;
-        let mut supervisor = Command::new(env!("CARGO_BIN_EXE_microswarmd"))
+        if benchmark_fanout {
+            fs::write(
+                home.join("config/policy.toml"),
+                "[spawn]\ndefault = \"allow\"\n",
+            )?;
+        }
+        let mut supervisor = Command::new(supervisor_binary())
             .env("MS_HOME", &home)
             .env("MS_MODEL_BASE_URL", model.base_url())
             .stdout(Stdio::null())
@@ -603,6 +620,9 @@ impl Drop for InteractiveChat {
 }
 
 fn cli_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Some(path) = std::env::var_os("MS_TEST_CLI") {
+        return Ok(PathBuf::from(path));
+    }
     let current = std::env::current_exe()?;
     let debug_dir = current
         .parent()
@@ -617,6 +637,13 @@ fn cli_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
         return Err(format!("CLI executable is missing: {}", executable.display()).into());
     }
     Ok(executable)
+}
+
+fn supervisor_binary() -> PathBuf {
+    std::env::var_os("MS_TEST_SUPERVISORD")
+        .map(PathBuf::from)
+        .or_else(|| option_env!("CARGO_BIN_EXE_microswarmd").map(PathBuf::from))
+        .expect("Cargo must build microswarmd or MS_TEST_SUPERVISORD must be set")
 }
 
 #[test]
