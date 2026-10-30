@@ -154,6 +154,26 @@ name = "us3-lead-notice"
 path = "../../tests/integration/us3_lead_notice.rs"
 
 [[test]]
+name = "us4-adopt"
+path = "../../tests/integration/us4_adopt.rs"
+
+[[test]]
+name = "us4-orphans"
+path = "../../tests/integration/us4_orphans.rs"
+
+[[test]]
+name = "us4-approvals"
+path = "../../tests/integration/us4_approvals.rs"
+
+[[test]]
+name = "us4-deadlines"
+path = "../../tests/integration/us4_deadlines.rs"
+
+[[test]]
+name = "us4-missing-container"
+path = "../../tests/integration/us4_missing_container.rs"
+
+[[test]]
 name = "us2-dismiss"
 path = "../../tests/integration/us2_dismiss.rs"
 

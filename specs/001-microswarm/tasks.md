@@ -173,11 +173,11 @@
 
 ### Tests first
 
-- [ ] T076 [P] [US4] Integration: `kill -9` with lead + member running ⇒ both adopted, 0 orphans — `tests/integration/us4_adopt.rs`
-- [ ] T077 [P] [US4] Integration: container with unknown/closed session label ⇒ stopped, `container.orphan_stopped` — `tests/integration/us4_orphans.rs`
-- [ ] T078 [P] [US4] Integration: pending approval ⇒ `expired` + re-issued with new code; old code rejected — `tests/integration/us4_approvals.rs`
-- [ ] T079 [P] [US4] Integration: deadline armed before crash fires at original time after restart — `tests/integration/us4_deadlines.rs`
-- [ ] T080 [P] [US4] Integration: session active in db with no container ⇒ treated as transient crash — `tests/integration/us4_missing_container.rs`
+- [x] T076 [P] [US4] Integration: `kill -9` with lead + member running ⇒ both adopted, 0 orphans — `tests/integration/us4_adopt.rs`
+- [x] T077 [P] [US4] Integration: container with unknown/closed session label ⇒ stopped, `container.orphan_stopped` — `tests/integration/us4_orphans.rs`
+- [x] T078 [P] [US4] Integration: pending approval ⇒ `expired` + re-issued with new code; old code rejected — `tests/integration/us4_approvals.rs`
+- [x] T079 [P] [US4] Integration: deadline armed before crash fires at original time after restart — `tests/integration/us4_deadlines.rs`
+- [x] T080 [P] [US4] Integration: session active in db with no container ⇒ treated as transient crash — `tests/integration/us4_missing_container.rs`
 
 ### Implementation
 
