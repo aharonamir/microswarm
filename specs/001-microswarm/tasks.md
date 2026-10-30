@@ -219,12 +219,19 @@
 
 ## Phase 9 — Polish & cross-cutting
 
-- [ ] T095 [P] Benchmarks for SC-001…SC-004; CI job on reference runner fails on regression > 20% — `crates/ms-bench/`
+- [x] T095 [P] Benchmarks for SC-001…SC-004; CI job on reference runner fails on regression > 20% — `crates/ms-bench/`
 - [x] T096 [P] Retention: delete session dirs older than `retention_days` — `crates/ms-runtime/src/retention.rs`, started by `crates/ms-supervisor/src/service.rs`
 - [x] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
 - [x] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
 - [ ] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`
 - [ ] T100 Run quickstart §0–§6 on a clean host; fix drift — `specs/001-microswarm/quickstart.md`
+
+T095 implementation evidence (2026-10-30): the benchmark ran locally with three
+cold-start samples and one warm swarm sample on Docker 29.1.3. This reduced local
+sample is diagnostic, not the `ubuntu-latest` reference baseline: SC-001 p50 was
+238.56 ms and SC-004 five-member overhead was 882.35%, both above their targets.
+The CI performance job measures the base and current revisions on the same
+`ubuntu-latest` runner and fails if any metric regresses by more than 20%.
 
 ---
 
