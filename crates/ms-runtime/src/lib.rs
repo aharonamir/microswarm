@@ -12,6 +12,7 @@ use std::{
 pub mod events;
 pub mod lifecycle;
 pub mod recovery;
+pub mod retention;
 pub mod router;
 
 pub trait CredentialProvider: Send + Sync + 'static {
