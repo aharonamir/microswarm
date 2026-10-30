@@ -5,7 +5,6 @@ use jsonschema::validator_for;
 use serde_json::Value;
 
 #[test]
-#[ignore = "red: T093 — trace JSON command not implemented"]
 fn trace_json_output_validates_against_event_contract() {
     let home = common::fixture();
     let output = common::trace(&home, &["--json"]);

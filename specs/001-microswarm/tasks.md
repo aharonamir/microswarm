@@ -209,9 +209,9 @@
 
 ## Phase 8 — US6: Read the swarm's trajectory (P3)
 
-- [ ] T092 [P] [US6] Snapshot test: `trace` text tree for a recorded two-member session — `crates/ms-cli/tests/trace_snapshot.rs`
-- [ ] T093 [P] [US6] Contract test: `trace --json` validates against `events.schema.json` — `tests/contract/trace_json.rs`
-- [ ] T094 [US6] `microswarm trace` text + `--json` + `--events` filter — `crates/ms-cli/src/trace.rs`
+- [x] T092 [P] [US6] Snapshot test: `trace` text tree for a recorded two-member session — `crates/ms-cli/tests/trace_snapshot.rs`
+- [x] T093 [P] [US6] Contract test: `trace --json` validates against `events.schema.json` — `tests/contract/trace_json.rs`
+- [x] T094 [US6] `microswarm trace` text + `--json` + `--events` filter — `crates/ms-cli/src/trace.rs`
 
 **Checkpoint:** **v0.3 shippable** (all stories).
 

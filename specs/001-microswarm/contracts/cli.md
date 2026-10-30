@@ -40,7 +40,7 @@ Exit codes: `0` success, `1` usage error, `2` not found, `3` supervisor unreacha
 └─ turn 2  reply → channel
 ```
 
-`--json` emits an array of events conforming to `events.schema.json`, ordered by `(ts_mono, source, seq)`.
+`--json` emits an array of events conforming to `events.schema.json`, ordered by `(ts, source, seq)`. The wall clock `ts` is shared across the agent and supervisor; `ts_mono` is local to each process.
 
 ## `microswarm.toml`
 

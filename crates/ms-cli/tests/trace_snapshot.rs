@@ -1,7 +1,6 @@
 mod common;
 
 #[test]
-#[ignore = "red: T092 — trace command not implemented"]
 fn trace_renders_two_member_session_tree_snapshot() {
     let home = common::fixture();
     let output = common::trace(&home, &[]);
@@ -23,7 +22,6 @@ fn trace_renders_two_member_session_tree_snapshot() {
 }
 
 #[test]
-#[ignore = "red: T094 — trace event filtering not implemented"]
 fn events_filter_keeps_only_selected_event_types() {
     let home = common::fixture();
     let output = common::trace(&home, &["--events", "tool.call"]);

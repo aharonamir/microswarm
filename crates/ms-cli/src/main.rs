@@ -9,6 +9,7 @@ use std::{
 };
 
 mod tools;
+mod trace;
 
 fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
@@ -34,6 +35,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "init" => init(&home),
         "doctor" => doctor(&home),
         "sessions" => sessions(&home),
+        "trace" => trace::run(&home, &args[1..]),
         "skills" => skills(&home, &args[1..]),
         "tools" => tools::run(&home, &args[1..]),
         "creds" => credentials(&home, &args[1..]),
@@ -49,7 +51,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|sessions|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
