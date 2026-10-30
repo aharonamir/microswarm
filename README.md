@@ -1,5 +1,9 @@
 # MicroSwarm — Spec Kit bundle
 
+MicroSwarm runs isolated model agents behind a host supervisor. See the
+[operator guides](docs/README.md) for installation, configuration, team skills,
+and security boundaries.
+
 ```
 .specify/memory/constitution.md      principles + Constitution Check
 specs/001-microswarm/
