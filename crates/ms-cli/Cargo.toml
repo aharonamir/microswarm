@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 ms-store = { path = "../ms-store" }
 ms-supervisor = { path = "../ms-supervisor" }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 http = "1.3.1"
 serde_json = "1.0.145"
 toml = "1.1.6"
@@ -20,3 +21,14 @@ path = "src/main.rs"
 [[test]]
 name = "commands"
 path = "tests/commands.rs"
+
+[[test]]
+name = "trace_snapshot"
+path = "tests/trace_snapshot.rs"
+
+[[test]]
+name = "trace_json"
+path = "../../tests/contract/trace_json.rs"
+
+[dev-dependencies]
+jsonschema = { version = "0.58.6", default-features = false }

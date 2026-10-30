@@ -1244,8 +1244,10 @@ name = "ms-cli"
 version = "0.1.0"
 dependencies = [
  "http",
+ "jsonschema",
  "ms-store",
  "ms-supervisor",
+ "rusqlite",
  "serde_json",
  "tokio",
  "toml",
