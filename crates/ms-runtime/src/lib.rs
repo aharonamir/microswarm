@@ -9,11 +9,74 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+pub mod credentials;
 pub mod events;
 pub mod lifecycle;
 pub mod recovery;
 pub mod retention;
 pub mod router;
+
+pub fn config_dir(home: &Path) -> PathBuf {
+    let nested = home.join("config");
+    if nested.join("microswarm.toml").is_file() {
+        nested
+    } else {
+        home.to_path_buf()
+    }
+}
+
+pub fn claim_session_busy(
+    store: &ms_store::SupervisorStore,
+    session_id: &str,
+    active_at: &str,
+) -> Result<(), String> {
+    let claimed = store.connection().execute(
+        "UPDATE sessions SET status='busy', last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
+        [session_id, active_at],
+    ).map_err(|error| error.to_string())?;
+    if claimed == 0 {
+        return Err("session is no longer ready to accept a message".into());
+    }
+    Ok(())
+}
+
+pub async fn wait_agent_ready(session: &mut ms_store::SessionConnections) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let ready: bool = session
+            .events()
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM events WHERE type='agent.ready')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if ready {
+            return Ok(());
+        }
+        let inbound: i64 = session
+            .inbound()
+            .query_row("SELECT COUNT(*) FROM inbound", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        let events: String = session
+            .events()
+            .query_row(
+                "SELECT COALESCE(group_concat(type, ','),'') FROM events",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if events.contains("agent.exit") {
+            return Err(format!(
+                "agent exited before ready (inbound rows={inbound}, events={events})"
+            ));
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("agent did not become ready".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
 
 pub trait CredentialProvider: Send + Sync + 'static {
     fn resolve(&self, name: &str) -> Option<String>;

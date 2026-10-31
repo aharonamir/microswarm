@@ -1,10 +1,7 @@
 //! Persisted delegation deadlines, processed independently of a live chat request.
-use crate::{
-    config::load_config_dir,
-    runtime::ContainerRuntime,
-    service::{config_dir, utc_now},
-};
+use crate::{config::load_config_dir, runtime::ContainerRuntime, service::utc_now};
 use ms_proto::InboundKind;
+use ms_runtime::config_dir;
 use ms_store::{SupervisorStore, open_session_dir};
 use serde_json::json;
 use std::{path::Path, time::Duration};

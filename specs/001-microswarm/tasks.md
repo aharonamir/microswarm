@@ -240,13 +240,15 @@ the resulting four-event trace validated against `events.schema.json`. Runtime
 integration tests passed for US1 approval, US2 quickstart and member approval,
 US3 safety, US4 adoption/reissued approvals, and US5 stdio tool registration.
 The US5 quickstart now uses the shell available in the scratch agent image rather
-than assuming Python is installed. A real-model US2 run found a remaining
-approval-ordering race: while a member's startup task awaits approval, the lead
-can send another task before the member has completed the pending tool call. The
-member then processes that task against incomplete tool-call history and exits
-with the provider's HTTP 400. Quickstart §§3–4 are covered by runtime integration
-tests, not manual real-model runs. T100 remains open until the approval-ordering
-race is fixed and §§0–6 complete on a clean host.
+than assuming Python is installed. A real-model US2 run exposed an
+approval-ordering race. The member task is now held through approval, its
+outbound cursor and reply are routed before accepting another task, and startup
+results are deferred until the member replies. A Docker regression verifies that
+a second send does not enter the unfinished member turn. In a fresh DeepSeek
+home, the spawn and member `fs.list` approvals completed and the lead answered
+from the member's `["auth.rs", "lib.rs"]` result. Quickstart §§3–4 are covered by
+runtime integration tests, not manual real-model runs. T100 remains open until
+§§0–6 complete on a clean host.
 
 ---
 

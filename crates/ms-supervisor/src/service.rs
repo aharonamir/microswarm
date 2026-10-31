@@ -5,17 +5,17 @@ use crate::{
     scope::{build_lead_scope, install_lead_scope},
 };
 use ms_proto::{DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEventType};
+use ms_runtime::claim_session_busy;
 pub(crate) use ms_runtime::events::emit_supervisor_event;
-pub(crate) use ms_runtime::{new_id, utc_now, utc_now_precise};
+pub(crate) use ms_runtime::{config_dir, new_id, utc_now, utc_now_precise};
 use ms_store::{
-    DelegationRecord, SessionConnections, SessionLifecycleUpdate, SessionRecord, SupervisorStore,
-    open_session_dir,
+    DelegationRecord, SessionLifecycleUpdate, SessionRecord, SupervisorStore, open_session_dir,
 };
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use std::{
-    fs::{self, OpenOptions},
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
@@ -310,8 +310,8 @@ async fn graceful_stop_session(
 async fn dispatch(home: &Path, request: &Value) -> Value {
     let result = match request.get("op").and_then(Value::as_str) {
         Some("skills_install") => install_skill(home, request),
-        Some("creds_set") => store_credential(home, request),
-        Some("creds_list") => list_credentials(home),
+        Some("creds_set") => ms_runtime::credentials::store_credential(home, request),
+        Some("creds_list") => ms_runtime::credentials::list_credentials(home),
         Some("approve") | Some("deny") => resolve_approval(home, request).await,
         Some("chat") => chat_message(home, request).await,
         Some("channel_message") => chat_message(home, request).await,
@@ -355,9 +355,10 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
             &json!({"op":if approve {"approve"} else {"deny"},"code":code.trim()}),
         )
         .await?;
-        return Ok(
-            json!({"text":format!("Approval {}.", resolved["decision"].as_str().unwrap_or("resolved"))}),
-        );
+        return Ok(json!({
+            "text":format!("Approval {}.", resolved["decision"].as_str().unwrap_or("resolved")),
+            "pending":resolved["pending"], "prompt":resolved["prompt"]
+        }));
     }
     let config_dir = if home.join("config/microswarm.toml").is_file() {
         home.join("config")
@@ -478,24 +479,6 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-}
-
-fn claim_session_busy(
-    store: &SupervisorStore,
-    session_id: &str,
-    active_at: &str,
-) -> Result<(), String> {
-    let claimed = store
-        .connection()
-        .execute(
-            "UPDATE sessions SET status='busy', last_active_at=?2 WHERE id=?1 AND status IN ('ready','busy')",
-            [session_id, active_at],
-        )
-        .map_err(|error| error.to_string())?;
-    if claimed == 0 {
-        return Err("session is no longer ready to accept a message".into());
-    }
-    Ok(())
 }
 
 async fn create_lead(
@@ -627,7 +610,7 @@ async fn create_lead(
             close_reason: None,
         })
         .map_err(|error| error.to_string())?;
-    if let Err(error) = wait_agent_ready(&mut session).await {
+    if let Err(error) = ms_runtime::wait_agent_ready(&mut session).await {
         let container_id = store
             .session_container_id(&id)
             .map_err(|error| error.to_string())?
@@ -898,7 +881,11 @@ async fn handle_delegation_request(
             store
                 .update_delegation_status(
                     &delegation_id,
-                    "active",
+                    if result.prompt.is_some() {
+                        "waiting_reply"
+                    } else {
+                        "active"
+                    },
                     Some(&member_id),
                     None,
                     &utc_now(),
@@ -923,7 +910,9 @@ async fn handle_delegation_request(
                     json!({"delegation_id":delegation_id,"member_id":member_id,"narrowed":scope.narrowed}),
                 )?;
             }
-            open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
+            if startup.prompt.is_none() {
+                open_session_dir(lead_session_dir).map_err(|error| error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
+            }
         }
         Err(error) => {
             store
@@ -1149,7 +1138,7 @@ async fn create_member(
             close_reason: None,
         })
         .map_err(|error| error.to_string())?;
-    wait_agent_ready(&mut session).await?;
+    ms_runtime::wait_agent_ready(&mut session).await?;
     let deadline = Instant::now() + Duration::from_secs(timeout_s);
     let (mut after_id, events_last_seq) =
         crate::router::tail_cursor(store, member_id).map_err(|error| error.to_string())?;
@@ -1269,6 +1258,21 @@ async fn handle_send_to_member(
         .delegation_id
         .clone()
         .ok_or("member has no delegation record")?;
+    let status: String = store
+        .connection()
+        .query_row(
+            "SELECT status FROM delegations WHERE id=?1",
+            [&delegation_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if status == "waiting_reply" {
+        open_session_dir(lead_session_dir).map_err(|error| error.to_string())?
+            .append_inbound(&InboundKind::DelegationResult,
+                &json!({"status":"member_busy","member_id":member_id,"delegation_id":delegation_id}))
+            .map_err(|error| error.to_string())?;
+        return Ok(None);
+    }
     let member_session = open_session_dir(home.join("sessions").join(member_id))
         .map_err(|error| error.to_string())?;
     let current_outbound: i64 = member_session
@@ -1463,44 +1467,6 @@ async fn handle_dismiss_member(
     Ok(())
 }
 
-async fn wait_agent_ready(session: &mut SessionConnections) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        let ready: bool = session
-            .events()
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM events WHERE type='agent.ready')",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
-        if ready {
-            return Ok(());
-        }
-        let inbound: i64 = session
-            .inbound()
-            .query_row("SELECT COUNT(*) FROM inbound", [], |row| row.get(0))
-            .map_err(|error| error.to_string())?;
-        let events: String = session
-            .events()
-            .query_row(
-                "SELECT COALESCE(group_concat(type, ','),'') FROM events",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|error| error.to_string())?;
-        if events.contains("agent.exit") {
-            return Err(format!(
-                "agent exited before ready (inbound rows={inbound}, events={events})"
-            ));
-        }
-        if Instant::now() >= deadline {
-            return Err("agent did not become ready".into());
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-}
-
 pub(super) fn runtime_for(config: &ConfigSet) -> Result<ContainerRuntime, String> {
     ContainerRuntime::connect(&config.microswarm.runtime.socket)
 }
@@ -1534,57 +1500,6 @@ pub(super) fn mcp_descriptors(config: &ConfigSet) -> Vec<Value> {
         "url":server.url,
         "credential":server.credential,
     })).collect()
-}
-
-fn store_credential(home: &Path, request: &Value) -> Result<Value, String> {
-    let name = request
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or("credential name is missing")?;
-    if name.is_empty()
-        || !name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
-    {
-        return Err("invalid credential name".into());
-    }
-    let value = request
-        .get("value")
-        .and_then(Value::as_str)
-        .ok_or("credential value is missing")?;
-    let directory = home.join("credentials");
-    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
-        .map_err(|error| error.to_string())?;
-    let path = directory.join(name);
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    file.set_permissions(fs::Permissions::from_mode(0o600))
-        .map_err(|error| error.to_string())?;
-    use std::io::Write;
-    file.write_all(value.as_bytes())
-        .map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())?;
-    Ok(json!({"ok":true}))
-}
-
-fn list_credentials(home: &Path) -> Result<Value, String> {
-    let directory = home.join("credentials");
-    if !directory.exists() {
-        return Ok(json!({"names":[]}));
-    }
-    let mut names = fs::read_dir(directory)
-        .map_err(|error| error.to_string())?
-        .filter_map(Result::ok)
-        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    names.sort();
-    Ok(json!({"names":names}))
 }
 
 async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String> {
@@ -1686,18 +1601,22 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
             .await
             {
                 Ok(startup) => {
+                    store
+                        .update_delegation_status(
+                            delegation_id,
+                            if startup.prompt.is_some() {
+                                "waiting_reply"
+                            } else {
+                                "active"
+                            },
+                            Some(member_id),
+                            None,
+                            &utc_now(),
+                        )
+                        .map_err(|error| error.to_string())?;
                     if startup.prompt.is_none() {
-                        store
-                            .update_delegation_status(
-                                delegation_id,
-                                "active",
-                                Some(member_id),
-                                None,
-                                &utc_now(),
-                            )
-                            .map_err(|error| error.to_string())?;
+                        session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
                     }
-                    session.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"spawned","member_id":member_id,"granted":scope,"narrowed":scope.narrowed,"initial_reply":startup.reply})).map_err(|error| error.to_string())?;
                     prompt_for_lead = startup.prompt;
                 }
                 Err(error) => {
@@ -1714,19 +1633,40 @@ async fn resolve_approval(home: &Path, request: &Value) -> Result<Value, String>
                 .await?;
         }
         return Ok(
-            json!({"ok":true,"approval_id":approval.id,"decision":decision,"prompt":prompt_for_lead}),
+            json!({"ok":true,"approval_id":approval.id,"decision":decision,"pending":prompt_for_lead.is_some(),"prompt":prompt_for_lead}),
         );
     }
     crate::approvals::resolve_by_code(&mut store, &session, code, approve)
         .map_err(|error| error.to_string())?;
+    let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
     if let Some(container_id) = container_id {
-        let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
         runtime_for(&config)?
             .signal(&container_id, "SIGUSR1")
             .await?;
     }
+    let mut prompt = None;
+    if approval.requesting_session_id != approval.root_session_id {
+        let deadline =
+            Instant::now() + Duration::from_secs(config.microswarm.limits.approval_timeout_s + 90);
+        loop {
+            prompt =
+                route_waiting_member_replies(home, &config, &mut store, &approval.root_session_id)
+                    .await?;
+            if prompt.is_some() {
+                break;
+            }
+            let waiting: bool = store.connection().query_row(
+                "SELECT EXISTS(SELECT 1 FROM delegations WHERE member_id=?1 AND status='waiting_reply')",
+                [&approval.requesting_session_id], |row| row.get(0)
+            ).map_err(|error| error.to_string())?;
+            if !waiting || Instant::now() >= deadline {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
     Ok(
-        json!({"ok":true, "approval_id":approval.id, "decision":if approve {"approved"} else {"denied"}}),
+        json!({"ok":true, "approval_id":approval.id, "decision":if approve {"approved"} else {"denied"}, "pending":prompt.is_some(), "prompt":prompt}),
     )
 }
 
@@ -1752,7 +1692,13 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
         .1;
     let mut cursor = after_id;
     loop {
-        route_waiting_member_replies(home, &config, &mut store, session_id).await?;
+        if let Some(prompt) =
+            route_waiting_member_replies(home, &config, &mut store, session_id).await?
+        {
+            return Ok(
+                json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":cursor}),
+            );
+        }
         if crate::approvals::expire_due(&mut store, session_id, &session)
             .map_err(|error| error.to_string())?
             > 0
@@ -1866,49 +1812,113 @@ async fn route_waiting_member_replies(
     config: &ConfigSet,
     store: &mut SupervisorStore,
     lead_id: &str,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let waiting = {
-        let mut statement=store.connection().prepare("SELECT id,member_id,waiting_since FROM delegations WHERE lead_id=?1 AND status='waiting_reply' AND member_id IS NOT NULL").map_err(|e|e.to_string())?;
+        let mut statement=store.connection().prepare("SELECT id,member_id FROM delegations WHERE lead_id=?1 AND status='waiting_reply' AND member_id IS NOT NULL").map_err(|e|e.to_string())?;
         statement
             .query_map([lead_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                ))
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?
     };
     let mut routed = false;
-    for (delegation_id, member_id, since) in waiting {
-        let Some(since) = since else { continue };
-        let member =
-            open_session_dir(home.join("sessions").join(&member_id)).map_err(|e| e.to_string())?;
-        let reply=member.outbound().query_row(
-            "SELECT body FROM outbound WHERE kind='reply' AND created_at>?1 ORDER BY id DESC LIMIT 1",[since],|row|row.get::<_,String>(0)
-        );
-        let Ok(body) = reply else { continue };
-        let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-        let text = body.get("text").and_then(Value::as_str).unwrap_or("");
-        open_session_dir(home.join("sessions").join(lead_id))
-            .map_err(|e| e.to_string())?
-            .append_inbound(
-                &InboundKind::MemberReply,
-                &json!({"member_id":member_id,"delegation_id":delegation_id,"text":text}),
+    for (delegation_id, member_id) in waiting {
+        let role: String = store
+            .connection()
+            .query_row(
+                "SELECT role FROM sessions WHERE id=?1",
+                [&member_id],
+                |row| row.get(0),
             )
             .map_err(|e| e.to_string())?;
-        store.connection().execute("UPDATE delegations SET status='active',waiting_since=NULL,deadline_at=NULL,updated_at=?2 WHERE id=?1 AND status='waiting_reply'",[&delegation_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
-        emit_supervisor_event(
-            store,
-            &member_id,
-            lead_id,
-            "member",
-            SupervisorEventType::DelegationReply,
-            json!({"member_id":member_id,"delegation_id":delegation_id}),
-        )?;
-        routed = true;
+        let member =
+            open_session_dir(home.join("sessions").join(&member_id)).map_err(|e| e.to_string())?;
+        let task_id: i64 = member
+            .inbound()
+            .query_row(
+                "SELECT id FROM inbound WHERE kind='task' ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        let (mut cursor, events_seq) =
+            crate::router::tail_cursor(store, &member_id).map_err(|e| e.to_string())?;
+        for reply in member.outbound_after(cursor).map_err(|e| e.to_string())? {
+            let Some(id) = reply.id else { continue };
+            cursor = id;
+            crate::router::persist_tail_cursor(store, &member_id, cursor, events_seq)
+                .map_err(|e| e.to_string())?;
+            if reply.in_reply_to.is_none_or(|inbound| inbound < task_id) {
+                continue;
+            }
+            if reply.kind == OutboundKind::ApprovalRequest {
+                let binding: ms_proto::ApprovalBinding =
+                    serde_json::from_value(reply.body["binding"].clone())
+                        .map_err(|e| e.to_string())?;
+                let args = reply.body.get("args").cloned().unwrap_or(Value::Null);
+                let approval = crate::approvals::request_tool_approval(
+                    store,
+                    &member_id,
+                    lead_id,
+                    &binding,
+                    &args,
+                    Duration::from_secs(config.microswarm.limits.approval_timeout_s),
+                )
+                .map_err(|e| e.to_string())?;
+                let prompt = crate::approvals::render_prompt(
+                    config.microswarm.home.lang,
+                    &approval.code,
+                    &binding.server,
+                    &binding.tool,
+                    &args,
+                );
+                return Ok(Some(format!("[{role} {member_id}] {prompt}")));
+            }
+            if reply.kind != OutboundKind::Reply {
+                continue;
+            }
+            let text = reply.body.get("text").and_then(Value::as_str).unwrap_or("");
+            let lead =
+                open_session_dir(home.join("sessions").join(lead_id)).map_err(|e| e.to_string())?;
+            let spawned: bool = lead.inbound().query_row(
+                "SELECT EXISTS(SELECT 1 FROM inbound WHERE kind='delegation_result' AND json_extract(body,'$.delegation_id')=?1 AND json_extract(body,'$.status')='spawned')",
+                [&delegation_id], |row| row.get(0),
+            ).map_err(|e| e.to_string())?;
+            if spawned {
+                lead.append_inbound(
+                    &InboundKind::MemberReply,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"text":text}),
+                )
+                .map_err(|e| e.to_string())?;
+            } else {
+                let scope: String = store
+                    .connection()
+                    .query_row(
+                        "SELECT scope_json FROM sessions WHERE id=?1",
+                        [&member_id],
+                        |row| row.get(0),
+                    )
+                    .map_err(|e| e.to_string())?;
+                let granted: Value = serde_json::from_str(&scope).map_err(|e| e.to_string())?;
+                lead.append_inbound(&InboundKind::DelegationResult,
+                    &json!({"member_id":member_id,"delegation_id":delegation_id,"status":"spawned","initial_reply":text,"narrowed":granted["narrowed"],"granted":granted}))
+                    .map_err(|e| e.to_string())?;
+            }
+            store.connection().execute("UPDATE delegations SET status='active',waiting_since=NULL,deadline_at=NULL,updated_at=?2 WHERE id=?1 AND status='waiting_reply'",[&delegation_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
+            store.connection().execute("UPDATE sessions SET status='ready',last_active_at=?2 WHERE id=?1 AND status='busy'",[&member_id,utc_now().as_str()]).map_err(|e|e.to_string())?;
+            emit_supervisor_event(
+                store,
+                &member_id,
+                lead_id,
+                "member",
+                SupervisorEventType::DelegationReply,
+                json!({"member_id":member_id,"delegation_id":delegation_id}),
+            )?;
+            routed = true;
+            break;
+        }
     }
     if routed {
         let container = store
@@ -1918,16 +1928,7 @@ async fn route_waiting_member_replies(
             runtime_for(config)?.signal(&container, "SIGUSR1").await?;
         }
     }
-    Ok(())
-}
-
-pub(crate) fn config_dir(home: &Path) -> PathBuf {
-    let nested = home.join("config");
-    if nested.join("microswarm.toml").is_file() {
-        nested
-    } else {
-        home.to_path_buf()
-    }
+    Ok(None)
 }
 
 #[cfg(test)]

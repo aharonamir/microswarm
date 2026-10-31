@@ -299,7 +299,11 @@ fn delegation_response(body: &str) -> String {
     if user_text.contains("call fixture-shell/weather")
         && names.iter().any(|name| name == "fixture-shell/weather")
     {
-        if messages.iter().any(|message| message["role"] == "tool") {
+        if messages.iter().any(|message| {
+            message["tool_calls"]
+                .as_array()
+                .is_some_and(|calls| !calls.is_empty())
+        }) {
             return response_with_text("27 C and clear");
         }
         return external_tool_call("fixture-shell/weather", serde_json::json!({}));
@@ -316,6 +320,9 @@ fn delegation_response(body: &str) -> String {
         && user_text.contains("read file")
         && names.iter().any(|name| name == "microswarm-tools/fs.read")
     {
+        if messages.iter().any(|message| message["role"] == "tool") {
+            return RESPONSE.into();
+        }
         return external_tool_call(
             "microswarm-tools/fs.read",
             serde_json::json!({"path":"/work/approval-target"}),

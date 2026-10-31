@@ -2,10 +2,11 @@
 use crate::{
     config::load_config_dir,
     runtime::ContainerRuntime,
-    service::{config_dir, emit_supervisor_event, utc_now},
+    service::{emit_supervisor_event, utc_now},
     sessions::{SessionEvent, SessionLifecycle, SessionStatus},
 };
 use ms_proto::{ExitReason, InboundKind, SupervisorEventType};
+use ms_runtime::config_dir;
 use ms_store::{SupervisorStore, open_session_dir};
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
