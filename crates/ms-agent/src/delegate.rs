@@ -20,8 +20,14 @@ pub fn tool_definitions(kind: &str, enabled: bool, _anthropic: bool) -> Vec<Valu
             Some(serde_json::json!({
                 "type":"function",
                 "function": {
-                    "name":format!("microswarm-core/{}", tool["name"].as_str()?),
-                    "description":tool["description"],
+                    "name":crate::mcp::encode_model_tool_name(
+                        "microswarm-core",
+                        tool["name"].as_str()?,
+                    ),
+                    "description":format!(
+                        "{} Use canonical server IDs and tool IDs in scope grants; for example, server `microswarm-tools` and tool `fs.list`. Function names use a provider-safe encoding and are not scope IDs.",
+                        tool["description"].as_str()?,
+                    ),
                     "parameters":tool["input_schema"]
                 }
             }))

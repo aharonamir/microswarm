@@ -107,7 +107,9 @@ Expect: every running container adopted, zero `container.orphan_stopped` for mat
 ## 5 · Add a tool without rebuilding (US5)
 
 ```console
-$ microswarm tools add weather --stdio "python3 /opt/tools/weather_mcp.py"
+$ export WORK=/absolute/path/to/the-host-directory-mounted-at-work
+$ cp tests/fixtures/us5_stdio_mcp.sh "$WORK/weather_mcp.sh"
+$ microswarm tools add weather --stdio "/bin/sh /work/weather_mcp.sh"
 $ # grant it in [lead.scope].tools, then:
 $ microswarm chat
 you › what's the weather in Herzliya?
@@ -117,7 +119,9 @@ weather  stdio  python3 /opt/tools/weather_mcp.py
 $ microswarm tools remove weather
 ```
 
-No `cargo` command was run.
+The configured host work directory must be mounted at `/work`. This fixture uses
+the shell already included in the agent image, so no image rebuild or `cargo`
+command is needed.
 
 Telegram and webhook channels can be enabled in `microswarm.toml`:
 

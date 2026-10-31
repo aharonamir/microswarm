@@ -8,8 +8,14 @@ fn delegation_tools_are_exposed_only_to_enabled_leads() {
     assert_eq!(lead.len(), 4);
     assert!(
         lead.iter()
-            .any(|tool| tool["function"]["name"] == "microswarm-core/spawn_member")
+            .any(|tool| tool["function"]["name"] == "ms_microswarm-core__spawn_x5Fmember")
     );
+    assert!(lead.iter().all(|tool| {
+        tool["function"]["name"].as_str().is_some_and(|name| {
+            name.bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+        })
+    }));
     assert!(tool_definitions("member", true, false).is_empty());
     assert!(tool_definitions("lead", false, false).is_empty());
 }

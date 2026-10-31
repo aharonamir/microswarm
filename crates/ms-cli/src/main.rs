@@ -585,8 +585,24 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
             let response: serde_json::Value =
                 serde_json::from_str(&response).map_err(|error| error.to_string())?;
+            if let Some(error) = response.get("error").and_then(serde_json::Value::as_str) {
+                return Err(error.into());
+            }
             if let Some(text) = response.get("text").and_then(serde_json::Value::as_str) {
                 println!("agent › {text}");
+            }
+            if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
+                if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
+                    println!("{prompt}");
+                }
+                if let (Some(id), Some(after)) = (
+                    response
+                        .get("session_id")
+                        .and_then(serde_json::Value::as_str),
+                    response.get("after_id").and_then(serde_json::Value::as_i64),
+                ) {
+                    pending_wait = Some((id.to_owned(), after));
+                }
             }
         }
     }

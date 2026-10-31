@@ -275,6 +275,7 @@ impl ModelClient {
                     "model": self.model,
                     "messages": messages,
                     "tools": tools,
+                    "parallel_tool_calls": false,
                 })
             }
             ModelProvider::Anthropic => json!({
@@ -402,6 +403,35 @@ fn history_message(entry: &HistoryEntry) -> Value {
         .unwrap_or_else(|| json!({ "role": entry.role, "content": entry.content }))
 }
 
+fn assistant_tool_call_message(provider: ModelProvider, response: &Value, call_id: &str) -> Value {
+    match provider {
+        ModelProvider::OpenAiCompatible => {
+            let mut message = response
+                .pointer("/choices/0/message")
+                .cloned()
+                .unwrap_or(Value::Null);
+            if let Some(calls) = message.get_mut("tool_calls").and_then(Value::as_array_mut) {
+                calls.retain(|call| call.get("id").and_then(Value::as_str) == Some(call_id));
+            }
+            message
+        }
+        ModelProvider::Anthropic => {
+            let content = response
+                .get("content")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|block| {
+                    block.get("type").and_then(Value::as_str) != Some("tool_use")
+                        || block.get("id").and_then(Value::as_str) == Some(call_id)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            json!({"role":"assistant","content":content})
+        }
+    }
+}
+
 fn model_tool_call(
     provider: ModelProvider,
     response: &Value,
@@ -411,12 +441,13 @@ fn model_tool_call(
             let call = response.pointer("/choices/0/message/tool_calls/0")?;
             let id = call.get("id")?.as_str()?.to_owned();
             let function = call.get("function")?;
-            let (server, tool) = function.get("name")?.as_str()?.split_once('/')?;
+            let (server, tool) =
+                crate::mcp::decode_model_tool_name(function.get("name")?.as_str()?)?;
             let arguments = function
                 .get("arguments")?
                 .as_str()
                 .and_then(|value| serde_json::from_str(value).ok())?;
-            Some((id, server.to_owned(), tool.to_owned(), arguments))
+            Some((id, server, tool, arguments))
         }
         ModelProvider::Anthropic => {
             let call = response
@@ -425,13 +456,8 @@ fn model_tool_call(
                 .iter()
                 .find(|item| item.get("type").and_then(Value::as_str) == Some("tool_use"))?;
             let id = call.get("id")?.as_str()?.to_owned();
-            let (server, tool) = call.get("name")?.as_str()?.split_once('/')?;
-            Some((
-                id,
-                server.to_owned(),
-                tool.to_owned(),
-                call.get("input")?.clone(),
-            ))
+            let (server, tool) = crate::mcp::decode_model_tool_name(call.get("name")?.as_str()?)?;
+            Some((id, server, tool, call.get("input")?.clone()))
         }
     }
 }
@@ -511,15 +537,8 @@ impl ModelClient {
                 if let Some(user) = user_pending.take() {
                     conversation.push(user);
                 }
-                let assistant_message = match self.provider {
-                    ModelProvider::OpenAiCompatible => response
-                        .pointer("/choices/0/message")
-                        .cloned()
-                        .unwrap_or(Value::Null),
-                    ModelProvider::Anthropic => {
-                        json!({"role":"assistant", "content":response.get("content").cloned().unwrap_or(Value::Null)})
-                    }
-                };
+                let assistant_message =
+                    assistant_tool_call_message(self.provider, &response, &call_id);
                 let assistant = HistoryEntry {
                     role: "assistant".into(),
                     content: json!({"_ms_message":assistant_message}),
@@ -567,7 +586,15 @@ impl ModelClient {
                         let reply = format!("Tool call denied: {server}/{tool}.");
                         return Ok(reply_output(reply, in_reply_to, delta));
                     }
-                    Err(reason) => return Err(TurnError::Config(reason)),
+                    Err(reason) => {
+                        let result_entry = tool_result_history(
+                            self.provider,
+                            &call_id,
+                            json!({"isError":true,"content":reason}),
+                        );
+                        conversation.push(result_entry.clone());
+                        delta.push(result_entry);
+                    }
                 }
                 continue;
             }
@@ -672,42 +699,108 @@ impl ModelClient {
                 Some(&approved_binding),
                 in_reply_to,
             )
-            .await
-            .map_err(TurnError::Config)?;
-        let result_entry = tool_result_history(self.provider, call_id, result);
+            .await;
+        let result_entry = match result {
+            Ok(result) => tool_result_history(self.provider, call_id, result),
+            Err(reason) => tool_result_history(
+                self.provider,
+                call_id,
+                json!({"isError":true,"content":reason}),
+            ),
+        };
         let mut conversation = history;
         conversation.push(result_entry.clone());
-        let tools = self
-            .available_tools(
-                &context.kind,
-                context
-                    .scope
-                    .delegation
-                    .as_ref()
-                    .is_some_and(|delegation| delegation.enabled),
-            )
-            .await
-            .map_err(TurnError::Transient)?;
-        let response = self
-            .complete_raw(&conversation, "", &tools)
-            .await
-            .map_err(map_model_error)?;
-        if model_tool_call(self.provider, &response).is_some() {
-            return Err(TurnError::Config(
-                "additional tool calls after approval require another turn".into(),
-            ));
-        }
-        let reply = self.text_response(&response).map_err(map_model_error)?;
-        Ok(reply_output(
-            reply.clone(),
-            in_reply_to,
-            vec![
-                result_entry,
-                HistoryEntry {
+        let mut delta = vec![result_entry];
+        for _ in 0..8 {
+            let tools = self
+                .available_tools(
+                    &context.kind,
+                    context
+                        .scope
+                        .delegation
+                        .as_ref()
+                        .is_some_and(|delegation| delegation.enabled),
+                )
+                .await
+                .map_err(TurnError::Transient)?;
+            let response = self
+                .complete_raw(&conversation, "", &tools)
+                .await
+                .map_err(map_model_error)?;
+            if let Some((call_id, server, tool, arguments)) =
+                model_tool_call(self.provider, &response)
+            {
+                let assistant = HistoryEntry {
                     role: "assistant".into(),
-                    content: json!(reply),
-                },
-            ],
+                    content: json!({"_ms_message":assistant_tool_call_message(self.provider, &response, &call_id)}),
+                };
+                conversation.push(assistant.clone());
+                delta.push(assistant);
+                let binding = ApprovalBinding::for_call(&server, &tool, Some(&arguments));
+                match self
+                    .call_tool(
+                        context,
+                        &server,
+                        &tool,
+                        arguments.clone(),
+                        None,
+                        in_reply_to,
+                    )
+                    .await
+                {
+                    Ok(result) => {
+                        let entry = tool_result_history(self.provider, &call_id, result);
+                        conversation.push(entry.clone());
+                        delta.push(entry);
+                    }
+                    Err(reason) if reason == PermitError::ApprovalRequired.to_string() => {
+                        let local_id = NEXT_APPROVAL_LOCAL_ID.fetch_add(1, Ordering::Relaxed);
+                        delta.push(HistoryEntry {
+                            role: "tool".into(),
+                            content: json!({"_ms_pending_approval":{"local_id":local_id,"call_id":call_id,"server":server,"tool":tool,"arguments":arguments,"binding":binding}}),
+                        });
+                        return Ok(TurnOutput {
+                            outbound: vec![OutboundMessage {
+                                id: None,
+                                kind: OutboundKind::ApprovalRequest,
+                                body: json!({"approval_local_id":local_id,"server":server,"tool":tool,"args":arguments,"binding":binding}),
+                                in_reply_to,
+                                created_at: None,
+                            }],
+                            history: delta,
+                        });
+                    }
+                    Err(reason)
+                        if reason == PermitError::Denied.to_string()
+                            || reason == PermitError::NotGranted.to_string() =>
+                    {
+                        return Ok(reply_output(
+                            format!("Tool call denied: {server}/{tool}."),
+                            in_reply_to,
+                            delta,
+                        ));
+                    }
+                    Err(reason) => {
+                        let entry = tool_result_history(
+                            self.provider,
+                            &call_id,
+                            json!({"isError":true,"content":reason}),
+                        );
+                        conversation.push(entry.clone());
+                        delta.push(entry);
+                    }
+                }
+                continue;
+            }
+            let reply = self.text_response(&response).map_err(map_model_error)?;
+            delta.push(HistoryEntry {
+                role: "assistant".into(),
+                content: json!(reply.clone()),
+            });
+            return Ok(reply_output(reply, in_reply_to, delta));
+        }
+        Err(TurnError::Config(
+            "model exceeded the maximum of eight tool calls in one turn".into(),
         ))
     }
 }
@@ -746,5 +839,325 @@ fn map_model_error(error: ModelError) -> TurnError {
         TurnError::Config(message)
     } else {
         TurnError::Transient(message)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ms_proto::{ApprovalBinding, DerivedFrom, Limits, Permission, Scope, ToolGrant, ToolNames};
+    use ms_store::{HistoryEntry, SessionStore, open_session_dir};
+    use std::{
+        collections::BTreeMap,
+        io::{BufRead, BufReader, Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    const ERROR_MCP: &str = r#"
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1"}}}\n' "$id"
+      ;;
+    *'"method":"tools/list"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"read","inputSchema":{"type":"object","properties":{"path":{"type":"string"}}}}]}}\n' "$id"
+      ;;
+    *'"method":"tools/call"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":"path is outside the work directory"}}\n' "$id"
+      ;;
+  esac
+done
+"#;
+
+    const SUCCESS_MCP: &str = r#"
+while IFS= read -r line; do
+  case "$line" in
+    *'"method":"initialize"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1"}}}\n' "$id"
+      ;;
+    *'"method":"tools/list"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"read","inputSchema":{"type":"object","properties":{"path":{"type":"string"}}}}]}}\n' "$id"
+      ;;
+    *'"method":"tools/call"'*)
+      id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"read ok"}]}}\n' "$id"
+      ;;
+  esac
+done
+"#;
+
+    fn test_scope() -> Scope {
+        let mut scope = Scope {
+            version: 1,
+            session_id: "01J00000000000000000000000".into(),
+            derived_from: DerivedFrom::Config,
+            source_ref: "test".into(),
+            mounts: vec![],
+            credentials: vec![],
+            tools: vec![ToolGrant {
+                server: "weather".into(),
+                tools: ToolNames::Selected(["read".into()].into()),
+                policy: Permission::Ask,
+                overrides: BTreeMap::new(),
+            }],
+            delegation: None,
+            limits: Limits {
+                memory_mb: 256,
+                pids: 32,
+                tmp_mb: 64,
+                max_turns: 8,
+                max_tokens: 4096,
+            },
+            narrowed: vec![],
+            hash: String::new(),
+        };
+        scope.update_hash();
+        scope
+    }
+
+    #[test]
+    fn assistant_tool_message_keeps_only_the_call_being_processed() {
+        let response = json!({"choices":[{"message":{"role":"assistant","tool_calls":[
+            {"id":"call-1","type":"function","function":{"name":"ms_weather__read","arguments":"{}"}},
+            {"id":"call-2","type":"function","function":{"name":"ms_weather__list","arguments":"{}"}}
+        ]}}]});
+        let message =
+            assistant_tool_call_message(ModelProvider::OpenAiCompatible, &response, "call-1");
+        assert_eq!(message["tool_calls"].as_array().unwrap().len(), 1);
+        assert_eq!(message["tool_calls"][0]["id"], "call-1");
+    }
+
+    #[test]
+    fn approved_tool_can_request_another_approval_in_the_same_turn() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut request = BufReader::new(stream);
+            let mut line = String::new();
+            request.read_line(&mut line).unwrap();
+            let mut content_length = 0;
+            loop {
+                line.clear();
+                request.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    content_length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            let mut body = vec![0; content_length];
+            request.read_exact(&mut body).unwrap();
+            let request_json: Value = serde_json::from_slice(&body).unwrap();
+            assert!(
+                request_json["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|message| message["role"] == "tool"
+                        && message["content"]
+                            .as_str()
+                            .is_some_and(|content| content.contains("read ok")))
+            );
+            let response = r#"{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-2","type":"function","function":{"name":"ms_weather__read","arguments":"{\"path\":\"/work/second.txt\"}"}}]}}]}"#;
+            write!(request.get_mut(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
+            request.get_mut().flush().unwrap();
+        });
+
+        let dir = std::env::temp_dir().join(format!("ms-chain-approval-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let _supervisor = open_session_dir(&dir).unwrap();
+        let scope = test_scope();
+        let store = SessionStore::open_dir(&dir).unwrap();
+        let mut context = AgentContext {
+            session_id: scope.session_id.clone(),
+            root_session_id: scope.session_id.clone(),
+            kind: "lead".into(),
+            role: "lead".into(),
+            proxy_url: Some(format!("http://{address}/v1")),
+            scope: scope.clone(),
+            store,
+        };
+        let mut client = ModelClient::new(
+            format!("http://{address}/v1"),
+            ModelProvider::OpenAiCompatible,
+            "fixture-model",
+            "fixture-key",
+        )
+        .unwrap();
+        client.mcp = Some(
+            McpClient::new(
+                &scope,
+                vec![crate::mcp::McpServerDescriptor {
+                    id: "weather".into(),
+                    transport: crate::mcp::McpTransport::Stdio,
+                    command: Some("/bin/sh".into()),
+                    args: vec!["-c".into(), SUCCESS_MCP.into()],
+                    url: None,
+                    credential: None,
+                }],
+                None,
+            )
+            .unwrap(),
+        );
+        let arguments = json!({"path":"/work/first.txt"});
+        let binding = ApprovalBinding::for_call("weather", "read", Some(&arguments));
+        let history = vec![HistoryEntry {
+            role: "tool".into(),
+            content: json!({"_ms_pending_approval":{"call_id":"call-1","server":"weather","tool":"read","arguments":arguments,"binding":binding}}),
+        }];
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let output = runtime
+            .block_on(client.process(
+                &mut context,
+                InboundMessage {
+                    id: Some(2),
+                    kind: InboundKind::ApprovalResult,
+                    body: json!({"decision":"approved","binding":binding}),
+                    created_at: None,
+                },
+                history,
+            ))
+            .unwrap();
+        assert_eq!(output.outbound[0].kind, OutboundKind::ApprovalRequest);
+        assert_eq!(output.outbound[0].body["server"], "weather");
+        assert_eq!(output.outbound[0].body["tool"], "read");
+        assert!(output.history.iter().any(|entry| {
+            entry
+                .content
+                .get("_ms_pending_approval")
+                .is_some_and(|pending| {
+                    pending["call_id"] == "call-2"
+                        && pending["arguments"]["path"] == "/work/second.txt"
+                })
+        }));
+        server.join().unwrap();
+        drop(context);
+        drop(_supervisor);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn approved_tool_execution_error_does_not_terminate_agent_turn() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let mut request = BufReader::new(stream);
+            let mut line = String::new();
+            request.read_line(&mut line).unwrap();
+            let mut content_length = 0;
+            loop {
+                line.clear();
+                request.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    content_length = value.trim().parse::<usize>().unwrap();
+                }
+            }
+            let mut body = vec![0; content_length];
+            request.read_exact(&mut body).unwrap();
+            let request_json: Value = serde_json::from_slice(&body).unwrap();
+            assert!(
+                request_json["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|message| {
+                        message["role"] == "tool"
+                            && message["content"].as_str().is_some_and(|content| {
+                                content.contains("outside the work directory")
+                            })
+                    })
+            );
+            let response = r#"{"choices":[{"message":{"content":"That path is outside /work, so I couldn't read it."}}]}"#;
+            write!(request.get_mut(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
+            request.get_mut().flush().unwrap();
+        });
+
+        let dir = std::env::temp_dir().join(format!("ms-tool-error-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let _supervisor = open_session_dir(&dir).unwrap();
+        let scope = test_scope();
+        let store = SessionStore::open_dir(&dir).unwrap();
+        let mut context = AgentContext {
+            session_id: scope.session_id.clone(),
+            root_session_id: scope.session_id.clone(),
+            kind: "lead".into(),
+            role: "lead".into(),
+            proxy_url: Some(format!("http://{address}/v1")),
+            scope: scope.clone(),
+            store,
+        };
+        let mut client = ModelClient::new(
+            format!("http://{address}/v1"),
+            ModelProvider::OpenAiCompatible,
+            "fixture-model",
+            "fixture-key",
+        )
+        .unwrap();
+        client.mcp = Some(
+            McpClient::new(
+                &scope,
+                vec![crate::mcp::McpServerDescriptor {
+                    id: "weather".into(),
+                    transport: crate::mcp::McpTransport::Stdio,
+                    command: Some("/bin/sh".into()),
+                    args: vec!["-c".into(), ERROR_MCP.into()],
+                    url: None,
+                    credential: None,
+                }],
+                None,
+            )
+            .unwrap(),
+        );
+        let arguments = json!({"path":"/etc/hostname"});
+        let binding = ApprovalBinding::for_call("weather", "read", Some(&arguments));
+        let history = vec![HistoryEntry {
+            role: "tool".into(),
+            content: json!({"_ms_pending_approval":{"call_id":"call-1","server":"weather","tool":"read","arguments":arguments,"binding":binding}}),
+        }];
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let output = runtime
+            .block_on(client.process(
+                &mut context,
+                InboundMessage {
+                    id: Some(2),
+                    kind: InboundKind::ApprovalResult,
+                    body: json!({"decision":"approved","binding":binding}),
+                    created_at: None,
+                },
+                history,
+            ))
+            .unwrap();
+        assert_eq!(
+            output.outbound[0].body["text"],
+            "That path is outside /work, so I couldn't read it."
+        );
+        server.join().unwrap();
+        drop(context);
+        drop(_supervisor);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

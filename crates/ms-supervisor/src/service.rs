@@ -456,101 +456,21 @@ async fn chat_message(home: &Path, request: &Value) -> Result<Value, String> {
             .outbound_after(last_id)
             .map_err(|error| error.to_string())?
         {
-            if let Some(id) = message.id {
-                last_id = id;
-                crate::router::persist_tail_cursor(
-                    &mut store,
-                    &session_id,
-                    last_id,
-                    events_last_seq,
-                )
+            last_id = message.id.unwrap_or(last_id);
+            crate::router::persist_tail_cursor(&mut store, &session_id, last_id, events_last_seq)
                 .map_err(|error| error.to_string())?;
-            }
-            if message.in_reply_to == Some(inbound_id) && message.kind == OutboundKind::Reply {
-                let active_at = utc_now();
-                store
-                    .connection()
-                    .execute(
-                        "UPDATE sessions SET status='ready', last_active_at=?2 WHERE id=?1",
-                        [session_id.as_str(), active_at.as_str()],
-                    )
-                    .map_err(|error| error.to_string())?;
-                return Ok(
-                    json!({"session_id":session_id,"text":message.body.get("text").and_then(Value::as_str).unwrap_or("")}),
-                );
-            }
-            if message.in_reply_to == Some(inbound_id)
-                && message.kind == OutboundKind::ApprovalRequest
+            if let Some(result) = process_outbound_message(
+                home,
+                &config,
+                &mut store,
+                &session_dir,
+                &session_id,
+                &message,
+                Some(inbound_id),
+            )
+            .await?
             {
-                let binding: ms_proto::ApprovalBinding = serde_json::from_value(
-                    message
-                        .body
-                        .get("binding")
-                        .cloned()
-                        .ok_or("approval request has no binding")?,
-                )
-                .map_err(|error| error.to_string())?;
-                let arguments = message.body.get("args").cloned().unwrap_or(Value::Null);
-                let approval = crate::approvals::request_tool_approval(
-                    &mut store,
-                    &session_id,
-                    &session_id,
-                    &binding,
-                    &arguments,
-                    Duration::from_secs(config.microswarm.limits.approval_timeout_s),
-                )
-                .map_err(|error| error.to_string())?;
-                let prompt = crate::approvals::render_prompt(
-                    config.microswarm.home.lang,
-                    &approval.code,
-                    &binding.server,
-                    &binding.tool,
-                    &arguments,
-                );
-                return Ok(
-                    json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
-                );
-            }
-            if message.kind == OutboundKind::DelegationRequest
-                && let Some(prompt) = handle_delegation_request(
-                    home,
-                    &config,
-                    &mut store,
-                    &session_dir,
-                    &session_id,
-                    &message.body,
-                )
-                .await?
-            {
-                return Ok(
-                    json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
-                );
-            }
-            if message.kind == OutboundKind::SendToMember
-                && let Some(prompt) = handle_send_to_member(
-                    home,
-                    &config,
-                    &mut store,
-                    &session_dir,
-                    &session_id,
-                    &message.body,
-                )
-                .await?
-            {
-                return Ok(
-                    json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":message.id.unwrap_or(last_id)}),
-                );
-            }
-            if message.kind == OutboundKind::Dismiss {
-                handle_dismiss_member(
-                    home,
-                    &config,
-                    &mut store,
-                    &session_dir,
-                    &session_id,
-                    &message.body,
-                )
-                .await?;
+                return Ok(result);
             }
         }
         if Instant::now() >= deadline {
@@ -975,17 +895,15 @@ async fn handle_delegation_request(
     .await
     {
         Ok(result) => {
-            if result.prompt.is_none() {
-                store
-                    .update_delegation_status(
-                        &delegation_id,
-                        "active",
-                        Some(&member_id),
-                        None,
-                        &utc_now(),
-                    )
-                    .map_err(|error| error.to_string())?;
-            }
+            store
+                .update_delegation_status(
+                    &delegation_id,
+                    "active",
+                    Some(&member_id),
+                    None,
+                    &utc_now(),
+                )
+                .map_err(|error| error.to_string())?;
             startup = result;
             emit_supervisor_event(
                 store,
@@ -1818,8 +1736,8 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .ok_or("wait session_id is missing")?;
     let after_id = request.get("after_id").and_then(Value::as_i64).unwrap_or(0);
-    let session = open_session_dir(home.join("sessions").join(session_id))
-        .map_err(|error| error.to_string())?;
+    let session_dir = home.join("sessions").join(session_id);
+    let session = open_session_dir(&session_dir).map_err(|error| error.to_string())?;
     let mut store =
         SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
     let container_id = store
@@ -1829,6 +1747,10 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
     let runtime = runtime_for(&config)?;
     let deadline =
         Instant::now() + Duration::from_secs(config.microswarm.limits.approval_timeout_s + 90);
+    let events_last_seq = crate::router::tail_cursor(&store, session_id)
+        .map_err(|e| e.to_string())?
+        .1;
+    let mut cursor = after_id;
     loop {
         route_waiting_member_replies(home, &config, &mut store, session_id).await?;
         if crate::approvals::expire_due(&mut store, session_id, &session)
@@ -1838,12 +1760,51 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
         {
             runtime.signal(container_id, "SIGUSR1").await?;
         }
-        if let Some(reply) = session
-            .outbound_after(after_id)
+        for message in session
+            .outbound_after(cursor)
             .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|message| message.kind == OutboundKind::Reply)
         {
+            let Some(id) = message.id else { continue };
+            cursor = id;
+            crate::router::persist_tail_cursor(&mut store, session_id, cursor, events_last_seq)
+                .map_err(|error| error.to_string())?;
+            if let Some(response) = process_outbound_message(
+                home,
+                &config,
+                &mut store,
+                &session_dir,
+                session_id,
+                &message,
+                None,
+            )
+            .await?
+            {
+                return Ok(response);
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err("timed out waiting for approval result".into());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn process_outbound_message(
+    home: &Path,
+    config: &ConfigSet,
+    store: &mut SupervisorStore,
+    session_dir: &Path,
+    session_id: &str,
+    message: &ms_proto::OutboundMessage,
+    inbound_id: Option<i64>,
+) -> Result<Option<Value>, String> {
+    let pending = |prompt: String| {
+        message
+            .id
+            .map(|id| json!({"session_id":session_id,"pending":true,"prompt":prompt,"after_id":id}))
+    };
+    Ok(match message.kind {
+        OutboundKind::Reply if inbound_id.is_none_or(|id| message.in_reply_to == Some(id)) => {
             let active_at = utc_now();
             store
                 .connection()
@@ -1852,15 +1813,52 @@ async fn wait_for_reply(home: &Path, request: &Value) -> Result<Value, String> {
                     [session_id, active_at.as_str()],
                 )
                 .map_err(|error| error.to_string())?;
-            return Ok(
-                json!({"session_id":session_id,"text":reply.body.get("text").and_then(Value::as_str).unwrap_or("")}),
-            );
+            Some(
+                json!({"session_id":session_id,"text":message.body.get("text").and_then(Value::as_str).unwrap_or("")}),
+            )
         }
-        if Instant::now() >= deadline {
-            return Err("timed out waiting for approval result".into());
+        OutboundKind::ApprovalRequest
+            if inbound_id.is_none_or(|id| message.in_reply_to == Some(id)) =>
+        {
+            let binding = serde_json::from_value::<ms_proto::ApprovalBinding>(
+                message.body["binding"].clone(),
+            )
+            .map_err(|e| e.to_string())?;
+            let args = message.body.get("args").cloned().unwrap_or(Value::Null);
+            let approval = crate::approvals::request_tool_approval(
+                store,
+                session_id,
+                session_id,
+                &binding,
+                &args,
+                Duration::from_secs(config.microswarm.limits.approval_timeout_s),
+            )
+            .map_err(|error| error.to_string())?;
+            pending(crate::approvals::render_prompt(
+                config.microswarm.home.lang,
+                &approval.code,
+                &binding.server,
+                &binding.tool,
+                &args,
+            ))
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+        OutboundKind::DelegationRequest => {
+            handle_delegation_request(home, config, store, session_dir, session_id, &message.body)
+                .await?
+                .and_then(pending)
+        }
+        OutboundKind::SendToMember => {
+            handle_send_to_member(home, config, store, session_dir, session_id, &message.body)
+                .await?
+                .and_then(pending)
+        }
+        OutboundKind::Dismiss => {
+            handle_dismiss_member(home, config, store, session_dir, session_id, &message.body)
+                .await?;
+            None
+        }
+        _ => None,
+    })
 }
 
 async fn route_waiting_member_replies(

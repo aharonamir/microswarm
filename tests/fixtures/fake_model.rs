@@ -8,7 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 const RESPONSE: &str = r#"{"id":"chatcmpl-fixture","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"fixture reply"},"finish_reason":"stop"}]}"#;
-const TOOL_RESPONSE: &str = r#"{"id":"chatcmpl-tool","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"fixture-call","type":"function","function":{"name":"first-party/fs.write","arguments":"{\"path\":\"/work/approval-marker\",\"content\":\"approved\"}"}}]},"finish_reason":"tool_calls"}]}"#;
+const TOOL_RESPONSE: &str = r#"{"id":"chatcmpl-tool","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"fixture-call","type":"function","function":{"name":"ms_first-party__fs_x2Ewrite","arguments":"{\"path\":\"/work/approval-marker\",\"content\":\"approved\"}"}}]},"finish_reason":"tool_calls"}]}"#;
 
 pub struct FakeModelServer {
     address: SocketAddr,
@@ -150,7 +150,7 @@ fn respond(
         benchmark_response(&request_body)
     } else if delegation_tools
         && request_body.contains("\"hang\"")
-        && !request_body.contains("microswarm-core/")
+        && !request_body.contains("ms_microswarm-core__")
     {
         thread::sleep(Duration::from_secs(12));
         RESPONSE.to_owned()
@@ -200,6 +200,7 @@ fn benchmark_response(body: &str) -> String {
         .filter_map(|tool| {
             tool.pointer("/function/name")
                 .and_then(serde_json::Value::as_str)
+                .map(canonical_tool_name)
         })
         .collect::<Vec<_>>();
     if !user_text.contains("benchmark-four-members")
@@ -207,7 +208,10 @@ fn benchmark_response(body: &str) -> String {
     {
         return delegation_response(body);
     }
-    if !names.contains(&"microswarm-core/spawn_member") {
+    if !names
+        .iter()
+        .any(|name| name == "microswarm-core/spawn_member")
+    {
         return delegation_response(body);
     }
     let called = |name: &str| {
@@ -217,7 +221,7 @@ fn benchmark_response(body: &str) -> String {
             .filter(|call| {
                 call.pointer("/function/name")
                     .and_then(serde_json::Value::as_str)
-                    == Some(name)
+                    .is_some_and(|actual| canonical_tool_name(actual) == name)
             })
             .count()
     };
@@ -289,17 +293,20 @@ fn delegation_response(body: &str) -> String {
         .filter_map(|tool| {
             tool.pointer("/function/name")
                 .and_then(serde_json::Value::as_str)
+                .map(canonical_tool_name)
         })
         .collect::<Vec<_>>();
-    if user_text.contains("call fixture-python/weather")
-        && names.contains(&"fixture-python/weather")
+    if user_text.contains("call fixture-shell/weather")
+        && names.iter().any(|name| name == "fixture-shell/weather")
     {
         if messages.iter().any(|message| message["role"] == "tool") {
             return response_with_text("27 C and clear");
         }
-        return external_tool_call("fixture-python/weather", serde_json::json!({}));
+        return external_tool_call("fixture-shell/weather", serde_json::json!({}));
     }
-    if user_text.contains("call fixture-http/weather") && names.contains(&"fixture-http/weather") {
+    if user_text.contains("call fixture-http/weather")
+        && names.iter().any(|name| name == "fixture-http/weather")
+    {
         if messages.iter().any(|message| message["role"] == "tool") {
             return response_with_text("HTTP weather result");
         }
@@ -307,7 +314,7 @@ fn delegation_response(body: &str) -> String {
     }
     if system_text.contains("Research the requested files and report concise findings.")
         && user_text.contains("read file")
-        && names.contains(&"microswarm-tools/fs.read")
+        && names.iter().any(|name| name == "microswarm-tools/fs.read")
     {
         return external_tool_call(
             "microswarm-tools/fs.read",
@@ -324,13 +331,15 @@ fn delegation_response(body: &str) -> String {
         .any(|name| name.starts_with("microswarm-core/"))
     {
         if user_text.contains("read file")
-            && names.contains(&"microswarm-tools/fs.read")
+            && names.iter().any(|name| name == "microswarm-tools/fs.read")
             && !messages.iter().any(|message| {
                 message["tool_calls"].as_array().is_some_and(|calls| {
                     calls.iter().any(|call| {
                         call.pointer("/function/name")
                             .and_then(serde_json::Value::as_str)
-                            == Some("microswarm-tools/fs.read")
+                            .is_some_and(|name| {
+                                canonical_tool_name(name) == "microswarm-tools/fs.read"
+                            })
                     })
                 })
             })
@@ -349,7 +358,7 @@ fn delegation_response(body: &str) -> String {
             .filter(|call| {
                 call.pointer("/function/name")
                     .and_then(serde_json::Value::as_str)
-                    == Some(name)
+                    .is_some_and(|actual| canonical_tool_name(actual) == name)
             })
             .count()
     };
@@ -466,12 +475,65 @@ fn external_tool_call(name: &str, arguments: serde_json::Value) -> String {
         "object":"chat.completion",
         "choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{
             "id":"fixture-delegation","type":"function","function":{
-                "name":name,
+                "name":provider_tool_name(name),
                 "arguments":arguments.to_string()
             }
         }]},"finish_reason":"tool_calls"}]
     })
     .to_string()
+}
+
+fn provider_tool_name(name: &str) -> String {
+    let (server, tool) = name
+        .split_once('/')
+        .expect("fixture tool names have server/tool form");
+    format!(
+        "ms_{}__{}",
+        encode_component(server),
+        encode_component(tool)
+    )
+}
+
+fn canonical_tool_name(name: &str) -> String {
+    let Some((server, tool)) = name
+        .strip_prefix("ms_")
+        .and_then(|name| name.split_once("__"))
+    else {
+        return name.to_owned();
+    };
+    format!("{}/{}", decode_component(server), decode_component(tool))
+}
+
+fn encode_component(value: &str) -> String {
+    value.bytes().fold(String::new(), |mut encoded, byte| {
+        if byte.is_ascii_alphanumeric() || byte == b'-' {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("_x{byte:02X}"));
+        }
+        encoded
+    })
+}
+
+fn decode_component(value: &str) -> String {
+    let mut decoded = Vec::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'_' && bytes.get(index + 1) == Some(&b'x') {
+            let byte = u8::from_str_radix(
+                std::str::from_utf8(&bytes[index + 2..index + 4]).expect("ASCII hex"),
+                16,
+            )
+            .expect("encoded tool-name byte");
+            decoded.push(byte);
+            index += 4;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).expect("fixture tool names are UTF-8")
 }
 
 fn response_with_text(text: &str) -> String {

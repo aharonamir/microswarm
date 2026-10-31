@@ -131,6 +131,31 @@ async fn denied_tool_call_does_not_launch_server() {
 }
 
 #[tokio::test]
+async fn model_tool_names_use_provider_safe_identifiers() {
+    let scope = scope();
+    let mut client = McpClient::new(
+        &scope,
+        vec![McpServerDescriptor {
+            id: "weather".into(),
+            transport: McpTransport::Stdio,
+            command: Some("/bin/sh".into()),
+            args: vec!["-c".into(), FAKE_STDIO_MCP.into()],
+            url: None,
+            credential: None,
+        }],
+        None,
+    )
+    .unwrap();
+    let tools = client.model_tools().await.unwrap();
+    let name = tools[0]["function"]["name"].as_str().unwrap();
+    assert!(
+        name.bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte))
+    );
+    assert_eq!(name, "ms_weather__forecast");
+}
+
+#[tokio::test]
 async fn stdio_lists_only_granted_tools_and_calls_allowed_tool() {
     let scope = scope();
     let mut client = McpClient::new(

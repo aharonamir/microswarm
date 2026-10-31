@@ -233,6 +233,21 @@ sample is diagnostic, not the `ubuntu-latest` reference baseline: SC-001 p50 was
 The CI performance job measures the base and current revisions on the same
 `ubuntu-latest` runner and fails if any metric regresses by more than 20%.
 
+T100 partial evidence (2026-10-31): in a fresh temporary home, `doctor` passed
+with the configured DeepSeek endpoint. A real-model US1 chat approved an
+out-of-`/work` read (the tool denied it and the agent replied) and listed `/work`;
+the resulting four-event trace validated against `events.schema.json`. Runtime
+integration tests passed for US1 approval, US2 quickstart and member approval,
+US3 safety, US4 adoption/reissued approvals, and US5 stdio tool registration.
+The US5 quickstart now uses the shell available in the scratch agent image rather
+than assuming Python is installed. A real-model US2 run found a remaining
+approval-ordering race: while a member's startup task awaits approval, the lead
+can send another task before the member has completed the pending tool call. The
+member then processes that task against incomplete tool-call history and exits
+with the provider's HTTP 400. Quickstart §§3–4 are covered by runtime integration
+tests, not manual real-model runs. T100 remains open until the approval-ordering
+race is fixed and §§0–6 complete on a clean host.
+
 ---
 
 ## Dependencies
