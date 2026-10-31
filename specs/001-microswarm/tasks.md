@@ -223,7 +223,7 @@
 - [x] T096 [P] Retention: delete session dirs older than `retention_days` — `crates/ms-runtime/src/retention.rs`, started by `crates/ms-supervisor/src/service.rs`
 - [x] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
 - [x] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
-- [ ] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`
+- [x] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`, review recorded in `docs/reviews/zh-native-review.md`
 - [ ] T100 Run quickstart §0–§6 on a clean host; fix drift — `specs/001-microswarm/quickstart.md`
 
 T095 implementation evidence (2026-10-30): the benchmark ran locally with three

@@ -1,6 +1,6 @@
 # Native-speaker review: Simplified Chinese supervisor messages
 
-Status: **awaiting native-speaker review**. T099 is not complete until a native Mandarin speaker confirms or edits every translation below. These strings are user-visible safety, approval, session, and lifecycle notices.
+Status: **approved**. The owner confirmed on 2026-10-31 that a native Mandarin speaker reviewed all 19 translations and approved them. Reviewer identity was not recorded. These strings are user-visible safety, approval, session, and lifecycle notices.
 
 Reviewer: ____________________  
 Dialect/script: Simplified Mandarin / 简体中文  
@@ -28,9 +28,9 @@ Date: ____________________
 | OrphanStopped | An unmanaged container was stopped. | 未关联会话的容器已停止。 | |
 | NoSessions | There are no active sessions. | 当前没有活动会话。 | |
 
-Reviewer conclusion (select one):
+Reviewer conclusion:
 
-- [ ] All 19 translations are natural, clear, and preserve the safety meaning.
+- [x] All 19 translations are natural, clear, and preserve the safety meaning.
 - [ ] Changes are required; reviewer notes above contain approved replacements.
 
 Reviewing native speaker: ____________________
