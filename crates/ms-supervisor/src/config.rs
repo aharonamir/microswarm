@@ -304,7 +304,13 @@ pub fn load_config_dir(path: impl AsRef<Path>) -> Result<ConfigSet, ConfigError>
         .unwrap_or_default();
     let ms_home = std::env::var_os("MS_HOME")
         .map(PathBuf::from)
-        .unwrap_or_default();
+        .unwrap_or_else(|| {
+            if path.ends_with("config") {
+                path.parent().unwrap_or(path).into()
+            } else {
+                path.into()
+            }
+        });
     config.ceiling.paths = expand_ceiling_paths(&config.ceiling.paths, &home, &ms_home)?;
     config.validate()?;
     Ok(config)

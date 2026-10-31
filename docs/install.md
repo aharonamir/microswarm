@@ -25,15 +25,17 @@ microswarm init --lang en
 
 `MS_HOME` selects the home directory. If unset, it defaults to
 `$HOME/.microswarm`. `microswarm init` writes configuration files directly in
-that directory. The daemon also accepts a `config/` subdirectory when all four
-configuration files are stored there; use one location consistently.
+that directory. In a terminal, it starts an interactive setup wizard for the
+model provider, endpoint, model name, credential, runtime, and optional `/work`
+mount. The API key is entered without echo and stored in the host-only
+`credentials/` directory; it is never written to TOML. Use `--no-wizard` for
+scripted initialization. The daemon also accepts a `config/` subdirectory when
+all four configuration files are stored there; use one location consistently.
 
-Edit `microswarm.toml` to configure the model, mount a working directory, and
-grant the model credential name in the lead scope. The complete field list is
-in the [configuration reference](configuration.md).
+The complete field list is in the [configuration reference](configuration.md).
 
-Store the credential value through standard input; do not put it in a command
-argument or a configuration file:
+To replace a credential later, store its value through standard input; do not
+put it in a command argument or a configuration file:
 
 ```sh
 microswarm creds set model-key

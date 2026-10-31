@@ -15,10 +15,7 @@ $ cargo install --path crates/ms-cli
 $ cargo install --path crates/ms-supervisor
 $ docker build -t microswarm-agent:dev -f images/agent.Containerfile .
 $ microswarm init --lang en
-$ # Edit $MS_HOME/microswarm.toml: set [model] provider, base_url, model,
-$ # credential = "model-key", and grant the work directory in [lead.scope].mounts.
 $ microswarmd &
-$ microswarm creds set model-key         # paste the key, then Ctrl-D
 $ microswarm doctor
 ✓ configuration   $MS_HOME
 ✓ runtime socket  unix:///var/run/docker.sock
