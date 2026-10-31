@@ -73,11 +73,26 @@ pub fn utc_now_precise() -> String {
 
 pub fn new_id() -> Result<String, String> {
     let mut bytes = [0u8; 16];
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    if timestamp > 0xFFFF_FFFF_FFFF {
+        return Err("current time is outside the ULID timestamp range".into());
+    }
+    bytes[..6].copy_from_slice(&timestamp.to_be_bytes()[10..]);
     use std::io::Read;
     fs::File::open("/dev/urandom")
-        .and_then(|mut file| file.read_exact(&mut bytes))
+        .and_then(|mut file| file.read_exact(&mut bytes[6..]))
         .map_err(|error| error.to_string())?;
-    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+    const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let mut value = u128::from_be_bytes(bytes);
+    let mut encoded = [0u8; 26];
+    for character in encoded.iter_mut().rev() {
+        *character = ALPHABET[(value & 0x1f) as usize];
+        value >>= 5;
+    }
+    String::from_utf8(encoded.to_vec()).map_err(|error| error.to_string())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
