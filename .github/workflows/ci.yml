@@ -17,6 +17,8 @@ jobs:
         run: scripts/dep-gate.sh
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Lint web assets
+        run: scripts/web-lint.sh
       - name: Lint
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build host binaries for integration tests

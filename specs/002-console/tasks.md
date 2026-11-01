@@ -13,7 +13,7 @@
 - **Q1** Mirror console-sent replies to the session's origin channel? [No, v1. Say so in the UI.]
 - **Q2** Should the supervisor reject a second message while a session is `busy`? [No change in 002. The console enforces its own lock (R-C5).]
 - **Q3** Vendor IBM Plex fonts (≈ 250 KB, OFL)? [Yes. Fallback is system fonts (R-C4).]
-- **Q4** May `ms-console` depend on the `ms-agent` crate to show the parsed shell structure? [Yes, for `permit::evaluate_shell` only (R-C6).]
+- **Q4** May `ms-console` depend on the `ms-agent` crate to show the parsed shell structure? [No direct dependency: T205 showed it brings model/MCP clients. Extract the pure parser into a small shared crate for both agent and console.]
 
 ---
 
@@ -29,11 +29,11 @@
 
 ## Phase 1 — Setup and making room
 
-- [ ] T206 Apply constitution amendment 1.1.0 (Principle IX + gate row); add `specs/002-console/` to the "Source of truth" line in `AGENTS.md` and set the 002 checkpoint rule — `.specify/memory/constitution.md`, `AGENTS.md`
-- [ ] T207 [P] Update the stale status note at the top of `specs/001-microswarm/tasks.md` to "complete (2026-11-01)" — `specs/001-microswarm/tasks.md`
-- [ ] T208 Create the `crates/ms-console` skeleton (lib + empty `web/`) and add it to the workspace; add `microswarm console` to the `ms-cli` help, returning "not implemented" — `Cargo.toml`, `crates/ms-console/`, `crates/ms-cli/src/main.rs`
-- [ ] T209 [P] Extend `scripts/loc-budget.sh` with `ms-console` Rust ≤ 4,000 and `crates/ms-console/web` JS + CSS ≤ 3,500 — `scripts/loc-budget.sh`
-- [ ] T210 [P] Add `scripts/web-lint.sh` (forbidden DOM sinks; inline `<script>`/`style=` in `index.html`) and call it from CI — `scripts/web-lint.sh`, `.github/workflows/ci.yml`
+- [x] T206 Apply constitution amendment 1.1.0 (Principle IX + gate row); add `specs/002-console/` to the "Source of truth" line in `AGENTS.md` and set the 002 checkpoint rule — `.specify/memory/constitution.md`, `AGENTS.md`
+- [x] T207 [P] Update the stale status note at the top of `specs/001-microswarm/tasks.md` to "complete (2026-11-01)" — `specs/001-microswarm/tasks.md`
+- [x] T208 Create the `crates/ms-console` skeleton (lib + empty `web/`) and add it to the workspace; add `microswarm console` to the `ms-cli` help, returning "not implemented" — `Cargo.toml`, `crates/ms-console/`, `crates/ms-cli/src/main.rs`
+- [x] T209 [P] Extend `scripts/loc-budget.sh` with `ms-console` Rust ≤ 4,000 and `crates/ms-console/web` JS + CSS ≤ 3,500 — `scripts/loc-budget.sh`
+- [x] T210 [P] Add `scripts/web-lint.sh` (forbidden DOM sinks; inline `<script>`/`style=` in `index.html`) and call it from CI — `scripts/web-lint.sh`, `.github/workflows/ci.yml`
 - [ ] T211 [P] Write red tests for the extractions: lifecycle behaviour unchanged (reuse 001 tests), trace JSON identical, doctor output snapshot, container profile ⇔ create body — `crates/ms-runtime/tests/`, `crates/ms-cli/tests/`
 - [ ] T212 Move the lifecycle helpers from `ms-supervisor/src/service.rs` to `ms-runtime/src/lifecycle.rs`; put before/after budget numbers in the commit message (gate: supervisor + shared ≤ 5,850) — `contracts/supervisor-rpc-additions.md` §2
 - [ ] T213 [P] Move the trace builder to `ms_runtime::trace`; the CLI keeps rendering — §3

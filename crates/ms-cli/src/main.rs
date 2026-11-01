@@ -45,13 +45,14 @@ fn run(args: Vec<String>) -> Result<(), String> {
         )
         .map(|_| ()),
         "chat" => chat(&home, &args[1..]),
+        "console" => Err("console is not implemented yet".into()),
         other => Err(format!("unknown command {other:?}; run microswarm --help")),
     }
 }
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  console\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
