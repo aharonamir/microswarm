@@ -66,9 +66,16 @@ jobs:
             BASE_SHA="$(git rev-parse HEAD^)"
           fi
           git fetch --no-tags origin "$BASE_SHA"
-          git worktree add --detach /tmp/microswarm-benchmark-baseline "$BASE_SHA"
           echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          if git cat-file -e "$BASE_SHA:crates/ms-bench/tests/performance.rs" 2>/dev/null; then
+            git worktree add --detach /tmp/microswarm-benchmark-baseline "$BASE_SHA"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "The base revision has no performance benchmark; this run establishes the first baseline."
+          fi
       - name: Build baseline binaries and image
+        if: steps.baseline.outputs.available == 'true'
         working-directory: /tmp/microswarm-benchmark-baseline
         run: |
           cargo build --locked --release --workspace --bins
@@ -80,6 +87,8 @@ jobs:
           cargo build --locked --release --target x86_64-unknown-linux-musl -p ms-agent -p ms-tools
           docker build --tag microswarm-agent:current --file images/agent.Containerfile .
       - name: Measure baseline commit
+        if: steps.baseline.outputs.available == 'true'
+        working-directory: /tmp/microswarm-benchmark-baseline
         env:
           MS_REQUIRE_RUNTIME: "1"
           MS_TEST_RUNTIME: docker
@@ -104,6 +113,7 @@ jobs:
           MS_BENCH_OUTPUT: ${{ github.workspace }}/benchmark-current.json
         run: cargo test --locked --release -p ms-bench --features measure --test performance collect_phase9_performance_report -- --exact --nocapture
       - name: Fail on performance regression above 20 percent
+        if: steps.baseline.outputs.available == 'true'
         run: target/release/ms-bench compare benchmark-baseline.json benchmark-current.json
       - uses: actions/upload-artifact@v4
         if: always()
