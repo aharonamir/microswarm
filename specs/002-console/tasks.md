@@ -36,8 +36,8 @@
 - [x] T210 [P] Add `scripts/web-lint.sh` (forbidden DOM sinks; inline `<script>`/`style=` in `index.html`) and call it from CI — `scripts/web-lint.sh`, `.github/workflows/ci.yml`
 - [x] T211 [P] Write red tests for the extractions: lifecycle behaviour unchanged (reuse 001 tests), trace JSON identical, doctor output snapshot, container profile ⇔ create body — `crates/ms-runtime/tests/`, `crates/ms-cli/tests/`
 - [x] T212 Move the lifecycle helpers from `ms-supervisor/src/service.rs` to `ms-runtime/src/lifecycle.rs`; put before/after budget numbers in the commit message (gate: supervisor + shared ≤ 5,850) — `contracts/supervisor-rpc-additions.md` §2
-- [ ] T213 [P] Move the trace builder to `ms_runtime::trace`; the CLI keeps rendering — §3
-- [ ] T214 [P] Move the doctor checks to `ms_runtime::doctor`; the CLI prints them as before — §4
+- [x] T213 [P] Move the trace builder to `ms_runtime::trace`; the CLI keeps rendering — §3
+- [x] T214 [P] Move the doctor checks to `ms_runtime::doctor`; the CLI prints them as before — §4
 - [ ] T215 Add `ms_runtime::profile::container_profile`, and derive the container create body from it — §5
 - [ ] T216 Write red tests for `end_session`: ends a lead with members; rejects a member id; rejects a closed session; denies pending approvals in the tree; idempotent retry; budget stays ≤ 6,000 — `tests/integration/c_end_session.rs`
 - [ ] T217 Implement `end_session` in `ms_runtime::lifecycle` plus one dispatch arm in `ms-supervisor` — §1

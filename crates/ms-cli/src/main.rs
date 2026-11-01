@@ -387,14 +387,16 @@ fn doctor(home: &Path) -> Result<(), String> {
             config.microswarm.runtime.image
         ));
     }
-    println!("✓ configuration   {}", config_dir.display());
-    println!("✓ runtime socket  {}", config.microswarm.runtime.socket);
-    println!("✓ agent image     {}", config.microswarm.runtime.image);
-    println!("✓ model           {} via session proxy", model.model);
-    println!(
-        "✓ credential      {} is present on the host",
-        model.credential
-    );
+    let checks = ms_runtime::doctor::run(ms_runtime::doctor::DoctorInput {
+        config_path: &config_dir.display().to_string(),
+        runtime_socket: &config.microswarm.runtime.socket,
+        agent_image: &config.microswarm.runtime.image,
+        model: &model.model,
+        credential: &model.credential,
+    });
+    for check in checks {
+        println!("✓ {:<16}{}", check.name, check.detail);
+    }
     Ok(())
 }
 

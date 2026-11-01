@@ -10,6 +10,7 @@ use std::{
 };
 
 pub mod credentials;
+pub mod doctor;
 pub mod events;
 pub mod lifecycle;
 pub mod recovery;
