@@ -1214,6 +1214,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "ms-proto",
+ "ms-shell",
  "ms-store",
  "rmcp",
  "serde",
@@ -1272,7 +1273,9 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "ms-proto",
  "ms-runtime",
+ "ms-shell",
  "rusqlite",
  "serde_json",
  "tokio",
@@ -1302,6 +1305,10 @@ dependencies = [
  "serde_json",
  "tokio",
 ]
+
+[[package]]
+name = "ms-shell"
+version = "0.1.0"
 
 [[package]]
 name = "ms-store"

@@ -10,6 +10,7 @@ members = [
     "crates/ms-tools",
     "crates/ms-cli",
     "crates/ms-console",
+    "crates/ms-shell",
     "crates/ms-bench",
 ]
 

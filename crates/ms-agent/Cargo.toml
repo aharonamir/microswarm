@@ -12,6 +12,7 @@ hyper = { version = "1.12.0", default-features = false, features = ["client", "h
 hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
 ms-proto = { path = "../ms-proto" }
 ms-store = { path = "../ms-store" }
+ms-shell = { path = "../ms-shell" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.145"
 rmcp = { version = "=3.5.1", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
