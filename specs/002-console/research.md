@@ -135,13 +135,13 @@ Before adding it, move those helpers **and** the shared idle query loops from `s
 
 | Criterion | Evidence | Result |
 |---|---|---|
-| SC-C01 | Playwright measured 140 ms from starting `microswarm console` through one-time login and first Sessions render on this host; target ≤ 2 s. | Pass locally |
-| SC-C02 | 20 samples from a committed supervisor status/event transaction in SQLite to the rendered status banner had p95 28 ms. The fixture used the console's real Unix socket follower, HTTP API, and browser SSE path. The writer was a controlled supervisor fixture rather than a running `microswarmd`. | Pass in integration fixture |
+| SC-C01 | Playwright measured 131 ms from starting `microswarm console` through one-time login and first Sessions render on this host; target ≤ 2 s. | Pass locally |
+| SC-C02 | 20 samples from a committed supervisor status/event transaction in SQLite to the rendered status banner had p95 26 ms. The fixture used the console's real Unix socket follower, HTTP API, and browser SSE path. The writer was a controlled supervisor fixture rather than a running `microswarmd`. | Pass in integration fixture |
 | SC-C03 | The 60 s combined merge + embedded console HTTP server + one follower fixture used 3.2% of one core with 50 sessions / 20,000 events. No browser SSE client was connected. | Pass for measured fixture |
 | SC-C04 | `cargo test --workspace` passed the console XSS and no-secrets suites; Playwright confirmed hostile agent text stayed inert in Chromium. | Pass |
 | SC-C05 | `scripts/loc-budget.sh` passed: supervisor + shared 5,862/6,000; runtime + shared 4,047/6,000; console 2,134/4,000; web 594/3,500. | Pass |
 | SC-C06 | `tests/e2e/console/package.json` contains only Playwright/axe dev dependencies; no runtime npm dependency or frontend build step. `scripts/web-lint.sh` passed; `crates/ms-console/src/assets.rs` embeds assets. | Pass |
-| SC-C07 | Playwright + axe passed with zero violations for six page states (new session, selected session, approvals, trace, host, member) at 1440 px and 390 px. | Pass |
+| SC-C07 | Playwright + axe passed with zero violations for six page states (new session, selected session, approvals, trace, host, member) at 1440 px and 390 px. Browser interaction checks also verified chat-send locking and the approval code route. | Pass |
 | SC-C08 | R-C9 defines the 3-person, 10-second usability protocol. No participant results have been collected. | Pending human study |
 
 T252 native Chinese review and T255 clean-host full console quickstart are also pending; the Docker fake-model CLI quickstart fixture does not substitute for them.

@@ -116,6 +116,47 @@ test("hostile agent text stays inert in a real browser", async () => {
   await page.close();
 });
 
+test("chat send posts through the console and keeps the session locked while pending", async () => {
+  const page = await context.newPage();
+  let request;
+  await page.route("**/api/v1/**", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "POST" && url.pathname === `/api/v1/sessions/${ROOT}/messages`) {
+      request = route.request();
+      return route.fulfill({ status: 202, json: { request_id: "e2e-chat-1", session_id: ROOT } });
+    }
+    return mockApi(route);
+  });
+  await page.goto(`/#/sessions/${ROOT}`);
+  const composer = page.getByLabel("Message the lead");
+  await composer.fill("Please summarize the test findings.");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(composer).toBeDisabled();
+  expect(request).toBeTruthy();
+  expect(request.postDataJSON()).toEqual({ text: "Please summarize the test findings." });
+  expect(request.headers()["x-ms-console"]).toBeTruthy();
+  await page.close();
+});
+
+test("approval decision posts only through its code route", async () => {
+  const page = await context.newPage();
+  let request;
+  await page.route("**/api/v1/**", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "POST" && url.pathname === "/api/v1/approvals/A1B2/approve") {
+      request = route.request();
+      return route.fulfill({ status: 200, json: { decision: "approved" } });
+    }
+    return mockApi(route);
+  });
+  await page.goto("/#/approvals/A1B2");
+  await page.getByRole("button", { name: "Approve this call" }).click();
+  await expect.poll(() => request?.url()).toContain("/api/v1/approvals/A1B2/approve");
+  expect(request.postDataJSON()).toEqual({});
+  expect(request.headers()["x-ms-console"]).toBeTruthy();
+  await page.close();
+});
+
 async function mockApi(route, activeSession = session) {
   const url = new URL(route.request().url());
   if (url.pathname === "/api/v1/events") return route.fulfill({ status: 200, contentType: "text/event-stream", body: "retry: 30000\n\n" });
