@@ -19,11 +19,11 @@
 
 ## Phase 0 — Research (blocking)
 
-- [ ] T201 Verify R-C0: re-read the state and confirm the ops list, socket mode and current `loc-budget.sh` numbers; record them — `research.md`
-- [ ] T202 [P] Verify R-C1: dump the inbound/outbound kinds from a real two-member session; confirm the merge order and the member-reply rule — `research.md`
-- [ ] T203 [P] Verify R-C3: build a fixture home with 50 sessions and 20,000 events; measure `event_stream` follow CPU over 60 s; record the result and decide on T222 — `research.md`, `crates/ms-bench/`
-- [ ] T204 [P] Verify R-C7: list the exact functions and line counts to move; predict the supervisor budget after the move — `research.md`
-- [ ] T205 [P] Verify R-C6 and Q4: confirm `ms_agent::permit::evaluate_shell` is callable from another crate without pulling container-only dependencies — `research.md`
+- [x] T201 Verify R-C0: re-read the state and confirm the ops list, socket mode and current `loc-budget.sh` numbers; record them — `research.md`
+- [x] T202 [P] Verify R-C1: dump the inbound/outbound kinds from a real two-member session; confirm the merge order and the member-reply rule — `research.md`
+- [x] T203 [P] Verify R-C3: build a fixture home with 50 sessions and 20,000 events; measure `event_stream` follow CPU over 60 s; record the result and decide on T222 — `research.md`, `crates/ms-bench/`
+- [x] T204 [P] Verify R-C7: list the exact functions and line counts to move; predict the supervisor budget after the move — `research.md`
+- [x] T205 [P] Verify R-C6 and Q4: confirm `ms_agent::permit::evaluate_shell` is callable from another crate without pulling container-only dependencies — `research.md`
 
 **Checkpoint A:** every ⚠ item in `research.md` has a recorded decision. **Stop and report.**
 

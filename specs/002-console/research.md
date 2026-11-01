@@ -1,6 +1,42 @@
 # Research: MicroSwarm Console
 
-Phase 0 output. Items marked **⚠ verify** carry a decision taken from a source read on 2026-11-01 (repo `main` at `6108308`). Confirm each against source before the task that depends on it, and record the evidence here.
+Phase 0 output. Verification on branch `002-console` is recorded below. The original source-read notes are retained where a later measurement corrected them.
+
+## Phase 0 verification (2026-11-01)
+
+### T201 / R-C0 — starting state
+
+- `scripts/loc-budget.sh` printed `ms-agent + shared crates: 4443 / 6000`, `ms-supervisor + shared crates: 6000 / 6000`, `ms-runtime + shared crates: 3494 / 6000`. The draft's 5,993 supervisor figure is stale; there is **zero** current headroom. Source: `scripts/loc-budget.sh` (tokei code-line count).
+- `crates/ms-supervisor/src/service.rs:31-39` binds `$MS_HOME/supervisor.sock` and sets mode `0o600`; lines 93 and 312-318 implement `event_stream`, `skills_install`, `creds_set`, `creds_list`, `approve`, `deny`, `chat`, `channel_message`, and `wait`. There is no `end_session` arm.
+- `crates/ms-runtime/src/lib.rs:28-35` confirms `claim_session_busy` accepts both `ready` and `busy`; retain R-C5's console-side lock and Q2 default.
+
+### T202 / R-C1 — conversation source and order
+
+- With `MS_KEEP_TEST_HOME=1 MS_REQUIRE_RUNTIME=1`, `cargo test -p ms-supervisor --test us2-clean-slate -- --nocapture` passed and preserved `/tmp/microswarm-test-3886335-1793556538049372520`, a real lead plus two researcher member sessions. The lead had inbound kinds `user_message`, three `delegation_result`, `member_failed`; outbound kinds `delegation_request`, `dismiss`, `reply`. The two member sessions each had inbound `task` and outbound `reply` (the first also had inbound `control`). Timestamps across the two lead databases were distinct and interleaved; merge by `created_at`, with a fixed source/id tie-breaker.
+- `cargo test -p ms-supervisor --test us2-send -- --nocapture` passed and preserved `/tmp/microswarm-test-3887433-1793556542945104995`. Its lead inbound `member_reply` at `18:09:03.725Z` held `role instructions reached model`; the next lead outbound `reply` at `18:09:03.784Z` held `fixture reply`. Source: the preserved `control/inbound.db` and `out/outbound.db` rows, queried read-only. These are distinct content. **Decision:** always show `member_reply` as its own “Lead · from <role>” item; do not attempt text de-duplication. The two-member transcript validates the kind set and merge; the member-reply transcript validates this rule.
+
+### T203 / R-C3 — follower cost
+
+- Added reproducible fixture runner `crates/ms-bench/src/bin/event_stream_cost.rs`: 50 session rows, 50 agent `events.db` files, 400 events per file (20,000 total). It calls the real `ms_runtime::events::stream` with `follow:true` and a sink for 60 seconds. Run: `cargo build --release -p ms-bench --bin event_stream_cost`, then `/usr/bin/time -f 'CPU user=%U s system=%S s elapsed=%e s maxRSS=%M KB' target/release/event_stream_cost 60`.
+- Output: `elapsed=60.00s; stream=timed out as expected`; `CPU user=30.60 s system=0.68 s elapsed=60.03 s maxRSS=42948 KB`. CPU = `(30.60 + 0.68) / 60.03 = 52.1%` of one core for the follower alone, versus SC-C03's 5% combined target. `crates/ms-runtime/src/events.rs:72-229` confirms every 100 ms pass scans the full source history and merged ledger. **Decision: T222 is required** before SSE fan-out. The fixture measures the idle follower in isolation, so adding the console can only increase combined CPU.
+
+### T204 / R-C7 — extraction budget and dependency boundary
+
+- `crates/ms-supervisor/src/service.rs:124-308` contains `close_idle_leads`, `close_idle_members`, `stop_member_idle`, `stop_idle_lead`, `stop_members_for_lead`, `graceful_stop_session`. `tokei` counts **179 Rust code lines** in the full 124-308 region; the four `stop_*`/`graceful_*` helpers alone (183-308) are **122**, insufficient to meet the ≤5,850 T212 gate from today's 6,000. Move the idle query loops too.
+- A direct copy is impossible: these functions use `ms_supervisor::config::ConfigSet` and `service::runtime_for`; `ms-runtime` cannot depend on `ms-supervisor` without a cycle. Pass a small runtime/idle settings value into `ms_runtime::lifecycle` instead. Budget prediction: 6,000 − 179 + approximately 10–20 service-side adapter lines = **5,831–5,841** supervisor + shared code lines, subject to T212's measured before/after check. Sources: `crates/ms-supervisor/src/config.rs:18`, `service.rs:1470-1472`, `crates/ms-runtime/src/lib.rs:305-310`, `scripts/loc-budget.sh`.
+
+### T205 / R-C6 / Q4 — shell parser dependency
+
+- `crates/ms-agent/src/lib.rs:9` exports `permit`; `permit.rs:156` exports `evaluate_shell`, and external integration test `crates/ms-agent/tests/permit.rs` imports it through `ms_agent::permit`. It is callable from another crate. `permit.rs:158-221` returns `parsed_structure` only for `Ask`; ordinary `Allow` commands and unparseable `Deny` commands have no `approval_prompt`. The UI must not claim a parsed structure in those cases.
+- `crates/ms-agent/Cargo.toml` and `cargo tree -p ms-agent -e normal` show the library brings `rmcp` (including child-process and HTTP transports), `reqwest`, `hyper` and `tokio` (322 dependency-tree lines). These are the agent's model/MCP client dependencies, not needed to display a shell command. **Decision: Q4's direct `ms-agent` dependency default is wrong under T205's “without pulling container-only dependencies” condition.** Recommendation for the owner: extract the pure shell parser into a small shared crate with no model/MCP dependency, used by both agent and console; otherwise use Q4's documented fallback and omit the parsed view. Do not implement the default until resolved.
+
+### Other R-C decisions
+
+- **R-C2:** keep the Rust core gate and separate Playwright/axe job. `crates/ms-bench/Cargo.toml` already uses feature-gated optional performance tests; the console plan has no npm runtime dependency or asset build step.
+- **R-C4 / Q3:** retain vendored Latin Plex fonts and system CJK fallback from `design/README.md`; no source finding contradicted this choice.
+- **R-C5 / Q2:** retain the console in-memory lock; the exact `status IN ('ready','busy')` update is in `crates/ms-runtime/src/lib.rs:34`.
+- **R-C8 / Q1:** retain no cross-channel mirroring. Telegram calls `wait` on pending replies (`crates/ms-channels/src/telegram.rs:206`); the supervisor socket `chat` reply is returned to the caller, and no Telegram broadcast exists in `service.rs`'s `chat` path.
+- **R-C9:** the three-person usability check remains a Phase 9 task; no Phase 0 implementation exists to test yet.
 
 ---
 
@@ -28,7 +64,7 @@ Phase 0 output. Items marked **⚠ verify** carry a decision taken from a source
 | supervisor.db | `approvals` where `root_session_id` = this lead | inline approval card at its `created_at`. This covers member requests, whose `approval_request` sits in the member's own outbound. The approval row, never the agent's outbound body, is what's displayed |
 | outbound | `delegation_request`, `send_to_member`, `dismiss` | not shown (visible in the trace) |
 
-**⚠ verify:** the `member_reply` de-duplication rule against real transcripts. If it is unreliable, always show member replies as their own "Lead · from <role>" item.
+**Verified in T202:** the de-duplication rule is unreliable; always show member replies as their own “Lead · from <role>” item.
 
 ## R-C2 — Testing the frontend without a build toolchain
 
@@ -42,7 +78,7 @@ Phase 0 output. Items marked **⚠ verify** carry a decision taken from a source
 
 **Finding:** `ms-runtime::events::stream` in follow mode rebuilds the merged ledger each 100 ms by reading every `supervisor_events` row and every session's `out/events.db`, then reconciling `event-stream.db`. Cost grows with total history.
 
-**Decision:** the console holds exactly one follower (FR-C40). Measure SC-C03 with 50 sessions and 20,000 events (T221). If it fails, make the merge incremental in `ms-runtime` (per-source high-water marks for each session's `events.db` and for `supervisor_events.seq`) as T222. **⚠ verify** by measurement.
+**Decision after T203:** the console holds exactly one follower (FR-C40). The 50-session, 20,000-event measurement fails SC-C03; make the merge incremental in `ms-runtime` as T222. See the 52.1% CPU measurement above.
 
 ## R-C4 — Fonts under a strict CSP
 
@@ -60,7 +96,7 @@ Phase 0 output. Items marked **⚠ verify** carry a decision taken from a source
 
 **Finding:** the agent's `approval_request` body is `{approval_local_id, server, tool, args, binding}` (`crates/ms-agent/src/model.rs`). The `ParsedCommand` from `permit::evaluate_shell` is not stored, and `supervisor.db.approvals.payload` has `{binding, arguments}`.
 
-**Decision:** for `tool == "shell.run"`, the console computes the display structure by calling `ms_agent::permit::evaluate_shell(args.command)`, a pure function. `ms-console` depends on the `ms-agent` library crate for that alone. The console never trusts a structure supplied by the agent. If the dependency on `ms-agent` is unwanted, the fallback is to omit the parsed view and show only the bound arguments.
+**Decision pending owner at Checkpoint A:** the parser is callable, but direct `ms-agent` dependency pulls model/MCP transport dependencies. Use a small shared parser crate or the documented fallback; retain bound arguments regardless. See T205 evidence above.
 
 ## R-C7 — Ending a session
 
@@ -71,7 +107,7 @@ Phase 0 output. Items marked **⚠ verify** carry a decision taken from a source
 4. Set `status='closed', close_reason='session_end'`.
 5. Emit `session.closed` with `data.by = "operator"`.
 
-Before adding it, move `stop_members_for_lead`, `stop_idle_lead`, `stop_member_idle` and `graceful_stop_session` from `service.rs` into `ms-runtime::lifecycle` to free supervisor budget. **⚠ verify** that the exact move frees at least 150 lines, and record the before/after `loc-budget.sh` output.
+Before adding it, move those helpers **and** the shared idle query loops from `service.rs` into `ms-runtime::lifecycle`. The four helpers alone free only 122 code lines; the full region is 179. T212 must measure the actual before/after budget and reach ≤5,850. See T204 evidence above.
 
 ## R-C8 — Cross-channel replies
 
