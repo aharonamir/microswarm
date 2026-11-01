@@ -122,14 +122,31 @@ fn retries_session_left_stopping_after_partial_failure() {
     assert_eq!(ended["status"], "closed");
 }
 
-#[path = "us2_support.rs"]
-mod team_support;
-
 #[test]
 fn closes_members_before_the_lead() {
-    let Some(harness) = team_support::start_with_skill() else {
+    let Some(harness) = IntegrationHarness::start_swarm_or_skip() else {
         return;
     };
+    let skill = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/skills/code-review-team");
+    let installed = harness
+        .run_cli(&["skills", "install", skill.to_str().unwrap()])
+        .unwrap();
+    assert!(
+        installed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+    std::fs::copy(
+        harness.home.join("credentials/fixture-model-key"),
+        harness.home.join("credentials/model-key"),
+    )
+    .unwrap();
+    let config = harness.home.join("config/microswarm.toml");
+    let contents = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace("fixture-model-key", "model-key");
+    std::fs::write(config, contents).unwrap();
     let output = harness
         .chat(None, &["spawn researcher for auth review"])
         .unwrap();
