@@ -34,8 +34,8 @@
 - [x] T208 Create the `crates/ms-console` skeleton (lib + empty `web/`) and add it to the workspace; add `microswarm console` to the `ms-cli` help, returning "not implemented" — `Cargo.toml`, `crates/ms-console/`, `crates/ms-cli/src/main.rs`
 - [x] T209 [P] Extend `scripts/loc-budget.sh` with `ms-console` Rust ≤ 4,000 and `crates/ms-console/web` JS + CSS ≤ 3,500 — `scripts/loc-budget.sh`
 - [x] T210 [P] Add `scripts/web-lint.sh` (forbidden DOM sinks; inline `<script>`/`style=` in `index.html`) and call it from CI — `scripts/web-lint.sh`, `.github/workflows/ci.yml`
-- [ ] T211 [P] Write red tests for the extractions: lifecycle behaviour unchanged (reuse 001 tests), trace JSON identical, doctor output snapshot, container profile ⇔ create body — `crates/ms-runtime/tests/`, `crates/ms-cli/tests/`
-- [ ] T212 Move the lifecycle helpers from `ms-supervisor/src/service.rs` to `ms-runtime/src/lifecycle.rs`; put before/after budget numbers in the commit message (gate: supervisor + shared ≤ 5,850) — `contracts/supervisor-rpc-additions.md` §2
+- [x] T211 [P] Write red tests for the extractions: lifecycle behaviour unchanged (reuse 001 tests), trace JSON identical, doctor output snapshot, container profile ⇔ create body — `crates/ms-runtime/tests/`, `crates/ms-cli/tests/`
+- [x] T212 Move the lifecycle helpers from `ms-supervisor/src/service.rs` to `ms-runtime/src/lifecycle.rs`; put before/after budget numbers in the commit message (gate: supervisor + shared ≤ 5,850) — `contracts/supervisor-rpc-additions.md` §2
 - [ ] T213 [P] Move the trace builder to `ms_runtime::trace`; the CLI keeps rendering — §3
 - [ ] T214 [P] Move the doctor checks to `ms_runtime::doctor`; the CLI prints them as before — §4
 - [ ] T215 Add `ms_runtime::profile::container_profile`, and derive the container create body from it — §5

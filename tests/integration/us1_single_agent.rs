@@ -91,7 +91,6 @@ fn second_cli_message_reuses_the_session_container() {
 }
 
 #[test]
-#[ignore = "red: T211 — lifecycle behavior regression guard for runtime extraction"]
 fn idle_lead_is_closed_with_idle_reason() {
     let Some(harness) = IntegrationHarness::start_or_skip() else {
         return;
