@@ -147,12 +147,28 @@ async fn dispatch(home: &Path, request: &Value) -> Value {
         Some("chat") => chat_message(home, request).await,
         Some("channel_message") => chat_message(home, request).await,
         Some("wait") => wait_for_reply(home, request).await,
+        Some("end_session") => end_session(home, request).await,
         _ => Err("unknown supervisor request".to_owned()),
     };
     match result {
         Ok(value) => value,
         Err(error) => json!({"error":error}),
     }
+}
+
+async fn end_session(home: &Path, request: &Value) -> Result<Value, String> {
+    let id = request
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or("session_id is missing")?;
+    let config = load_config_dir(config_dir(home)).map_err(|e| e.to_string())?;
+    ms_runtime::lifecycle::end_session(
+        home,
+        &config.microswarm.runtime.socket,
+        config.microswarm.limits.grace_ms,
+        id,
+    )
+    .await
 }
 
 fn install_skill(home: &Path, request: &Value) -> Result<Value, String> {

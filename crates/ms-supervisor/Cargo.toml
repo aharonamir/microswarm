@@ -218,3 +218,7 @@ path = "../../tests/adversarial/symlink_scope.rs"
 [[test]]
 name = "spawn-policy"
 path = "tests/policy.rs"
+
+[[test]]
+name = "c-end-session"
+path = "../../tests/integration/c_end_session.rs"

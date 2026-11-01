@@ -76,7 +76,13 @@ pub async fn graceful_stop(
     Ok(())
 }
 
-async fn stop_members(home: &Path, socket: &str, grace_ms: u64, lead: &str) -> Result<(), String> {
+async fn stop_members(
+    home: &Path,
+    socket: &str,
+    grace_ms: u64,
+    lead: &str,
+    by: Option<&str>,
+) -> Result<(), String> {
     let mut store = SupervisorStore::open(home.join("supervisor.db")).map_err(|e| e.to_string())?;
     let members = {
         let mut stmt=store.connection().prepare("SELECT id,container_id,role FROM sessions WHERE parent_id=?1 AND kind='member' AND status NOT IN ('closed','failed') AND container_id IS NOT NULL ORDER BY created_at").map_err(|e|e.to_string())?;
@@ -102,7 +108,11 @@ async fn stop_members(home: &Path, socket: &str, grace_ms: u64, lead: &str) -> R
             lead,
             &role,
             SupervisorEventType::SessionClosed,
-            json!({"reason":"session_end"}),
+            if let Some(by) = by {
+                json!({"reason":"session_end","by":by})
+            } else {
+                json!({"reason":"session_end"})
+            },
         )?;
     }
     Ok(())
@@ -144,11 +154,79 @@ async fn stop_idle_lead(
     lead: &str,
     container: &str,
 ) -> Result<(), String> {
-    stop_members(home, socket, grace_ms, lead).await?;
+    stop_members(home, socket, grace_ms, lead, None).await?;
     graceful_stop(home, socket, grace_ms, lead, container).await?;
     let now = crate::utc_now();
     SupervisorStore::open(home.join("supervisor.db")).map_err(|e|e.to_string())?.connection().execute("UPDATE sessions SET status='closed',close_reason='idle',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status='stopping'",[lead,&now]).map_err(|e|e.to_string())?;
     Ok(())
+}
+
+pub async fn end_session(
+    home: &Path,
+    runtime_socket: &str,
+    grace_ms: u64,
+    session_id: &str,
+) -> Result<serde_json::Value, String> {
+    use rusqlite::OptionalExtension;
+    let mut store = SupervisorStore::open(home.join("supervisor.db")).map_err(|e| e.to_string())?;
+    let row: Option<(String, String, Option<String>, String)> = store
+        .connection()
+        .query_row(
+            "SELECT kind,status,container_id,role FROM sessions WHERE id=?1",
+            [session_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let (kind, status, container, role) = row.ok_or_else(|| "session_not_found".to_owned())?;
+    if kind != "lead" {
+        return Err("not_a_lead".into());
+    }
+    if matches!(status.as_str(), "closed" | "failed") {
+        return Err("already_closed".into());
+    }
+    let claimed=store.connection().execute("UPDATE sessions SET status='stopping' WHERE id=?1 AND kind='lead' AND status NOT IN ('closed','failed')",[session_id]).map_err(|e|e.to_string())?;
+    if claimed == 0 {
+        return Err("already_closed".into());
+    }
+    let pending = {
+        let mut q=store.connection().prepare("SELECT approvals.id,requesting_session_id,role FROM approvals JOIN sessions ON sessions.id=approvals.requesting_session_id WHERE approvals.root_session_id=?1 AND approvals.status='pending'").map_err(|e|e.to_string())?;
+        q.query_map([session_id], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+    };
+    let now = crate::utc_now();
+    for (id, requester, requester_role) in pending {
+        if store.connection().execute("UPDATE approvals SET status='denied',resolved_at=?2 WHERE id=?1 AND status='pending'",[&id,&now]).map_err(|e|e.to_string())?==1 {crate::events::emit_supervisor_event(&mut store,&requester,session_id,&requester_role,SupervisorEventType::ApprovalResolved,json!({"approval_id":id,"reason":"session_end","decision":"denied"}))?;}
+    }
+    drop(store);
+    let count_before = {
+        let db = SupervisorStore::open_readonly(home.join("supervisor.db"))
+            .map_err(|e| e.to_string())?;
+        db.connection().query_row("SELECT COUNT(*) FROM sessions WHERE parent_id=?1 AND kind='member' AND status NOT IN ('closed','failed')",[session_id],|r|r.get::<_,i64>(0)).map_err(|e|e.to_string())?
+    };
+    stop_members(home, runtime_socket, grace_ms, session_id, Some("operator")).await?;
+    let container = container.ok_or_else(|| "lead has no container".to_owned())?;
+    graceful_stop(home, runtime_socket, grace_ms, session_id, &container).await?;
+    let now = crate::utc_now();
+    let mut store = SupervisorStore::open(home.join("supervisor.db")).map_err(|e| e.to_string())?;
+    store.connection().execute("UPDATE sessions SET status='closed',close_reason='session_end',closed_at=?2,last_active_at=?2 WHERE id=?1 AND status='stopping'",[session_id,&now]).map_err(|e|e.to_string())?;
+    crate::events::emit_supervisor_event(
+        &mut store,
+        session_id,
+        session_id,
+        &role,
+        SupervisorEventType::SessionClosed,
+        json!({"reason":"session_end","by":"operator"}),
+    )?;
+    Ok(json!({"session_id":session_id,"closed_members":count_before,"status":"closed"}))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
