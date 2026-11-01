@@ -109,202 +109,33 @@ async fn handle_connection(home: PathBuf, stream: UnixStream) -> Result<(), Stri
 async fn idle_session_watcher(home: PathBuf) {
     loop {
         tokio::time::sleep(Duration::from_millis(250)).await;
-        if let Err(error) = close_idle_leads(&home).await {
-            eprintln!("idle session watcher failed: {error}");
+        let idle = async {
+            let config = load_config_dir(config_dir(&home)).map_err(|e| e.to_string())?;
+            let socket = &config.microswarm.runtime.socket;
+            let grace = config.microswarm.limits.grace_ms;
+            ms_runtime::lifecycle::close_idle_leads(
+                &home,
+                socket,
+                config.microswarm.limits.lead_idle_s,
+                grace,
+            )
+            .await?;
+            ms_runtime::lifecycle::close_idle_members(
+                &home,
+                socket,
+                config.microswarm.limits.member_idle_s,
+                grace,
+            )
+            .await
         }
-        if let Err(error) = close_idle_members(&home).await {
-            eprintln!("member idle watcher failed: {error}");
+        .await;
+        if let Err(error) = idle {
+            eprintln!("idle session watcher failed: {error}");
         }
         if let Err(error) = crate::deadlines::process_due(&home).await {
             eprintln!("delegation deadline watcher failed: {error}");
         }
     }
-}
-
-async fn close_idle_leads(home: &Path) -> Result<(), String> {
-    let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
-    let idle_seconds = config.microswarm.limits.lead_idle_s;
-    let store =
-        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
-    let due = {
-        let mut statement = store
-            .connection()
-            .prepare(
-                "SELECT id, container_id, last_active_at FROM sessions
-                 WHERE kind='lead' AND status='ready' AND container_id IS NOT NULL
-                   AND (julianday('now') - julianday(last_active_at)) * 86400.0 >= ?1",
-            )
-            .map_err(|error| error.to_string())?;
-        let rows = statement
-            .query_map([idle_seconds as f64], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|error| error.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())?
-    };
-    for (session_id, container_id, last_active_at) in due {
-        let claimed = store
-            .connection()
-            .execute(
-                "UPDATE sessions SET status='stopping'
-                 WHERE id=?1 AND status='ready' AND last_active_at=?2",
-                [&session_id, &last_active_at],
-            )
-            .map_err(|error| error.to_string())?;
-        if claimed == 0 {
-            continue;
-        }
-        stop_idle_lead(home, &config, &session_id, &container_id).await?;
-    }
-    Ok(())
-}
-
-async fn close_idle_members(home: &Path) -> Result<(), String> {
-    let config = load_config_dir(config_dir(home)).map_err(|error| error.to_string())?;
-    let store =
-        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
-    let due = store.connection().prepare(
-        "UPDATE sessions SET status='stopping' WHERE id IN (
-           SELECT id FROM sessions WHERE kind='member' AND status='ready' AND container_id IS NOT NULL
-           AND (julianday('now') - julianday(last_active_at)) * 86400.0 >= ?1
-         ) RETURNING id,parent_id,container_id",
-    ).map_err(|e|e.to_string())?.query_map([config.microswarm.limits.member_idle_s as f64],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).map_err(|e|e.to_string())?.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
-    for (member_id, lead_id, container_id) in due {
-        stop_member_idle(home, &config, &member_id, &lead_id, &container_id).await?;
-    }
-    Ok(())
-}
-
-async fn stop_member_idle(
-    home: &Path,
-    config: &ConfigSet,
-    member_id: &str,
-    lead_id: &str,
-    container_id: &str,
-) -> Result<(), String> {
-    graceful_stop_session(home, config, member_id, container_id).await?;
-    let now = utc_now();
-    let mut store =
-        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
-    store.connection().execute("UPDATE sessions SET status='closed',close_reason='idle',closed_at=?2,last_active_at=?2 WHERE id=?1",[member_id,now.as_str()]).map_err(|error|error.to_string())?;
-    store.connection().execute("UPDATE delegations SET status='failed',failure_reason='timeout',updated_at=?2 WHERE lead_id=?1 AND member_id=?3",[lead_id,now.as_str(),member_id]).map_err(|error|error.to_string())?;
-    emit_supervisor_event(
-        &mut store,
-        member_id,
-        lead_id,
-        "member",
-        SupervisorEventType::DelegationTimeout,
-        json!({"reason":"idle"}),
-    )?;
-    open_session_dir(home.join("sessions").join(lead_id))
-        .map_err(|error| error.to_string())?
-        .append_inbound(
-            &InboundKind::MemberFailed,
-            &json!({"member_id":member_id,"reason":"timeout"}),
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(())
-}
-
-async fn stop_idle_lead(
-    home: &Path,
-    config: &ConfigSet,
-    session_id: &str,
-    container_id: &str,
-) -> Result<(), String> {
-    stop_members_for_lead(home, config, session_id).await?;
-    graceful_stop_session(home, config, session_id, container_id).await?;
-
-    let closed_at = utc_now();
-    let store =
-        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
-    store
-        .connection()
-        .execute(
-            "UPDATE sessions SET status='closed', close_reason='idle', closed_at=?2, last_active_at=?2
-             WHERE id=?1 AND status='stopping'",
-            [session_id, closed_at.as_str()],
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(())
-}
-
-async fn stop_members_for_lead(
-    home: &Path,
-    config: &ConfigSet,
-    lead_id: &str,
-) -> Result<(), String> {
-    let mut store =
-        SupervisorStore::open(home.join("supervisor.db")).map_err(|error| error.to_string())?;
-    let members = {
-        let mut statement = store.connection().prepare(
-            "SELECT id, container_id, role FROM sessions WHERE parent_id=?1 AND kind='member'
-             AND status NOT IN ('closed','failed') AND container_id IS NOT NULL ORDER BY created_at",
-        ).map_err(|error| error.to_string())?;
-        statement
-            .query_map([lead_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|error| error.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())?
-    };
-    for (member_id, container_id, role) in members {
-        graceful_stop_session(home, config, &member_id, &container_id).await?;
-        let now = utc_now();
-        store.connection().execute(
-            "UPDATE sessions SET status='closed', close_reason='session_end', closed_at=?2, last_active_at=?2 WHERE id=?1",
-            [member_id.as_str(),now.as_str()],
-        ).map_err(|error| error.to_string())?;
-        store.connection().execute(
-            "UPDATE delegations SET status='dismissed', updated_at=?2 WHERE lead_id=?1 AND member_id=?3",
-            [lead_id,now.as_str(),member_id.as_str()],
-        ).map_err(|error| error.to_string())?;
-        emit_supervisor_event(
-            &mut store,
-            &member_id,
-            lead_id,
-            &role,
-            SupervisorEventType::SessionClosed,
-            json!({"reason":"session_end"}),
-        )?;
-    }
-    Ok(())
-}
-
-async fn graceful_stop_session(
-    home: &Path,
-    config: &ConfigSet,
-    session_id: &str,
-    container_id: &str,
-) -> Result<(), String> {
-    open_session_dir(home.join("sessions").join(session_id))
-        .map_err(|error| error.to_string())?
-        .append_inbound(
-            &InboundKind::Control,
-            &json!({"op":"shutdown","grace_ms":config.microswarm.limits.grace_ms}),
-        )
-        .map_err(|error| error.to_string())?;
-    let runtime = runtime_for(config)?;
-    runtime.signal(container_id, "SIGUSR1").await?;
-    let grace = Duration::from_millis(config.microswarm.limits.grace_ms);
-    let deadline = Instant::now() + grace;
-    while runtime.is_running(container_id).await? && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    if runtime.is_running(container_id).await? {
-        runtime.stop(container_id, grace).await?;
-    }
-    Ok(())
 }
 
 async fn dispatch(home: &Path, request: &Value) -> Value {
@@ -1434,7 +1265,14 @@ async fn handle_dismiss_member(
         return Ok(());
     }
     let container_id = member.container_id.ok_or("member has no container")?;
-    graceful_stop_session(home, config, member_id, &container_id).await?;
+    ms_runtime::lifecycle::graceful_stop(
+        home,
+        &config.microswarm.runtime.socket,
+        config.microswarm.limits.grace_ms,
+        member_id,
+        &container_id,
+    )
+    .await?;
     let now = utc_now();
     store
         .connection()
