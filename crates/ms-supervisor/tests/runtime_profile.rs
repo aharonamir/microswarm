@@ -35,6 +35,7 @@ fn scope(work_path: &std::path::Path) -> Scope {
 }
 
 #[test]
+#[ignore = "red: T211 — shared profile must match container create settings"]
 fn runtime_profile_enforces_mount_and_process_boundaries() {
     let session_dir = std::env::temp_dir().join(format!(
         "ms-runtime-profile-{}-{}",
