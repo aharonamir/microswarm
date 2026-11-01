@@ -27,7 +27,7 @@ Run [quickstart.md](../../specs/002-console/quickstart.md) §§0–2 against Doc
 
 ### Automated integration evidence (not a manual quickstart pass)
 
-On 2026-11-01, `MS_REQUIRE_RUNTIME=1 MS_TEST_RUNTIME=docker MS_TEST_AGENT_IMAGE=microswarm-agent:dev cargo test -p ms-supervisor --test console-quickstart -- --nocapture` passed. The integration test starts the real `microswarmd` and fake-model agent, launches `microswarm console`, authenticates with the one-time startup token, confirms the actual session appears in `/api/v1/sessions`, then approves its pending tool request through the authenticated console endpoint and confirms the agent resumes. This verifies the real supervisor socket path for session reads and approval decisions. It does not run the quickstart UI with an active Telegram session or replace the manual §0–§2 run below.
+On 2026-11-01, `MS_REQUIRE_RUNTIME=1 MS_TEST_RUNTIME=docker MS_TEST_AGENT_IMAGE=microswarm-agent:dev cargo test -p ms-supervisor --test console-quickstart -- --nocapture` passed. The integration test starts the real `microswarmd` and fake-model agent, launches `microswarm console`, authenticates with the one-time startup token, confirms the actual session appears in `/api/v1/sessions`, approves its pending tool request through the authenticated console endpoint, then sends a follow-up through the console chat endpoint and confirms it appears in session history after reaching the fake model. It verifies live supervisor socket paths for session reads, chat, and approval decisions. It does not run the quickstart UI with an active Telegram session or replace the manual §0–§2 run below.
 
 | Section | Passed? | Environment/date | Drift or fix |
 |---|---|---|---|

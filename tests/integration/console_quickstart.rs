@@ -103,6 +103,31 @@ fn console_lists_real_session_and_decides_approval_through_supervisor() {
             .contains("fixture reply")
     );
     assert!(chat.wait().expect("chat exits after approval").success());
+
+    let console_message = format!("/api/v1/sessions/{session_id}/messages");
+    let accepted = http_request(
+        address,
+        &host,
+        "POST",
+        &console_message,
+        Some(&cookie),
+        Some(r#"{"text":"console follow-up"}"#),
+    );
+    assert!(accepted.starts_with("HTTP/1.1 202"), "{accepted}");
+    let model_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while harness.model.request_count() < 3 && std::time::Instant::now() < model_deadline {
+        thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        harness.model.request_count() >= 3,
+        "console message did not reach the fake model"
+    );
+    let messages_path = format!("/api/v1/sessions/{session_id}/messages");
+    let messages = http_request(address, &host, "GET", &messages_path, Some(&cookie), None);
+    let messages_json: serde_json::Value = response_json(&messages);
+    let items = messages_json["items"].as_array().unwrap();
+    assert!(items.iter().any(|item| item["text"] == "console follow-up"));
+    assert!(items.iter().any(|item| item["text"] == "fixture reply"));
 }
 
 struct ConsoleProcess(Child);
