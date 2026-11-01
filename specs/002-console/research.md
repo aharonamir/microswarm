@@ -19,6 +19,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 
 - Added reproducible fixture runner `crates/ms-bench/src/bin/event_stream_cost.rs`: 50 session rows, 50 agent `events.db` files, 400 events per file (20,000 total). It calls the real `ms_runtime::events::stream` with `follow:true` and a sink for 60 seconds. Run: `cargo build --release -p ms-bench --bin event_stream_cost`, then `/usr/bin/time -f 'CPU user=%U s system=%S s elapsed=%e s maxRSS=%M KB' target/release/event_stream_cost 60`.
 - Output: `elapsed=60.00s; stream=timed out as expected`; `CPU user=30.60 s system=0.68 s elapsed=60.03 s maxRSS=42948 KB`. CPU = `(30.60 + 0.68) / 60.03 = 52.1%` of one core for the follower alone, versus SC-C03's 5% combined target. `crates/ms-runtime/src/events.rs:72-229` confirms every 100 ms pass scans the full source history and merged ledger. **Decision: T222 is required** before SSE fan-out. The fixture measures the idle follower in isolation, so adding the console can only increase combined CPU.
+- After T222, the same release fixture ran for 10 seconds: `elapsed=10.00s; stream=timed out as expected`; `/usr/bin/time` reported `CPU user=0.33 s system=0.14 s elapsed=10.03 s maxRSS=42944 KB`, or **4.7% of one core**. This short run meets 5% only for the isolated follower and leaves effectively no measured headroom for the console; retain one follower and remeasure the combined console path under T242.
 
 ### T204 / R-C7 — extraction budget and dependency boundary
 

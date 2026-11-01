@@ -53,7 +53,7 @@
 - [ ] T221 [P] Status-word tests: every row of the data-model table, including "Ended by you" via `data.by` — `crates/ms-console/tests/status.rs`
 
 ### Implementation
-- [ ] T222 (only if T203 fails SC-C03) Make the `event_stream` merge incremental with per-source high-water marks — `crates/ms-runtime/src/events.rs`
+- [x] T222 (only if T203 fails SC-C03) Make the `event_stream` merge incremental with per-source high-water marks — `crates/ms-runtime/src/events.rs`
 - [ ] T223 Server, routing, assets, headers and the `microswarm console` entry point — `crates/ms-console/src/{lib,server,assets}.rs`, `crates/ms-cli/src/main.rs`
 - [ ] T224 Auth: token, console sessions, Host/Origin/header checks — `crates/ms-console/src/auth.rs`
 - [ ] T225 [P] Supervisor RPC client: request/response, plus a follow stream with reconnect — `crates/ms-console/src/rpc.rs`
