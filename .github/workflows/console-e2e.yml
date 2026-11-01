@@ -16,6 +16,14 @@ jobs:
           cache-dependency-path: tests/e2e/console/package-lock.json
       - name: Build host binaries
         run: cargo build --workspace --bins
+      - name: Build agent image for the fake-model quickstart
+        run: docker build --tag microswarm-agent:dev --file images/agent.Containerfile .
+      - name: Exercise the fake-model Docker quickstart
+        env:
+          MS_REQUIRE_RUNTIME: "1"
+          MS_TEST_RUNTIME: docker
+          MS_TEST_AGENT_IMAGE: microswarm-agent:dev
+        run: cargo test -p ms-supervisor --test us2-quickstart -- --nocapture
       - name: Install browser test dependencies
         working-directory: tests/e2e/console
         run: npm ci
