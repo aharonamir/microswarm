@@ -224,7 +224,7 @@
 - [x] T097 [P] Adversarial review of `ms-agent` and `ms-supervisor` against the Constitution Check; record findings — `docs/reviews/`
 - [x] T098 [P] Operator docs: install, config reference, team-skill authoring, threat model mapped to OWASP ASI — `docs/`
 - [x] T099 [P] Chinese translations reviewed by a native speaker — `crates/ms-supervisor/src/i18n.rs`, review recorded in `docs/reviews/zh-native-review.md`
-- [ ] T100 Run quickstart §0–§6 on a clean host; fix drift — `specs/001-microswarm/quickstart.md`
+- [x] T100 Run quickstart §0–§6 on a clean host; fix drift — `specs/001-microswarm/quickstart.md`
 
 T095 implementation evidence (2026-10-30): the benchmark ran locally with three
 cold-start samples and one warm swarm sample on Docker 29.1.3. This reduced local
@@ -233,22 +233,21 @@ sample is diagnostic, not the `ubuntu-latest` reference baseline: SC-001 p50 was
 The CI performance job measures the base and current revisions on the same
 `ubuntu-latest` runner and fails if any metric regresses by more than 20%.
 
-T100 partial evidence (2026-10-31): in a fresh temporary home, `doctor` passed
-with the configured DeepSeek endpoint. A real-model US1 chat approved an
-out-of-`/work` read (the tool denied it and the agent replied) and listed `/work`;
-the resulting four-event trace validated against `events.schema.json`. Runtime
-integration tests passed for US1 approval, US2 quickstart and member approval,
-US3 safety, US4 adoption/reissued approvals, and US5 stdio tool registration.
-The US5 quickstart now uses the shell available in the scratch agent image rather
-than assuming Python is installed. A real-model US2 run exposed an
-approval-ordering race. The member task is now held through approval, its
-outbound cursor and reply are routed before accepting another task, and startup
-results are deferred until the member replies. A Docker regression verifies that
-a second send does not enter the unfinished member turn. In a fresh DeepSeek
-home, the spawn and member `fs.list` approvals completed and the lead answered
-from the member's `["auth.rs", "lib.rs"]` result. Quickstart §§3–4 are covered by
-runtime integration tests, not manual real-model runs. T100 remains open until
-§§0–6 complete on a clean host.
+T100 evidence (2026-11-01): installed CLI and supervisor into a fresh temporary
+install root, built the agent image, and initialized fresh homes and a work
+directory. `doctor` passed with the configured DeepSeek endpoint. Real-model
+US1 listed `/work/src` and denied `/etc/hostname`; US2 spawned researcher and
+tester members, ran the shell test, and dismissed both; US3 classified forced
+member removal as safety with no retry and restarted a missing lead container
+after supervisor recovery; US4 adopted containers, expired and reissued a
+pending approval, rejected the old code, and accepted the new one; US5 added,
+called, listed, and removed the weather stdio tool without rebuilding the image.
+US6 validated all 18 events in a real approved-tool trace and all 15 events in
+an out-of-work denial trace against the Draft 2020-12 schema. The trace now
+includes turn, model, tool, and permission events. `MS_REQUIRE_RUNTIME=1 cargo
+test --workspace` passed, along with format, clippy, build, and line-budget
+checks. The run used an isolated clean install and home on the existing Ubuntu
+host; it did not provision a separate VM.
 
 ---
 

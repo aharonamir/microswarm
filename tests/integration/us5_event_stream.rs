@@ -10,6 +10,25 @@ use std::{
 };
 
 #[test]
+fn agent_trace_contains_model_and_turn_events() {
+    let Some(harness) = IntegrationHarness::start_or_skip() else {
+        return;
+    };
+    assert!(harness.chat(None, &["hello"]).unwrap().status.success());
+    let mut types = std::collections::BTreeSet::new();
+    for entry in std::fs::read_dir(harness.home.join("sessions")).unwrap() {
+        let db = ms_store::open_session_dir(entry.unwrap().path()).unwrap();
+        let mut stmt = db.events().prepare("SELECT type FROM events").unwrap();
+        for event in stmt.query_map([], |row| row.get::<_, String>(0)).unwrap() {
+            types.insert(event.unwrap());
+        }
+    }
+    for event in ["turn.start", "model.call", "turn.end"] {
+        assert!(types.contains(event), "missing {event}: {types:?}");
+    }
+}
+
+#[test]
 fn host_event_stream_merges_all_events_with_gapless_session_sequences() {
     let Some(harness) = IntegrationHarness::start_or_skip() else {
         return;

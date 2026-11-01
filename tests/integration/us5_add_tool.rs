@@ -36,7 +36,7 @@ fn added_stdio_tool_is_available_without_rebuilding() {
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("27 C and clear"),
-        "agent should return the Python MCP tool result: {}",
+        "agent should return the shell MCP tool result: {}",
         String::from_utf8_lossy(&output.stdout)
     );
 }

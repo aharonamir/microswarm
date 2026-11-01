@@ -10,7 +10,9 @@ use hyper::{Method, Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use ms_proto::{ApprovalBinding, InboundKind, InboundMessage, OutboundKind, OutboundMessage};
+use ms_proto::{
+    AgentEventType, ApprovalBinding, InboundKind, InboundMessage, OutboundKind, OutboundMessage,
+};
 use ms_store::HistoryEntry;
 use serde_json::{Value, json};
 use std::error::Error;
@@ -19,6 +21,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 static NEXT_APPROVAL_LOCAL_ID: AtomicU64 = AtomicU64::new(1);
@@ -493,6 +496,125 @@ impl TurnProcessor for ModelClient {
 }
 
 impl ModelClient {
+    fn trace(
+        context: &mut AgentContext,
+        event: AgentEventType,
+        data: Value,
+    ) -> Result<(), TurnError> {
+        crate::emit::emit(
+            &mut context.store,
+            &context.session_id,
+            &context.root_session_id,
+            &context.role,
+            event,
+            data,
+        )
+        .map(|_| ())
+        .map_err(|error| TurnError::Config(format!("cannot record agent event: {error}")))
+    }
+
+    async fn traced_complete(
+        &self,
+        context: &mut AgentContext,
+        history: &[HistoryEntry],
+        text: &str,
+        tools: &[Value],
+    ) -> Result<Value, TurnError> {
+        let started = Instant::now();
+        let response = self
+            .complete_raw(history, text, tools)
+            .await
+            .map_err(map_model_error)?;
+        let usage = response.get("usage");
+        let input_tokens = usage
+            .and_then(|value| {
+                value
+                    .get("prompt_tokens")
+                    .or_else(|| value.get("input_tokens"))
+            })
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let output_tokens = usage
+            .and_then(|value| {
+                value
+                    .get("completion_tokens")
+                    .or_else(|| value.get("output_tokens"))
+            })
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        Self::trace(
+            context,
+            AgentEventType::ModelCall,
+            json!({
+                "model": self.model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "duration_ms": started.elapsed().as_millis() as u64,
+            }),
+        )?;
+        Ok(response)
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "trace identity accompanies the existing tool call context"
+    )]
+    async fn traced_tool_call(
+        &mut self,
+        context: &mut AgentContext,
+        call_id: &str,
+        server: &str,
+        tool: &str,
+        arguments: Value,
+        approved: Option<&ApprovalBinding>,
+        in_reply_to: Option<i64>,
+    ) -> Result<Result<Value, String>, TurnError> {
+        Self::trace(
+            context,
+            AgentEventType::ToolCall,
+            json!({
+                "call_id": call_id, "server": server, "tool": tool, "args": arguments,
+            }),
+        )?;
+        let started = Instant::now();
+        let result = self
+            .call_tool(context, server, tool, arguments, approved, in_reply_to)
+            .await;
+        let decision = match result.as_ref() {
+            Ok(_) => "allow",
+            Err(reason) if reason == &PermitError::ApprovalRequired.to_string() => "ask",
+            Err(reason)
+                if reason == &PermitError::Denied.to_string()
+                    || reason == &PermitError::NotGranted.to_string() =>
+            {
+                "deny"
+            }
+            Err(_) => "allow",
+        };
+        Self::trace(
+            context,
+            AgentEventType::PermitDecision,
+            json!({
+                "call_id": call_id, "decision": decision,
+                "rule": if approved.is_some() { "approved binding" } else { "session scope" },
+            }),
+        )?;
+        if decision != "ask" {
+            let ok = result
+                .as_ref()
+                .is_ok_and(|value| value.get("isError").and_then(Value::as_bool) != Some(true));
+            Self::trace(
+                context,
+                AgentEventType::ToolResult,
+                json!({
+                    "call_id": call_id, "ok": ok,
+                    "duration_ms": started.elapsed().as_millis() as u64,
+                }),
+            )?;
+        }
+        Ok(result)
+    }
+
     async fn run_turn(
         &mut self,
         context: &mut AgentContext,
@@ -528,9 +650,8 @@ impl ModelClient {
                 ""
             };
             let response = self
-                .complete_raw(&conversation, request_text, &tools)
-                .await
-                .map_err(map_model_error)?;
+                .traced_complete(context, &conversation, request_text, &tools)
+                .await?;
             if let Some((call_id, server, tool, arguments)) =
                 model_tool_call(self.provider, &response)
             {
@@ -547,15 +668,16 @@ impl ModelClient {
                 delta.push(assistant);
                 let binding = ApprovalBinding::for_call(&server, &tool, Some(&arguments));
                 match self
-                    .call_tool(
+                    .traced_tool_call(
                         context,
+                        &call_id,
                         &server,
                         &tool,
                         arguments.clone(),
                         None,
                         in_reply_to,
                     )
-                    .await
+                    .await?
                 {
                     Ok(result) => {
                         let result_entry = tool_result_history(self.provider, &call_id, result);
@@ -660,6 +782,16 @@ impl ModelClient {
             ));
         }
         if result.get("decision").and_then(Value::as_str) != Some("approved") {
+            Self::trace(
+                context,
+                AgentEventType::PermitDecision,
+                json!({"call_id": call_id, "decision": "deny", "rule": "approval not granted"}),
+            )?;
+            Self::trace(
+                context,
+                AgentEventType::ToolResult,
+                json!({"call_id": call_id, "ok": false, "duration_ms": 0}),
+            )?;
             let result_entry = tool_result_history(
                 self.provider,
                 call_id,
@@ -680,9 +812,8 @@ impl ModelClient {
                 .await
                 .map_err(TurnError::Transient)?;
             let response = self
-                .complete_raw(&conversation, "", &tools)
-                .await
-                .map_err(map_model_error)?;
+                .traced_complete(context, &conversation, "", &tools)
+                .await?;
             let reply = self.text_response(&response).map_err(map_model_error)?;
             delta.push(HistoryEntry {
                 role: "assistant".into(),
@@ -691,15 +822,16 @@ impl ModelClient {
             return Ok(reply_output(reply, in_reply_to, delta));
         }
         let result = self
-            .call_tool(
+            .traced_tool_call(
                 context,
+                call_id,
                 server,
                 tool,
                 arguments,
                 Some(&approved_binding),
                 in_reply_to,
             )
-            .await;
+            .await?;
         let result_entry = match result {
             Ok(result) => tool_result_history(self.provider, call_id, result),
             Err(reason) => tool_result_history(
@@ -724,9 +856,8 @@ impl ModelClient {
                 .await
                 .map_err(TurnError::Transient)?;
             let response = self
-                .complete_raw(&conversation, "", &tools)
-                .await
-                .map_err(map_model_error)?;
+                .traced_complete(context, &conversation, "", &tools)
+                .await?;
             if let Some((call_id, server, tool, arguments)) =
                 model_tool_call(self.provider, &response)
             {
@@ -738,15 +869,16 @@ impl ModelClient {
                 delta.push(assistant);
                 let binding = ApprovalBinding::for_call(&server, &tool, Some(&arguments));
                 match self
-                    .call_tool(
+                    .traced_tool_call(
                         context,
+                        &call_id,
                         &server,
                         &tool,
                         arguments.clone(),
                         None,
                         in_reply_to,
                     )
-                    .await
+                    .await?
                 {
                     Ok(result) => {
                         let entry = tool_result_history(self.provider, &call_id, result);

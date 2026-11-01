@@ -167,6 +167,15 @@ pub async fn run<P: TurnProcessor>(
             }
 
             let history = context.store.history().map_err(LoopError::Store)?;
+            crate::emit::emit(
+                &mut context.store,
+                &context.session_id,
+                &context.root_session_id,
+                &context.role,
+                AgentEventType::TurnStart,
+                json!({ "inbound_id": inbound_id }),
+            )
+            .map_err(LoopError::Store)?;
             let output = tokio::select! {
                 result = processor.process(&mut context, message, history) => result.map_err(LoopError::Turn)?,
                 _ = terminate.recv() => return Err(LoopError::Terminated),
@@ -175,6 +184,15 @@ pub async fn run<P: TurnProcessor>(
                 .store
                 .commit_turn(inbound_id, &output.outbound, &output.history)
                 .map_err(LoopError::Store)?;
+            crate::emit::emit(
+                &mut context.store,
+                &context.session_id,
+                &context.root_session_id,
+                &context.role,
+                AgentEventType::TurnEnd,
+                json!({ "inbound_id": inbound_id }),
+            )
+            .map_err(LoopError::Store)?;
             continue;
         }
 
