@@ -189,6 +189,79 @@ pub fn status_event(home: &Path, event: &Value) -> Option<Value> {
     )
 }
 
+pub fn recent_activity(home: &Path, id: &str) -> Result<Value, String> {
+    if !valid_session_id(id) {
+        return Err("invalid session id".into());
+    }
+    let db = supervisor(home)?;
+    let root: String = db
+        .query_row("SELECT root_id FROM sessions WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()
+        .map_err(|e| e.to_string())?
+        .ok_or("session not found")?;
+    let ids = {
+        let mut stmt = db
+            .prepare("SELECT id FROM sessions WHERE root_id=?1 ORDER BY created_at,id")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map([&root], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    let mut events = Vec::<(i64, i64, Value)>::new();
+    let mut stmt = db.prepare("SELECT seq,ts_mono,session_id,agent_role,type,data,ts FROM supervisor_events WHERE root_session_id=?1 ORDER BY ts_mono DESC,seq DESC LIMIT 8").map_err(|e|e.to_string())?;
+    let rows = stmt
+        .query_map([&root], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    for row in rows {
+        let (seq, mono, sid, role, kind, data, ts) = row.map_err(|e| e.to_string())?;
+        events.push((mono,seq,json!({"seq":seq,"session_id":sid,"agent_role":role,"type":kind,"source":"supervisor","at":ts,"data":serde_json::from_str::<Value>(&data).unwrap_or(Value::Null),"observation":false})));
+    }
+    drop(stmt);
+    for sid in ids {
+        let path = home.join("sessions").join(&sid).join("out/events.db");
+        if !path.is_file() {
+            continue;
+        }
+        let agent = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| e.to_string())?;
+        let mut query = agent.prepare("SELECT seq,ts_mono,agent_role,type,data,ts FROM events ORDER BY ts_mono DESC,seq DESC LIMIT 8").map_err(|e|e.to_string())?;
+        let rows = query
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (seq, mono, role, kind, data, ts) = row.map_err(|e| e.to_string())?;
+            events.push((mono,seq,json!({"seq":seq,"session_id":sid,"agent_role":role,"type":kind,"source":"agent","at":ts,"data":serde_json::from_str::<Value>(&data).unwrap_or(Value::Null),"observation":true})));
+        }
+    }
+    events.sort_by(|a, b| (&b.0, &b.1).cmp(&(&a.0, &a.1)));
+    Ok(json!({"events":events.into_iter().take(8).map(|(_,_,event)|event).collect::<Vec<_>>()}))
+}
+
 pub fn trace(home: &Path, id: &str) -> Result<Value, String> {
     if !valid_session_id(id) {
         return Err("invalid session id".into());
@@ -198,12 +271,17 @@ pub fn trace(home: &Path, id: &str) -> Result<Value, String> {
     Ok(json!({"sessions":sessions,"events":result.events}))
 }
 
-pub fn messages(home: &Path, id: &str, limit: usize) -> Result<Value, String> {
+pub fn messages(
+    home: &Path,
+    id: &str,
+    before: Option<&str>,
+    limit: usize,
+) -> Result<Value, String> {
     if !valid_session_id(id) {
         return Err("invalid session id".into());
     }
     let root_db = supervisor(home)?;
-    let mut items = Vec::<(String, Value)>::new();
+    let mut items = Vec::<(String, u8, i64, Value)>::new();
     let inbound_path = home.join("sessions").join(id).join("control/inbound.db");
     if inbound_path.is_file() {
         let db = Connection::open_with_flags(
@@ -211,18 +289,19 @@ pub fn messages(home: &Path, id: &str, limit: usize) -> Result<Value, String> {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .map_err(|e| e.to_string())?;
-        let mut stmt=db.prepare("SELECT kind,body,created_at FROM inbound WHERE kind IN ('user_message','member_reply','member_failed','delegation_result','approval_result') ORDER BY created_at,id").map_err(|e|e.to_string())?;
+        let mut stmt=db.prepare("SELECT id,kind,body,created_at FROM inbound WHERE kind IN ('user_message','member_reply','member_failed','delegation_result','approval_result') ORDER BY created_at,id").map_err(|e|e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
         for row in rows {
-            let (kind, body, at) = row.map_err(|e| e.to_string())?;
+            let (row_id, kind, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
             let item = match kind.as_str() {
                 "user_message" => {
@@ -247,7 +326,7 @@ pub fn messages(home: &Path, id: &str, limit: usize) -> Result<Value, String> {
                     json!({"kind":"team","at":at,"team":{"event":"approval_result","detail":body["decision"]}})
                 }
             };
-            items.push((at, item));
+            items.push((at, 0, row_id, item));
         }
     }
     let outbound_path = home.join("sessions").join(id).join("out/outbound.db");
@@ -257,35 +336,61 @@ pub fn messages(home: &Path, id: &str, limit: usize) -> Result<Value, String> {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .map_err(|e| e.to_string())?;
-        let mut stmt=db.prepare("SELECT kind,body,created_at FROM outbound WHERE kind='reply' ORDER BY created_at,id").map_err(|e|e.to_string())?;
+        let mut stmt=db.prepare("SELECT id,kind,body,created_at FROM outbound WHERE kind='reply' ORDER BY created_at,id").map_err(|e|e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
         for row in rows {
-            let (_, body, at) = row.map_err(|e| e.to_string())?;
+            let (row_id, _, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
             items.push((
                 at.clone(),
+                1,
+                row_id,
                 json!({"kind":"lead","at":at,"text":body["text"]}),
             ));
         }
     }
-    items.sort_by(|a, b| a.0.cmp(&b.0));
+    items.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
+    let cursor = before.and_then(parse_message_cursor);
+    if before.is_some() && cursor.is_none() {
+        return Err("invalid message cursor".into());
+    }
+    if let Some(cursor) = cursor.as_ref() {
+        items.retain(|(at, source, row_id, _)| {
+            (at, source, row_id) < (&cursor.0, &cursor.1, &cursor.2)
+        });
+    }
     let start = items.len().saturating_sub(limit.clamp(1, 100));
     let next_before = if start > 0 {
-        Some(items[start].0.clone())
+        Some(format!(
+            "{}|{}|{}",
+            items[start].0, items[start].1, items[start].2
+        ))
     } else {
         None
     };
     Ok(
-        json!({"items":items.into_iter().skip(start).map(|(_,item)|item).collect::<Vec<_>>(),"next_before":next_before}),
+        json!({"items":items.into_iter().skip(start).map(|(_,_,_,item)|item).collect::<Vec<_>>(),"next_before":next_before}),
     )
+}
+
+fn parse_message_cursor(cursor: &str) -> Option<(String, u8, i64)> {
+    let mut parts = cursor.split('|');
+    let at = parts.next()?.to_owned();
+    let source = parts.next()?.parse::<u8>().ok()?;
+    let id = parts.next()?.parse::<i64>().ok()?;
+    if parts.next().is_some() || source > 1 || id < 0 || at.is_empty() {
+        return None;
+    }
+    Some((at, source, id))
 }
 
 pub fn approval(home: &Path, id: &str) -> Result<Value, String> {
@@ -301,10 +406,7 @@ pub fn host(home: &Path) -> Value {
         home.to_path_buf()
     };
     let config_file = config_path.join("microswarm.toml");
-    let config = std::fs::read_to_string(&config_file)
-        .unwrap_or_default()
-        .parse::<toml::Value>()
-        .unwrap_or(toml::Value::Table(Default::default()));
+    let config = read_config_value(&config_file);
     let socket = config
         .get("runtime")
         .and_then(|v| v.get("socket"))
@@ -414,6 +516,130 @@ pub fn pending_approvals(home: &Path) -> Result<i64, String> {
     .map_err(|e| e.to_string())
 }
 
+pub fn chat_state(home: &Path, id: &str) -> Result<(String, String), String> {
+    if !valid_session_id(id) {
+        return Err("invalid session id".into());
+    }
+    let db = supervisor(home)?;
+    db.query_row(
+        "SELECT kind,status FROM sessions WHERE id=?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "session not found".into())
+}
+
+pub fn scope(home: &Path, id: &str, member: bool) -> Result<Value, String> {
+    if !valid_session_id(id) {
+        return Err("invalid session id".into());
+    }
+    let db = supervisor(home)?;
+    let (root, parent, role, raw): (String, Option<String>, String, Option<String>) = db
+        .query_row(
+            "SELECT root_id,parent_id,role,scope_json FROM sessions WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .ok_or("session not found")?;
+    if member && parent.is_none() {
+        return Err("member session required".into());
+    }
+    let granted: Value = raw
+        .as_deref()
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .ok_or("stored scope is unavailable")?;
+    let profile = scope_profile(home, id, &granted)?;
+    if !member {
+        return Ok(json!({"granted":granted,"profile":profile}));
+    }
+    let lead: Value = db
+        .query_row(
+            "SELECT scope_json FROM sessions WHERE id=?1",
+            [&root],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or(Value::Null);
+    let requested: Value = db
+        .query_row(
+            "SELECT scope_request FROM delegations WHERE member_id=?1",
+            [id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or(Value::Null);
+    let ceiling_path = if home.join("config/ceiling.toml").is_file() {
+        home.join("config/ceiling.toml")
+    } else {
+        home.join("ceiling.toml")
+    };
+    let ceiling = read_config_value(&ceiling_path);
+    let dimensions = ["mounts", "credentials", "tools", "limits", "delegation"];
+    let rows = dimensions.iter().map(|dimension| {
+        let ceiling_key = if *dimension == "mounts" { "paths" } else { *dimension };
+        let narrowed = granted["narrowed"].as_array().into_iter().flatten().filter(|entry| {
+            let source = entry["dimension"].as_str().unwrap_or_default();
+            matches!((*dimension, source), ("mounts", "mount") | ("credentials", "credential") | ("tools", "tool") | ("limits", "limit") | ("delegation", "policy"))
+        }).cloned().collect::<Vec<_>>();
+        let ceiling_values = ceiling.get(ceiling_key).and_then(toml::Value::as_array).map(|values| values.iter().filter_map(toml::Value::as_str).map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
+        json!({"dimension":dimension,"requested":requested.get(*dimension).cloned().unwrap_or(Value::Null),"lead":lead.get(*dimension).cloned().unwrap_or(Value::Null),"ceiling":ceiling_values,"granted":granted.get(*dimension).cloned().unwrap_or(Value::Null),"narrowed":narrowed})
+    }).collect::<Vec<_>>();
+    Ok(
+        json!({"member_id":id,"lead_id":root,"role":role,"derived_from":granted["derived_from"],"source_ref":granted["source_ref"],"scope_hash":granted["hash"],"rows":rows,"profile":profile}),
+    )
+}
+
+fn scope_profile(home: &Path, id: &str, granted: &Value) -> Result<Value, String> {
+    let scope: ms_proto::Scope =
+        serde_json::from_value(granted.clone()).map_err(|e| e.to_string())?;
+    let config_path = if home.join("config/microswarm.toml").is_file() {
+        home.join("config/microswarm.toml")
+    } else {
+        home.join("microswarm.toml")
+    };
+    let config = read_config_value(&config_path);
+    let image = config
+        .get("runtime")
+        .and_then(|v| v.get("image"))
+        .and_then(toml::Value::as_str)
+        .unwrap_or("unknown");
+    let session_dir = home.join("sessions").join(id);
+    let built = ms_runtime::profile::container_profile(
+        &scope,
+        &scope.limits,
+        image,
+        &session_dir,
+        &format!("ms-net-{id}"),
+        "runtime-managed",
+        "runtime-managed",
+    )?;
+    let mounts = built
+        .mounts
+        .iter()
+        .map(|mount| json!({"target":mount.target,"read_only":mount.read_only}))
+        .collect::<Vec<_>>();
+    Ok(
+        json!({"image":built.image,"filesystem":{"root_read_only":built.read_only_rootfs,"mounts":mounts,"tmpfs":built.tmpfs},"process":{"no_new_privileges":built.no_new_privileges,"cap_drop":built.cap_drop,"memory_bytes":built.memory_bytes,"pids_limit":built.pids_limit},"network":{"policy":"session proxy only"}}),
+    )
+}
+
+fn read_config_value(path: &Path) -> toml::Value {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|contents| toml::from_str::<toml::Table>(&contents).ok())
+        .map(toml::Value::Table)
+        .unwrap_or_else(|| toml::Value::Table(Default::default()))
+}
+
 type ApprovalRow = (
     String,
     String,
@@ -447,18 +673,32 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
         row;
     let payload: Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
     let db = supervisor(home)?;
-    let role: String = db
+    let (role, runs_in): (String, String) = db
         .query_row(
-            "SELECT role FROM sessions WHERE id=?1",
+            "SELECT role,scope_json FROM sessions WHERE id=?1",
             [&requester],
-            |row| row.get(0),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get::<_, Option<String>>(1)?
+                        .unwrap_or_else(|| "{}".into()),
+                ))
+            },
         )
         .map_err(|e| e.to_string())?;
-    let tool_call=(kind=="tool_call").then(||json!({"server":payload["binding"]["server"],"tool":payload["binding"]["tool"],"arguments":payload["arguments"],"argument_hash":payload["binding"]["argument_hash"]}));
+    let runs_in: Value = serde_json::from_str(&runs_in).unwrap_or_else(|_| json!({}));
+    let tool_call=(kind=="tool_call").then(|| {
+        let parsed = if payload["binding"]["tool"] == "shell.run" {
+            payload["arguments"]["command"].as_str().and_then(|command| {
+                ms_shell::parse_shell_command(command).map(|parsed| json!({"kind":parsed.kind,"commands":parsed.commands}))
+            })
+        } else { None };
+        json!({"server":payload["binding"]["server"],"tool":payload["binding"]["tool"],"arguments":payload["arguments"],"argument_hash":payload["binding"]["argument_hash"],"parsed":parsed})
+    });
     let spawn = (kind == "spawn").then(
         || json!({"role":payload["role"],"task":payload["task"],"requested":payload["scope"]}),
     );
     Ok(
-        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn}),
+        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_in}),
     )
 }

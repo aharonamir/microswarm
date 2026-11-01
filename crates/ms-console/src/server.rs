@@ -1,6 +1,7 @@
 use crate::{
     assets,
     auth::ConsoleAuth,
+    chat::ChatManager,
     events::{ConsoleEvent, EventRing},
     rpc,
 };
@@ -55,21 +56,20 @@ pub const SSE_PING_INTERVAL: Duration = Duration::from_secs(15);
 pub async fn run(home: PathBuf, listen: SocketAddr) -> Result<(), String> {
     validate_listen(listen)?;
     let listener = TcpListener::bind(listen).await.map_err(|e| e.to_string())?;
+    let listen = listener.local_addr().map_err(|e| e.to_string())?;
     let auth = Arc::new(Mutex::new(ConsoleAuth::new()?));
     let ring = Arc::new(Mutex::new(EventRing::new(2_000)));
+    let chats = Arc::new(Mutex::new(ChatManager::default()));
     tokio::spawn(rpc::follow(home.clone(), ring.clone()));
     let token = auth.lock().await.token().to_owned();
-    eprintln!(
-        "MicroSwarm console: http://{}:{}/login?token={token}",
-        listen.ip(),
-        listen.port()
-    );
+    eprintln!("MicroSwarm console: http://{}/login?token={token}", listen);
     loop {
         let (stream, _) = listener.accept().await.map_err(|e| e.to_string())?;
         let auth = auth.clone();
         let home = home.clone();
         let ring = ring.clone();
-        let host = format!("{}:{}", listen.ip(), listen.port());
+        let chats = chats.clone();
+        let host = listen.to_string();
         tokio::spawn(async move {
             let io = TokioIo::new(stream);
             let service = service_fn(move |request| {
@@ -77,7 +77,12 @@ pub async fn run(home: PathBuf, listen: SocketAddr) -> Result<(), String> {
                 let home = home.clone();
                 let host = host.clone();
                 let ring = ring.clone();
-                async move { Ok::<_, Infallible>(handle_request(request, auth, home, host, ring).await) }
+                let chats = chats.clone();
+                async move {
+                    Ok::<_, Infallible>(
+                        handle_request(request, auth, home, host, ring, chats).await,
+                    )
+                }
             });
             let _ = http1::Builder::new().serve_connection(io, service).await;
         });
@@ -90,6 +95,7 @@ async fn handle_request(
     home: PathBuf,
     allowed_host: String,
     ring: Arc<Mutex<EventRing>>,
+    chats: Arc<Mutex<ChatManager>>,
 ) -> WebResponse {
     let method = request.method().clone();
     let path = request.uri().path().to_owned();
@@ -213,6 +219,7 @@ async fn handle_request(
                         ring,
                         last_event_id,
                         query,
+                        chats,
                     },
                 )
                 .await
@@ -229,6 +236,7 @@ async fn handle_request(
                     ring,
                     last_event_id,
                     query,
+                    chats,
                 },
             )
             .await
@@ -257,6 +265,7 @@ struct RequestContext {
     ring: Arc<Mutex<EventRing>>,
     last_event_id: Option<u64>,
     query: String,
+    chats: Arc<Mutex<ChatManager>>,
 }
 
 fn api_get(
@@ -287,6 +296,12 @@ fn api_get(
         .collect::<Vec<_>>();
     match parts.as_slice() {
         ["sessions", id] => crate::read::session(home, id).map_err(|e| read_error(&e)),
+        ["sessions", id, "scope"] => {
+            crate::read::scope(home, id, false).map_err(|e| read_error(&e))
+        }
+        ["sessions", id, "activity"] => {
+            crate::read::recent_activity(home, id).map_err(|e| read_error(&e))
+        }
         ["sessions", id, "messages"] => {
             if !crate::read::valid_session_id(id) {
                 return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
@@ -294,22 +309,235 @@ fn api_get(
             let limit = query_value(query, "limit")
                 .and_then(|value| value.parse::<usize>().ok())
                 .unwrap_or(100);
-            crate::read::messages(home, id, limit).map_err(|e| read_error(&e))
+            let before = query_value(query, "before");
+            crate::read::messages(home, id, before.as_deref(), limit).map_err(|e| read_error(&e))
         }
         ["sessions", id, "trace"] => crate::read::trace(home, id).map_err(|e| read_error(&e)),
         ["approvals", id] => crate::read::approval(home, id).map_err(|e| read_error(&e)),
+        ["members", id, "scope"] => crate::read::scope(home, id, true).map_err(|e| read_error(&e)),
         _ => Err((StatusCode::NOT_FOUND, "not_found")),
+    }
+}
+
+pub async fn api_post(
+    home: &Path,
+    path: &str,
+    payload: serde_json::Value,
+    chats: Arc<Mutex<ChatManager>>,
+    ring: Arc<Mutex<EventRing>>,
+) -> Result<(StatusCode, Option<serde_json::Value>), (StatusCode, &'static str)> {
+    if path == "/api/v1/sessions" {
+        let text = message_text(&payload)?;
+        let thread = ms_runtime::new_id()
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "request_id_unavailable"))?;
+        let response = crate::chat::submit(home.to_path_buf(), None, thread, text, chats, ring)
+            .await
+            .map_err(|e| {
+                if e == "session_busy" {
+                    (StatusCode::CONFLICT, "session_busy")
+                } else {
+                    (StatusCode::INTERNAL_SERVER_ERROR, e)
+                }
+            })?;
+        return Ok((StatusCode::ACCEPTED, Some(response)));
+    }
+    let parts = path
+        .trim_start_matches("/api/v1/")
+        .split('/')
+        .collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["sessions", id, "messages"] => {
+            if !crate::read::valid_session_id(id) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+            }
+            let (kind, status) = crate::read::chat_state(home, id).map_err(|e| read_error(&e))?;
+            if kind != "lead" {
+                return Err((StatusCode::BAD_REQUEST, "lead_session_required"));
+            }
+            if matches!(status.as_str(), "closed" | "failed" | "stopping") {
+                return Err((StatusCode::CONFLICT, "session_closed"));
+            }
+            let text = message_text(&payload)?;
+            let thread = ms_runtime::new_id()
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "request_id_unavailable"))?;
+            let response = crate::chat::submit(
+                home.to_path_buf(),
+                Some((*id).into()),
+                thread,
+                text,
+                chats,
+                ring,
+            )
+            .await
+            .map_err(|e| {
+                if e == "session_busy" {
+                    (StatusCode::CONFLICT, "session_busy")
+                } else {
+                    (StatusCode::INTERNAL_SERVER_ERROR, e)
+                }
+            })?;
+            Ok((
+                StatusCode::ACCEPTED,
+                Some(serde_json::json!({"request_id":response["request_id"]})),
+            ))
+        }
+        ["sessions", id, "end"] => {
+            if !crate::read::valid_session_id(id) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+            }
+            let (kind, status) = crate::read::chat_state(home, id).map_err(|e| read_error(&e))?;
+            if kind != "lead" {
+                return Err((StatusCode::CONFLICT, "lead_session_required"));
+            }
+            if matches!(status.as_str(), "closed" | "failed" | "stopping") {
+                return Err((StatusCode::CONFLICT, "session_closed"));
+            }
+            let request_id = ms_runtime::new_id()
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "request_id_unavailable"))?;
+            let home = home.to_path_buf();
+            let session = (*id).to_owned();
+            let ring = ring.clone();
+            let request = request_id.clone();
+            tokio::spawn(async move {
+                if rpc::request(
+                    &home,
+                    &serde_json::json!({"op":"end_session","session_id":session}),
+                )
+                .await
+                .is_err()
+                {
+                    let event = ConsoleEvent {
+                        id: 0,
+                        name: "chat.error".into(),
+                        data: serde_json::json!({"type":"chat.error","at":ms_runtime::utc_now(),"request_id":request,"session_id":session,"error":"supervisor_error","text":"The session could not be ended."}),
+                    };
+                    ring.lock().await.push(event);
+                }
+            });
+            Ok((
+                StatusCode::ACCEPTED,
+                Some(serde_json::json!({"request_id":request_id})),
+            ))
+        }
+        ["approvals", code, action] if matches!(*action, "approve" | "deny") => {
+            if code.len() != 4
+                || !code
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+            {
+                return Err((StatusCode::BAD_REQUEST, "invalid_approval_code"));
+            }
+            let op = if *action == "approve" {
+                "approve"
+            } else {
+                "deny"
+            };
+            match rpc::request(home, &serde_json::json!({"op":op,"code":code})).await {
+                Ok(result) if result.get("error").is_none() => Ok((
+                    StatusCode::OK,
+                    Some(serde_json::json!({"decision":result["decision"]})),
+                )),
+                Ok(result) => Err(approval_error(result["error"].as_str().unwrap_or_default())),
+                Err(_) => Err((StatusCode::SERVICE_UNAVAILABLE, "supervisor_down")),
+            }
+        }
+        ["credentials", name] => {
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+            {
+                return Err((StatusCode::BAD_REQUEST, "invalid_credential_name"));
+            }
+            let value = payload
+                .get("value")
+                .and_then(serde_json::Value::as_str)
+                .ok_or((StatusCode::BAD_REQUEST, "invalid_credential_value"))?;
+            match rpc::request(
+                home,
+                &serde_json::json!({"op":"creds_set","name":name,"value":value}),
+            )
+            .await
+            {
+                Ok(result) if result.get("error").is_none() => Ok((StatusCode::NO_CONTENT, None)),
+                _ => Err((StatusCode::SERVICE_UNAVAILABLE, "credential_store_failed")),
+            }
+        }
+        ["skills", "install"] => {
+            let path = payload
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or((StatusCode::BAD_REQUEST, "invalid_skill_path"))?;
+            match rpc::request(
+                home,
+                &serde_json::json!({"op":"skills_install","path":path}),
+            )
+            .await
+            {
+                Ok(result) if result.get("error").is_none() => Ok((StatusCode::OK, Some(result))),
+                _ => Err((StatusCode::SERVICE_UNAVAILABLE, "skill_install_failed")),
+            }
+        }
+        _ => Err((StatusCode::NOT_FOUND, "not_found")),
+    }
+}
+
+fn message_text(payload: &serde_json::Value) -> Result<String, (StatusCode, &'static str)> {
+    let text = payload
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .ok_or((StatusCode::BAD_REQUEST, "invalid_message"))?;
+    if text.trim().is_empty() || text.chars().count() > 8_000 {
+        return Err((StatusCode::BAD_REQUEST, "invalid_message"));
+    }
+    Ok(text.to_owned())
+}
+
+fn approval_error(error: &str) -> (StatusCode, &'static str) {
+    if error.contains("already resolved") {
+        (StatusCode::CONFLICT, "already_resolved")
+    } else if error.contains("expired") || error.contains("timed out") {
+        (StatusCode::GONE, "expired")
+    } else if error.contains("not found") {
+        (StatusCode::NOT_FOUND, "not_found")
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, "approval_failed")
     }
 }
 
 fn query_value(query: &str, key: &str) -> Option<String> {
     query.split('&').find_map(|pair| {
         let (name, value) = pair.split_once('=')?;
-        (name == key).then(|| value.replace('+', " "))
+        if name != key {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(value.len());
+        let raw = value.as_bytes();
+        let mut index = 0;
+        while index < raw.len() {
+            match raw[index] {
+                b'+' => {
+                    bytes.push(b' ');
+                    index += 1;
+                }
+                b'%' if index + 2 < raw.len() => {
+                    let hex = std::str::from_utf8(&raw[index + 1..index + 3]).ok()?;
+                    bytes.push(u8::from_str_radix(hex, 16).ok()?);
+                    index += 3;
+                }
+                b'%' => return None,
+                byte => {
+                    bytes.push(byte);
+                    index += 1;
+                }
+            }
+        }
+        String::from_utf8(bytes).ok()
     })
 }
 fn read_error(error: &str) -> (StatusCode, &'static str) {
-    if error.contains("invalid session id") {
+    if error.contains("invalid session id") || error.contains("member session required") {
         (StatusCode::BAD_REQUEST, "invalid_session_id")
     } else if error.contains("not found") {
         (StatusCode::NOT_FOUND, "not_found")
@@ -331,6 +559,7 @@ async fn route_authenticated(
         ring,
         last_event_id,
         query,
+        chats,
     } = context;
     if method == http::Method::POST {
         let mut body = request.into_body();
@@ -359,7 +588,22 @@ async fn route_authenticated(
                 Some("ms_console=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0".into()),
             );
         }
-        return (json_response(StatusCode::NOT_FOUND, "not_found"), None);
+        let payload: serde_json::Value = match serde_json::from_slice(&bytes) {
+            Ok(payload) => payload,
+            Err(_) => return (json_response(StatusCode::BAD_REQUEST, "invalid_json"), None),
+        };
+        return match api_post(&home, &path, payload, chats, ring).await {
+            Ok((status, Some(body))) => (
+                body_response(
+                    status,
+                    "application/json; charset=utf-8",
+                    serde_json::to_vec(&body).unwrap_or_default(),
+                ),
+                None,
+            ),
+            Ok((status, None)) => (empty_response(status), None),
+            Err((status, code)) => (json_response(status, code), None),
+        };
     }
     if method != http::Method::GET {
         return (
