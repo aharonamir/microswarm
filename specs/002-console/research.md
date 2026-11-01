@@ -130,3 +130,18 @@ Before adding it, move those helpers **and** the shared idle query loops from `s
 - **T242 / SC-C03:** `cargo build --release -p ms-bench --bin console_event_stream_cost`; `/usr/bin/time -f 'CPU user=%U s system=%S s elapsed=%e s maxRSS=%M KB' target/release/console_event_stream_cost 60` reported `elapsed=60.00s; stream=timed out as expected`, `CPU user=1.20 s system=0.74 s elapsed=60.03 s maxRSS=43180 KB`, or **3.2% of one core** for the event merge plus one console follower. This is below 5%, leaving 1.8 percentage points in the fixture. Browser SSE client rendering/fan-out is not part of this CPU fixture.
 - **T222 decision:** required and completed before the console follower. The isolated measurement improved from 52.1% to 4.7%; the combined fixture measured 3.2%.
 - **Runtime fixture check:** `MS_REQUIRE_RUNTIME=1 MS_TEST_RUNTIME=docker cargo test -p ms-supervisor --test us2-quickstart -- --nocapture` passed 5/5 in 1.81 s, and the parallel `us2-review-regressions` target passed 9/9 in 17.11 s after its fixture waits were made deterministic and runtime harnesses serialized. These cover existing fake-model CLI flows; they do not count as completing the console's manual quickstart steps T237, T241, or T255.
+
+## Phase 9 acceptance evidence (2026-11-01)
+
+| Criterion | Evidence | Result |
+|---|---|---|
+| SC-C01 | Playwright measured 143 ms from starting `microswarm console` through one-time login and first Sessions render on this host; target ≤ 2 s. | Pass locally |
+| SC-C02 | 20 browser samples from a synthetic `status.changed` SSE emission to the rendered status banner had p95 28 ms. The fake supervisor socket test separately measured 298 µs from writing an event to derived `status.changed`; neither sample includes a real supervisor DB commit, so the full commit-to-DOM criterion remains partially measured. | Partial |
+| SC-C03 | The 60 s combined merge + one follower fixture used 3.2% of one core with 50 sessions / 20,000 events. It does not include HTTP server work or connected browser fan-out. | Pass for measured fixture |
+| SC-C04 | `cargo test --workspace` passed the console XSS and no-secrets suites; Playwright confirmed hostile agent text stayed inert in Chromium. | Pass |
+| SC-C05 | `scripts/loc-budget.sh` passed: supervisor + shared 5,862/6,000; runtime + shared 4,047/6,000; console 2,134/4,000; web 594/3,500. | Pass |
+| SC-C06 | `tests/e2e/console/package.json` contains only Playwright/axe dev dependencies; no runtime npm dependency or frontend build step. `scripts/web-lint.sh` passed; `crates/ms-console/src/assets.rs` embeds assets. | Pass |
+| SC-C07 | Playwright + axe passed with zero violations for six page states (new session, selected session, approvals, trace, host, member) at 1440 px and 390 px. | Pass |
+| SC-C08 | R-C9 defines the 3-person, 10-second usability protocol. No participant results have been collected. | Pending human study |
+
+T252 native Chinese review and T255 clean-host full console quickstart are also pending; the Docker fake-model CLI quickstart fixture does not substitute for them.
