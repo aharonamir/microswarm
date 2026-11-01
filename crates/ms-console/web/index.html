@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MicroSwarm</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="global-header">
+    <a class="brand" href="#/sessions" aria-label="MicroSwarm home"><span class="brand-mark" aria-hidden="true">微</span><span>MicroSwarm</span></a>
+    <nav class="primary-nav" aria-label="Main navigation">
+      <a href="#/sessions" data-route="sessions">Sessions</a>
+      <a href="#/approvals" data-route="approvals">Approvals <span class="badge" id="approval-count" hidden>0</span></a>
+      <a href="#/trace" data-route="trace">Trace</a>
+      <a href="#/host" data-route="host">Host</a>
+    </nav>
+    <div class="header-tools"><span class="supervisor-chip"><span class="status-dot"></span> Supervisor running</span><button class="language-toggle" id="language-toggle" aria-pressed="false">EN <span aria-hidden="true">|</span> 中文</button></div>
+  </header>
+  <main id="app" class="page-frame" tabindex="-1"></main>
+</body>
+</html>

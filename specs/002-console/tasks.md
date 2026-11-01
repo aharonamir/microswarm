@@ -47,20 +47,20 @@
 ## Phase 2 — Foundational console
 
 ### Tests first
-- [ ] T218 [P] Auth tests: token is single-use and expires after 10 min; cookie attributes; no cookie → 401; wrong Host → 421; POST without Origin or with a mismatched Origin → 403; missing `X-MS-Console` → 403; wrong content type → 415; body > 64 KiB → 413; non-loopback `--listen` refuses to start — `crates/ms-console/tests/auth.rs`
-- [ ] T219 [P] Header tests: exact CSP and the other FR-C08 headers on HTML, API and static responses — `crates/ms-console/tests/headers.rs`
-- [ ] T220 [P] SSE tests: fan-out to 2 clients; `Last-Event-ID` replay within the ring; `resync` outside it; `supervisor.down`/`up` on socket loss; ping every 15 s — `crates/ms-console/tests/sse.rs`
-- [ ] T221 [P] Status-word tests: every row of the data-model table, including "Ended by you" via `data.by` — `crates/ms-console/tests/status.rs`
+- [x] T218 [P] Auth tests: token is single-use and expires after 10 min; cookie attributes; no cookie → 401; wrong Host → 421; POST without Origin or with a mismatched Origin → 403; missing `X-MS-Console` → 403; wrong content type → 415; body > 64 KiB → 413; non-loopback `--listen` refuses to start — `crates/ms-console/tests/auth.rs`
+- [x] T219 [P] Header tests: exact CSP and the other FR-C08 headers on HTML, API and static responses — `crates/ms-console/tests/headers.rs`
+- [x] T220 [P] SSE tests: fan-out to 2 clients; `Last-Event-ID` replay within the ring; `resync` outside it; `supervisor.down`/`up` on socket loss; ping every 15 s — `crates/ms-console/tests/sse.rs`
+- [x] T221 [P] Status-word tests: every row of the data-model table, including "Ended by you" via `data.by` — `crates/ms-console/tests/status.rs`
 
 ### Implementation
 - [x] T222 (only if T203 fails SC-C03) Make the `event_stream` merge incremental with per-source high-water marks — `crates/ms-runtime/src/events.rs`
-- [ ] T223 Server, routing, assets, headers and the `microswarm console` entry point — `crates/ms-console/src/{lib,server,assets}.rs`, `crates/ms-cli/src/main.rs`
-- [ ] T224 Auth: token, console sessions, Host/Origin/header checks — `crates/ms-console/src/auth.rs`
-- [ ] T225 [P] Supervisor RPC client: request/response, plus a follow stream with reconnect — `crates/ms-console/src/rpc.rs`
+- [x] T223 Server, routing, assets, headers and the `microswarm console` entry point — `crates/ms-console/src/{lib,server,assets}.rs`, `crates/ms-cli/src/main.rs`
+- [x] T224 Auth: token, console sessions, Host/Origin/header checks — `crates/ms-console/src/auth.rs`
+- [x] T225 [P] Supervisor RPC client: request/response, plus a follow stream with reconnect — `crates/ms-console/src/rpc.rs`
 - [ ] T226 [P] Read-only views over `supervisor.db`, session dbs and config, with id validation before any path join — `crates/ms-console/src/read.rs`
-- [ ] T227 [P] Status words — `crates/ms-console/src/status.rs`
+- [x] T227 [P] Status words — `crates/ms-console/src/status.rs`
 - [ ] T228 Event follower, ring buffer, broadcast, SSE endpoint and derived `status.changed` — `crates/ms-console/src/events.rs`
-- [ ] T229 [P] Frontend base: `index.html` (no inline script/style), `styles.css` tokens from `design/README.md`, `js/dom.js` (the only DOM builder), `js/router.js` (hash routes), `js/api.js` (adds `X-MS-Console`), `js/sse.js` (reconnect + resync), `js/i18n.js`; the global header and responsive frame — `crates/ms-console/web/`
+- [x] T229 [P] Frontend base: `index.html` (no inline script/style), `styles.css` tokens from `design/README.md`, `js/dom.js` (the only DOM builder), `js/router.js` (hash routes), `js/api.js` (adds `X-MS-Console`), `js/sse.js` (reconnect + resync), `js/i18n.js`; the global header and responsive frame — `crates/ms-console/web/`
 - [ ] T230 [P] Vendor the fonts + OFL licence (per Q3) — `crates/ms-console/web/fonts/`
 - [ ] T231 [P] Add `i18n/en.json` and `i18n/zh.json` with keys for every string in the design reference — `crates/ms-console/web/i18n/`
 - [ ] T232 Adversarial tests: the fake model emits HTML, script, `javascript:` and data-URL payloads, and every API and SSE response carries them as inert JSON strings; a credential set via the API never appears in any response, SSE frame or log — `crates/ms-console/tests/{xss,no_secrets}.rs`

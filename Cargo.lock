@@ -1252,6 +1252,7 @@ version = "0.1.0"
 dependencies = [
  "http",
  "jsonschema",
+ "ms-console",
  "ms-runtime",
  "ms-store",
  "ms-supervisor",
@@ -1265,6 +1266,15 @@ dependencies = [
 [[package]]
 name = "ms-console"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "ms-proto"

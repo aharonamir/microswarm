@@ -45,14 +45,14 @@ fn run(args: Vec<String>) -> Result<(), String> {
         )
         .map(|_| ()),
         "chat" => chat(&home, &args[1..]),
-        "console" => Err("console is not implemented yet".into()),
+        "console" => console(&home, &args[1..]),
         other => Err(format!("unknown command {other:?}; run microswarm --help")),
     }
 }
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  console\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
@@ -60,6 +60,29 @@ fn option_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.windows(2)
         .find(|pair| pair[0] == name)
         .map(|pair| pair[1].as_str())
+}
+
+fn console(home: &Path, args: &[String]) -> Result<(), String> {
+    let mut listen = "127.0.0.1:8790";
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--listen" => {
+                index += 1;
+                listen = args.get(index).ok_or("--listen requires an IP:PORT")?;
+            }
+            other => return Err(format!("unknown console option {other:?}")),
+        }
+        index += 1;
+    }
+    let address = listen
+        .parse()
+        .map_err(|_| "--listen must be an IP:PORT address".to_owned())?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
+    runtime.block_on(ms_console::server::run(home.to_path_buf(), address))
 }
 
 fn init(home: &Path, args: &[String]) -> Result<(), String> {
