@@ -1272,8 +1272,11 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "ms-runtime",
+ "rusqlite",
  "serde_json",
  "tokio",
+ "toml",
 ]
 
 [[package]]

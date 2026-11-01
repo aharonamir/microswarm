@@ -1,3 +1,8 @@
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/plex-sans-regular.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/plex-sans-medium.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
+@font-face { font-family: "IBM Plex Sans"; src: url("/fonts/plex-sans-semibold.woff2") format("woff2"); font-style: normal; font-weight: 600; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/fonts/plex-mono-regular.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url("/fonts/plex-mono-medium.woff2") format("woff2"); font-style: normal; font-weight: 500; font-display: swap; }
 :root {
   --ground: #F6F2EB; --panel: #FFFDF9; --ink: #1E1916; --ink-2: #5E524A; --ink-3: #6E6056;
   --rule: #DDD2C4; --rule-2: #CDBFAF; --tint: #EFE7DB; --seal: #B3312A; --seal-ink: #8E241E;

@@ -17,7 +17,7 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -212,6 +212,7 @@ async fn handle_request(
                         home,
                         ring,
                         last_event_id,
+                        query,
                     },
                 )
                 .await
@@ -227,6 +228,7 @@ async fn handle_request(
                     home,
                     ring,
                     last_event_id,
+                    query,
                 },
             )
             .await
@@ -254,6 +256,66 @@ struct RequestContext {
     home: PathBuf,
     ring: Arc<Mutex<EventRing>>,
     last_event_id: Option<u64>,
+    query: String,
+}
+
+fn api_get(
+    home: &Path,
+    path: &str,
+    query: &str,
+) -> Result<serde_json::Value, (StatusCode, &'static str)> {
+    if path == "/api/v1/overview" {
+        let pending = crate::read::pending_approvals(home).unwrap_or(0);
+        return Ok(
+            serde_json::json!({"supervisor":"running","runtime":"unknown","containers":0,"pending_approvals":pending,"lang":"en","console_version":"0.2.0"}),
+        );
+    }
+    if path == "/api/v1/sessions" {
+        let group = query_value(query, "group").unwrap_or_else(|| "active".into());
+        return crate::read::sessions(home, &group).map_err(|e| read_error(&e));
+    }
+    if path == "/api/v1/approvals" {
+        let state = query_value(query, "state").unwrap_or_else(|| "pending".into());
+        return crate::read::approvals(home, &state).map_err(|e| read_error(&e));
+    }
+    if path == "/api/v1/host" {
+        return Ok(crate::read::host(home));
+    }
+    let parts = path
+        .trim_start_matches("/api/v1/")
+        .split('/')
+        .collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["sessions", id] => crate::read::session(home, id).map_err(|e| read_error(&e)),
+        ["sessions", id, "messages"] => {
+            if !crate::read::valid_session_id(id) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+            }
+            let limit = query_value(query, "limit")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(100);
+            crate::read::messages(home, id, limit).map_err(|e| read_error(&e))
+        }
+        ["sessions", id, "trace"] => crate::read::trace(home, id).map_err(|e| read_error(&e)),
+        ["approvals", id] => crate::read::approval(home, id).map_err(|e| read_error(&e)),
+        _ => Err((StatusCode::NOT_FOUND, "not_found")),
+    }
+}
+
+fn query_value(query: &str, key: &str) -> Option<String> {
+    query.split('&').find_map(|pair| {
+        let (name, value) = pair.split_once('=')?;
+        (name == key).then(|| value.replace('+', " "))
+    })
+}
+fn read_error(error: &str) -> (StatusCode, &'static str) {
+    if error.contains("invalid session id") {
+        (StatusCode::BAD_REQUEST, "invalid_session_id")
+    } else if error.contains("not found") {
+        (StatusCode::NOT_FOUND, "not_found")
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, "read_failed")
+    }
 }
 
 async fn route_authenticated(
@@ -265,9 +327,10 @@ async fn route_authenticated(
     let RequestContext {
         auth,
         cookie,
-        home: _home,
+        home,
         ring,
         last_event_id,
+        query,
     } = context;
     if method == http::Method::POST {
         let mut body = request.into_body();
@@ -308,19 +371,17 @@ async fn route_authenticated(
         return (sse_response(ring, last_event_id).await, None);
     }
     if path.starts_with("/api/v1/") {
-        let body = if path == "/api/v1/overview" {
-            r#"{"supervisor":"running","runtime":"unknown","containers":0,"pending_approvals":0,"lang":"en","console_version":"0.2.0"}"#
-        } else {
-            return (json_response(StatusCode::NOT_FOUND, "not_found"), None);
-        };
-        return (
-            body_response(
-                StatusCode::OK,
-                "application/json; charset=utf-8",
-                body.as_bytes().to_vec(),
+        return match api_get(&home, &path, &query) {
+            Ok(value) => (
+                body_response(
+                    StatusCode::OK,
+                    "application/json; charset=utf-8",
+                    serde_json::to_vec(&value).unwrap_or_default(),
+                ),
+                None,
             ),
-            None,
-        );
+            Err((status, code)) => (json_response(status, code), None),
+        };
     }
     if let Some(asset) = assets::get(&path) {
         let mut response = body_response(StatusCode::OK, asset.content_type, asset.bytes.to_vec());
@@ -436,13 +497,16 @@ async fn sse_response(ring: Arc<Mutex<EventRing>>, after: Option<u64>) -> WebRes
         }
         if let Some(event) = state.replay.pop_front() {
             state.last = event.id;
-            return Some((Ok(Frame::data(Bytes::from(sse_frame(&event)))), state));
+            return Some((
+                Ok(Frame::data(Bytes::from(encode_sse_event(&event)))),
+                state,
+            ));
         }
         tokio::select! {
             received = state.receiver.recv() => match received {
                 Ok(event) if event.id > state.last => {
                     state.last = event.id;
-                    Some((Ok(Frame::data(Bytes::from(sse_frame(&event)))), state))
+                    Some((Ok(Frame::data(Bytes::from(encode_sse_event(&event)))), state))
                 }
                 Ok(_) => Some((Ok(Frame::data(Bytes::new())), state)),
                 Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -467,7 +531,7 @@ async fn sse_response(ring: Arc<Mutex<EventRing>>, after: Option<u64>) -> WebRes
     response
 }
 
-fn sse_frame(event: &ConsoleEvent) -> String {
+pub fn encode_sse_event(event: &ConsoleEvent) -> String {
     let mut data = event.data.to_string();
     data.retain(|character| character != '\n' && character != '\r');
     format!(

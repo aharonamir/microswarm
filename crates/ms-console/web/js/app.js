@@ -1,6 +1,7 @@
 import { el, clear } from "./dom.js";
 import { currentRoute, onRoute } from "./router.js";
 import { loadLocale, t } from "./i18n.js";
+import { connectEvents } from "./sse.js";
 
 const app = document.getElementById("app");
 const nav = document.querySelector(".primary-nav");
@@ -27,3 +28,4 @@ document.getElementById("language-toggle").addEventListener("click", async event
   await render();
 });
 onRoute(render);
+connectEvents((type) => { if (type === "resync") render(); });

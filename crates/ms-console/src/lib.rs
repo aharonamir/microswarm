@@ -3,6 +3,7 @@
 pub mod assets;
 pub mod auth;
 pub mod events;
+pub mod read;
 pub mod rpc;
 pub mod server;
 pub mod status;

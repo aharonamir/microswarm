@@ -45,6 +45,26 @@ pub fn get(path: &str) -> Option<Asset> {
             "application/json; charset=utf-8",
             include_bytes!("../web/i18n/zh.json"),
         ),
+        "/fonts/plex-sans-regular.woff2" => (
+            "font/woff2",
+            include_bytes!("../web/fonts/plex-sans-regular.woff2"),
+        ),
+        "/fonts/plex-sans-medium.woff2" => (
+            "font/woff2",
+            include_bytes!("../web/fonts/plex-sans-medium.woff2"),
+        ),
+        "/fonts/plex-sans-semibold.woff2" => (
+            "font/woff2",
+            include_bytes!("../web/fonts/plex-sans-semibold.woff2"),
+        ),
+        "/fonts/plex-mono-regular.woff2" => (
+            "font/woff2",
+            include_bytes!("../web/fonts/plex-mono-regular.woff2"),
+        ),
+        "/fonts/plex-mono-medium.woff2" => (
+            "font/woff2",
+            include_bytes!("../web/fonts/plex-mono-medium.woff2"),
+        ),
         _ if path.starts_with("/fonts/") => return None,
         _ => return None,
     };

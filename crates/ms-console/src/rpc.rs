@@ -67,6 +67,11 @@ pub async fn follow(home: std::path::PathBuf, ring: Arc<Mutex<EventRing>>) {
                         };
                         let payload = json!({"type":kind,"at":event["ts"],"event":event});
                         push(&ring, kind, payload).await;
+                        if source == "supervisor"
+                            && let Some(status) = crate::read::status_event(&home, &event)
+                        {
+                            push(&ring, "status.changed", status).await;
+                        }
                     }
                 }
             }

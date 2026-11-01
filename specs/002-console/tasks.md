@@ -57,11 +57,11 @@
 - [x] T223 Server, routing, assets, headers and the `microswarm console` entry point — `crates/ms-console/src/{lib,server,assets}.rs`, `crates/ms-cli/src/main.rs`
 - [x] T224 Auth: token, console sessions, Host/Origin/header checks — `crates/ms-console/src/auth.rs`
 - [x] T225 [P] Supervisor RPC client: request/response, plus a follow stream with reconnect — `crates/ms-console/src/rpc.rs`
-- [ ] T226 [P] Read-only views over `supervisor.db`, session dbs and config, with id validation before any path join — `crates/ms-console/src/read.rs`
+- [x] T226 [P] Read-only views over `supervisor.db`, session dbs and config, with id validation before any path join — `crates/ms-console/src/read.rs`
 - [x] T227 [P] Status words — `crates/ms-console/src/status.rs`
-- [ ] T228 Event follower, ring buffer, broadcast, SSE endpoint and derived `status.changed` — `crates/ms-console/src/events.rs`
+- [x] T228 Event follower, ring buffer, broadcast, SSE endpoint and derived `status.changed` — `crates/ms-console/src/events.rs`
 - [x] T229 [P] Frontend base: `index.html` (no inline script/style), `styles.css` tokens from `design/README.md`, `js/dom.js` (the only DOM builder), `js/router.js` (hash routes), `js/api.js` (adds `X-MS-Console`), `js/sse.js` (reconnect + resync), `js/i18n.js`; the global header and responsive frame — `crates/ms-console/web/`
-- [ ] T230 [P] Vendor the fonts + OFL licence (per Q3) — `crates/ms-console/web/fonts/`
+- [x] T230 [P] Vendor the fonts + OFL licence (per Q3) — `crates/ms-console/web/fonts/`
 - [ ] T231 [P] Add `i18n/en.json` and `i18n/zh.json` with keys for every string in the design reference — `crates/ms-console/web/i18n/`
 - [ ] T232 Adversarial tests: the fake model emits HTML, script, `javascript:` and data-URL payloads, and every API and SSE response carries them as inert JSON strings; a credential set via the API never appears in any response, SSE frame or log — `crates/ms-console/tests/{xss,no_secrets}.rs`
 
