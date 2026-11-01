@@ -15,6 +15,7 @@ pub mod lifecycle;
 pub mod recovery;
 pub mod retention;
 pub mod router;
+pub mod trace;
 
 pub fn config_dir(home: &Path) -> PathBuf {
     let nested = home.join("config");

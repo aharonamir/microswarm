@@ -1252,6 +1252,7 @@ version = "0.1.0"
 dependencies = [
  "http",
  "jsonschema",
+ "ms-runtime",
  "ms-store",
  "ms-supervisor",
  "rpassword",
