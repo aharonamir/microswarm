@@ -9,9 +9,11 @@ license.workspace = true
 measure = []
 
 [dependencies]
+ms-runtime = { path = "../ms-runtime" }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+tokio = { version = "1.53.2", features = ["macros", "rt", "io-util", "time"] }
 
 [[test]]
 name = "performance"

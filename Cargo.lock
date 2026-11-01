@@ -1225,9 +1225,11 @@ dependencies = [
 name = "ms-bench"
 version = "0.1.0"
 dependencies = [
+ "ms-runtime",
  "rusqlite",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
