@@ -29,7 +29,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 ### T205 / R-C6 / Q4 — shell parser dependency
 
 - `crates/ms-agent/src/lib.rs:9` exports `permit`; `permit.rs:156` exports `evaluate_shell`, and external integration test `crates/ms-agent/tests/permit.rs` imports it through `ms_agent::permit`. It is callable from another crate. `permit.rs:158-221` returns `parsed_structure` only for `Ask`; ordinary `Allow` commands and unparseable `Deny` commands have no `approval_prompt`. The UI must not claim a parsed structure in those cases.
-- `crates/ms-agent/Cargo.toml` and `cargo tree -p ms-agent -e normal` show the library brings `rmcp` (including child-process and HTTP transports), `reqwest`, `hyper` and `tokio` (322 dependency-tree lines). These are the agent's model/MCP client dependencies, not needed to display a shell command. **Decision: Q4's direct `ms-agent` dependency default is wrong under T205's “without pulling container-only dependencies” condition.** Recommendation for the owner: extract the pure shell parser into a small shared crate with no model/MCP dependency, used by both agent and console; otherwise use Q4's documented fallback and omit the parsed view. Do not implement the default until resolved.
+- `crates/ms-agent/Cargo.toml` and `cargo tree -p ms-agent -e normal` show the library brings `rmcp` (including child-process and HTTP transports), `reqwest`, `hyper` and `tokio` (322 dependency-tree lines). These are the agent's model/MCP client dependencies, not needed to display a shell command. **Decision: no direct `ms-agent` dependency.** The Q4 default's concern was valid; implementation uses the dependency-free `crates/ms-shell` crate for both `ms-agent` and `ms-console`. The console recomputes display structure from the bound `shell.run` arguments; the supervisor's binding remains authoritative.
 
 ### Other R-C decisions
 
@@ -37,7 +37,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 - **R-C4 / Q3:** retain vendored Latin Plex fonts and system CJK fallback from `design/README.md`; no source finding contradicted this choice.
 - **R-C5 / Q2:** retain the console in-memory lock; the exact `status IN ('ready','busy')` update is in `crates/ms-runtime/src/lib.rs:34`.
 - **R-C8 / Q1:** retain no cross-channel mirroring. Telegram calls `wait` on pending replies (`crates/ms-channels/src/telegram.rs:206`); the supervisor socket `chat` reply is returned to the caller, and no Telegram broadcast exists in `service.rs`'s `chat` path.
-- **R-C9:** the three-person usability check remains a Phase 9 task; no Phase 0 implementation exists to test yet.
+- **R-C9:** the three-person usability check remains a Phase 9 human task against the implemented Sessions page.
 
 ---
 
@@ -57,7 +57,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 | Source | Kind | Shown as |
 |---|---|---|
 | inbound | `user_message` | "You" (with channel if not web) |
-| inbound | `member_reply` | "Lead · from <role>" only if the lead's next `reply` doesn't already restate it; else a Team marker |
+| inbound | `member_reply` | "Lead · from <role>" as a separate item |
 | inbound | `member_failed` | Team marker "<role> ended · <reason in words>" |
 | inbound | `delegation_result` | Team marker "<role> joined" / "couldn't start · <reason>" |
 | inbound | `approval_result` | Team marker "You approved/denied <code>" |
@@ -71,7 +71,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 
 **Decision:**
 - **Core CI** (the four commands): Rust tests only. Endpoint contracts, headers, auth, SSE, XSS (the API returns agent HTML as inert JSON strings), and no-secrets checks. `scripts/web-lint.sh` greps `web/` for forbidden sinks (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval(`, `new Function`, `setTimeout("`, `setInterval("`) and for inline `<script>` or `style=` in `index.html`.
-- **A separate `console-e2e` CI job:** Playwright (Chromium) plus `@axe-core/playwright`, driving the console against the fake model and Docker. It is not part of the four required commands, mirroring the runtime job's opt-in pattern.
+- **A separate `console-e2e` CI job:** Playwright (Chromium) plus `@axe-core/playwright` drives the embedded console server against controlled API/SSE fixtures at both required viewport sizes. The same job runs the fake-model Docker quickstart integration with `MS_REQUIRE_RUNTIME=1`; the browser tests exercise real HTTP/auth/static assets while avoiding model timing in accessibility checks.
 
 **Rationale:** keeps SC-C06 (no npm runtime deps, no build step) while still testing behaviour and accessibility in a real browser.
 
@@ -97,7 +97,7 @@ Phase 0 output. Verification on branch `002-console` is recorded below. The orig
 
 **Finding:** the agent's `approval_request` body is `{approval_local_id, server, tool, args, binding}` (`crates/ms-agent/src/model.rs`). The `ParsedCommand` from `permit::evaluate_shell` is not stored, and `supervisor.db.approvals.payload` has `{binding, arguments}`.
 
-**Decision pending owner at Checkpoint A:** the parser is callable, but direct `ms-agent` dependency pulls model/MCP transport dependencies. Use a small shared parser crate or the documented fallback; retain bound arguments regardless. See T205 evidence above.
+**Decision:** extract the pure parser into `crates/ms-shell`, a dependency-free shared crate used by both `ms-agent` and `ms-console`. T205 showed a direct agent dependency would pull model/MCP transports; the shared crate keeps those dependencies out of the console. `ms-shell::parse_shell_command` recomputes structure from the bound `shell.run` arguments, including simple commands, while approval binding remains the stored supervisor authority. The implementation follows Q4’s stated default.
 
 ## R-C7 — Ending a session
 
@@ -122,3 +122,10 @@ Before adding it, move those helpers **and** the shared idle query loops from `s
 ## R-C9 — Usability check for SC-C08
 
 **Decision:** three people unfamiliar with MicroSwarm, given the Sessions page with one session waiting on an approval. Task: "send the lead a message" and "say what the session is waiting for". Pass if all three do both within 10 s. Record the results here with the date.
+
+
+## Phase 5 verification (2026-11-01)
+
+- **T242 / SC-C02:** `cargo test -p ms-console --test api_status -- --nocapture` reported `status.changed arrived in 298 µs after the supervisor event was written`; the assertion passed under 500 ms. This measures console event receipt and status derivation after the fake supervisor writes the event to the socket. It does not include the supervisor's database commit. The combined fixture measures the 50-session merge and one console follower without connected browser SSE clients.
+- **T242 / SC-C03:** `cargo build --release -p ms-bench --bin console_event_stream_cost`; `/usr/bin/time -f 'CPU user=%U s system=%S s elapsed=%e s maxRSS=%M KB' target/release/console_event_stream_cost 60` reported `elapsed=60.00s; stream=timed out as expected`, `CPU user=1.20 s system=0.74 s elapsed=60.03 s maxRSS=43180 KB`, or **3.2% of one core** for the event merge plus one console follower. This is below 5%, leaving 1.8 percentage points in the fixture. Browser SSE client rendering/fan-out is not part of this CPU fixture.
+- **T222 decision:** required and completed before the console follower. The isolated measurement improved from 52.1% to 4.7%; the combined fixture measured 3.2%.
