@@ -73,14 +73,14 @@
 - [x] T234 [US1] Chat jobs with the per-session lock (FR-C22–C24) — `crates/ms-console/src/chat.rs`
 - [x] T235 [US1] Sessions and conversation endpoints — `crates/ms-console/src/read.rs`, `server.rs`
 - [x] T236 [US1] Sessions page: left rail with New session at the top; main column with header, status banner, labelled messages, team markers, the composer and its channel-aware helper text, End session with confirm; `aria-live` regions — `web/js/pages/sessions.js`
-- [ ] T237 [US1] Quickstart §0–§1 against Docker and the fake model — `specs/002-console/quickstart.md`
+- [ ] T237 [US1] Quickstart §0–§1 against Docker and the fake model — `specs/002-console/quickstart.md`, `docs/reviews/console-human-acceptance.md`
 
 ## Phase 4 — US2: Approvals (P1)
 
 - [x] T238 [P] [US2] Red API tests: list by state; detail for tool_call (binding, args, parsed) and spawn (requested scope); approve/deny map to `approve`/`deny` with the code only; already-resolved → 409; expired → 410 — `crates/ms-console/tests/api_approvals.rs`
 - [x] T239 [US2] Approvals endpoints; parsed shell structure via `evaluate_shell` (R-C6) — `crates/ms-console/src/read.rs`, `server.rs`
 - [x] T240 [US2] Approvals page (queue + detail, phone layout with a sticky footer), inline approval cards in Sessions, and the header badge — `web/js/pages/approvals.js`, `web/js/pages/sessions.js`
-- [ ] T241 [US2] Quickstart §2
+- [ ] T241 [US2] Quickstart §2 — `specs/002-console/quickstart.md`, `docs/reviews/console-human-acceptance.md`
 
 **Checkpoint D (MVP):** US1 and US2 acceptance scenarios pass; quickstart §0–§2 pass; CI green. **Stop and wait for the owner** before US3.
 
@@ -103,10 +103,10 @@
 
 ## Phase 9 — Polish
 - [x] T251 [P] `console-e2e` CI job: Playwright + axe at 1440 and 390 px on all pages; XSS check in a real browser; `MS_REQUIRE_RUNTIME=1` — `tests/e2e/console/`, `.github/workflows/console-e2e.yml`
-- [ ] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/`
+- [ ] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/console-zh-native-review.md`
 - [x] T253 [P] Operator docs: starting the console, SSH-tunnel access, cross-channel behaviour (R-C8), the security model — `docs/console.md`
-- [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9)
-- [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`
+- [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9) — `docs/reviews/console-human-acceptance.md`
+- [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`, `docs/reviews/console-human-acceptance.md`
 - [x] T256 Adversarial review of `ms-console` against gates I–IX; record findings — `docs/reviews/`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**

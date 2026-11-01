@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 
 const ROOT = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const MEMBER = "01ARZ3NDEKTSV4RRFFQ69G5FAW";
@@ -11,6 +12,8 @@ const hostile = "<img src=x onerror=alert(1)> javascript:alert(1) data:text/html
 const session = { id: ROOT, root_id: ROOT, title: hostile, kind: "lead", role: "lead", channel: "web", status_words: { key: "status.ready", tone: "ready", args: {} }, member_count: 1, open_approvals: 1, in_flight: false, scope: { mounts: [] } };
 
 let child;
+let fixture;
+let fixtureLines;
 let home;
 let token;
 let context;
@@ -20,6 +23,10 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser }) => {
   home = await mkdtemp(join(tmpdir(), "ms-console-e2e-"));
+  const fixtureBinary = process.env.MS_CONSOLE_FIXTURE_BIN || resolve("../../../target/debug/console_status_fixture");
+  fixture = spawn(fixtureBinary, [home], { stdio: ["pipe", "pipe", "inherit"] });
+  fixtureLines = createInterface({ input: fixture.stdout })[Symbol.asyncIterator]();
+  await expectFixtureLine("READY");
   const binary = process.env.MS_CONSOLE_BIN || resolve("../../../target/debug/microswarm");
   const startedAt = Date.now();
   child = spawn(binary, ["console", "--listen", "127.0.0.1:8792"], { env: { ...process.env, MS_HOME: home }, stdio: ["ignore", "ignore", "pipe"] });
@@ -28,6 +35,7 @@ test.beforeAll(async ({ browser }) => {
   child.stderr.on("data", chunk => { stderr += chunk; token ||= stderr.match(/token=([^\s]+)/)?.[1]; });
   for (let attempt = 0; attempt < 100 && !token; attempt++) await new Promise(resolve => setTimeout(resolve, 50));
   if (!token) throw new Error(`console did not print a startup token: ${stderr}`);
+  await expectFixtureLine("CONNECTED");
   context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const login = await context.newPage();
   await login.route("**/api/v1/**", route => mockApi(route));
@@ -41,6 +49,7 @@ test.beforeAll(async ({ browser }) => {
 test.afterAll(async () => {
   await context?.close();
   child?.kill("SIGTERM");
+  fixture?.kill("SIGTERM");
   if (home) await rm(home, { recursive: true, force: true });
 });
 
@@ -73,32 +82,24 @@ test("console reaches the Sessions page within two seconds", () => {
 
 test("status updates reach the browser DOM with p95 below 500 ms", async () => {
   const latencies = [];
+  const page = await context.newPage();
+  await page.goto(`/#/sessions/${ROOT}`);
+  await expect(page.locator(".status-banner")).toContainText("Ready for your next message");
   for (let sample = 0; sample < 20; sample++) {
-    let activeSession = { ...session };
-    let emittedAt;
-    let releaseEvent;
-    const eventReady = new Promise(resolve => { releaseEvent = resolve; });
-    const page = await context.newPage();
-    await page.route("**/api/v1/**", async route => {
-      const url = new URL(route.request().url());
-      if (url.pathname === "/api/v1/events") {
-        await eventReady;
-        activeSession = {
-          ...session,
-          status_words: { key: "status.waiting_for_you", en: "Waiting for you", zh: "等待批准", tone: "warning" },
-        };
-        emittedAt = Date.now();
-        return route.fulfill({ status: 200, contentType: "text/event-stream", body: `event: status.changed\ndata: ${JSON.stringify({ session_id: ROOT })}\n\nretry: 60000\n\n` });
-      }
-      return mockApi(route, activeSession);
-    });
-    await page.goto(`/#/sessions/${ROOT}`);
-    await expect(page.locator(".status-banner")).toContainText("Ready for your next message");
-    releaseEvent();
-    await expect(page.locator(".status-banner")).toContainText("Waiting for you");
-    latencies.push(Date.now() - emittedAt);
-    await page.close();
+    const status = sample % 2 === 0 ? "busy" : "ready";
+    const seq = sample + 1;
+    fixture.stdin.write(`${JSON.stringify({ op: "commit", status, seq })}\n`);
+    const committed = JSON.parse(await nextFixtureLine());
+    expect(committed.committed).toBe(seq);
+    const committedAt = Date.now();
+    fixture.stdin.write(`${JSON.stringify({ op: "deliver" })}\n`);
+    const delivered = JSON.parse(await nextFixtureLine());
+    expect(delivered.delivered).toBe(seq);
+    const expected = status === "busy" ? "Working" : "Ready for your next message";
+    await expect(page.locator(".status-banner")).toContainText(expected);
+    latencies.push(Date.now() - committedAt);
   }
+  await page.close();
   latencies.sort((a, b) => a - b);
   const p95 = latencies[Math.ceil(latencies.length * 0.95) - 1];
   console.log(`status.changed browser DOM p95: ${p95} ms over ${latencies.length} events`);
@@ -132,6 +133,17 @@ async function mockApi(route, activeSession = session) {
   else if (url.pathname === `/api/v1/members/${MEMBER}/scope`) body = { member_id: MEMBER, lead_id: ROOT, role: "reviewer", source_ref: "delegation-1", rows: [{ dimension: "mounts", requested: [], lead: [], ceiling: [], granted: [], narrowed: [] }], profile: { filesystem: { root_read_only: true } } };
   else return route.fulfill({ status: 404, json: { error: "not_found" } });
   return route.fulfill({ status: 200, json: body });
+}
+
+async function nextFixtureLine() {
+  const result = await fixtureLines.next();
+  if (result.done) throw new Error("console status fixture exited unexpectedly");
+  return result.value;
+}
+
+async function expectFixtureLine(expected) {
+  const line = await nextFixtureLine();
+  if (line !== expected) throw new Error(`expected fixture ${expected}, received ${line}`);
 }
 
 async function mockApiValue(path) {

@@ -5,7 +5,6 @@ use std::{env, fs, path::Path, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     net::UnixListener,
-    sync::Mutex,
 };
 
 fn fixture(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -45,8 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .map_or(60, |value| value.parse::<u64>().unwrap_or(60));
     let listener = UnixListener::bind(home.join("supervisor.sock"))?;
-    let ring = std::sync::Arc::new(Mutex::new(ms_console::events::EventRing::new(512)));
-    let follower = tokio::spawn(ms_console::rpc::follow(home.clone(), ring));
+    let server = tokio::spawn(ms_console::server::run(
+        home.clone(),
+        "127.0.0.1:0".parse()?,
+    ));
     let (stream, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept()).await??;
     let (read, mut write) = stream.into_split();
     let mut request = String::new();
@@ -59,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
     println!(
-        "combined fixture: 50 sessions, 20,000 agent events, one console follower; elapsed={:.2}s; stream={}",
+        "combined fixture: 50 sessions, 20,000 agent events, one console HTTP server + follower; elapsed={:.2}s; stream={}",
         started.elapsed().as_secs_f64(),
         match result {
             Err(_) => "timed out as expected",
@@ -67,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(Err(_)) => "error",
         }
     );
-    follower.abort();
+    server.abort();
     fs::remove_dir_all(&home)?;
     Ok(())
 }
