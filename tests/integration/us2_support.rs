@@ -5,7 +5,11 @@ pub mod harness;
 
 use harness::IntegrationHarness;
 use ms_store::SupervisorStore;
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    thread,
+    time::{Duration, Instant},
+};
 
 pub fn start_with_skill() -> Option<IntegrationHarness> {
     let harness = IntegrationHarness::start_swarm_or_skip()?;
@@ -39,6 +43,17 @@ pub fn members(harness: &IntegrationHarness) -> Vec<(String, String, Option<Stri
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
+}
+
+pub fn wait_for_member(harness: &IntegrationHarness) -> (String, String, Option<String>) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(member) = members(harness).into_iter().next() {
+            return member;
+        }
+        assert!(Instant::now() < deadline, "member session was not created");
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 pub fn has_supervisor_event(harness: &IntegrationHarness, event_type: &str) -> bool {

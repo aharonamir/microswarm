@@ -13,6 +13,8 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+static RUNTIME_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[derive(Debug, Clone, Copy)]
 pub enum Runtime {
     Docker,
@@ -24,6 +26,7 @@ pub struct IntegrationHarness {
     pub model: FakeModelServer,
     pub runtime: Runtime,
     supervisor: Option<Child>,
+    _runtime_guard: std::sync::MutexGuard<'static, ()>,
 }
 
 impl IntegrationHarness {
@@ -118,6 +121,9 @@ impl IntegrationHarness {
         swarm: bool,
         benchmark_fanout: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        let runtime_guard = RUNTIME_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let home = unique_home()?;
         fs::create_dir_all(home.join("config"))?;
         fs::create_dir_all(home.join("sessions"))?;
@@ -172,6 +178,7 @@ impl IntegrationHarness {
             model,
             runtime,
             supervisor: Some(supervisor),
+            _runtime_guard: runtime_guard,
         })
     }
 
