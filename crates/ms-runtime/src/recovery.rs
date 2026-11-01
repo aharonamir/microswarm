@@ -1,6 +1,6 @@
 //! Boot-time reconciliation of managed containers and persisted supervisor state.
 use crate::{
-    ContainerProfile, ContainerRuntime, ManagedContainer, MountSpec,
+    ContainerRuntime, ManagedContainer, MountSpec,
     lifecycle::{SessionEvent, SessionLifecycle, SessionStatus},
 };
 use ms_proto::{ExitReason, InboundKind, Scope, SupervisorEvent, SupervisorEventType};
@@ -317,8 +317,15 @@ pub async fn recreate_missing(
         }
     };
     let user = runtime.container_user(&dir)?;
-    let mut profile =
-        ContainerProfile::for_session(&scope, &config.image, &dir, &network, &gateway, &user)?;
+    let mut profile = crate::profile::container_profile(
+        &scope,
+        &scope.limits,
+        &config.image,
+        &dir,
+        &network,
+        &gateway,
+        &user,
+    )?;
     let mut env = vec![
         format!("MS_SESSION_ID={}", session.id),
         format!("MS_ROOT_SESSION_ID={}", session.root),

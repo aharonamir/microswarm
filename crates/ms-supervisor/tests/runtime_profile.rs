@@ -1,5 +1,4 @@
 use ms_proto::{DerivedFrom, Limits, Mount, MountMode, Scope};
-use ms_supervisor::runtime::ContainerProfile;
 use std::{
     fs,
     path::PathBuf,
@@ -35,7 +34,6 @@ fn scope(work_path: &std::path::Path) -> Scope {
 }
 
 #[test]
-#[ignore = "red: T211 — shared profile must match container create settings"]
 fn runtime_profile_enforces_mount_and_process_boundaries() {
     let session_dir = std::env::temp_dir().join(format!(
         "ms-runtime-profile-{}-{}",
@@ -47,8 +45,9 @@ fn runtime_profile_enforces_mount_and_process_boundaries() {
     fs::create_dir_all(session_dir.join("out")).unwrap();
     let work_path = session_dir.join("work");
     fs::create_dir_all(&work_path).unwrap();
-    let profile = ContainerProfile::for_session(
+    let profile = ms_runtime::profile::container_profile(
         &scope(&work_path),
+        &scope(&work_path).limits,
         "microswarm-agent:dev",
         &session_dir,
         "ms-net-session",
@@ -115,8 +114,9 @@ fn runtime_profile_maps_container_host_names_to_the_host_gateway() {
     fs::create_dir_all(session_dir.join("out")).unwrap();
     let work_path = session_dir.join("work");
     fs::create_dir_all(&work_path).unwrap();
-    let profile = ContainerProfile::for_session(
+    let profile = ms_runtime::profile::container_profile(
         &scope(&work_path),
+        &scope(&work_path).limits,
         "microswarm-agent:dev",
         &session_dir,
         "ms-net-session",

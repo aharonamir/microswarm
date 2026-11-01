@@ -1,7 +1,7 @@
 use crate::{
     config::{ConfigSet, SpawnPolicy, ToolTransport, load_config_dir},
     proxy::{ProxyRoutes, SessionProxy},
-    runtime::{ContainerProfile, ContainerRuntime, FileCredentials},
+    runtime::{ContainerRuntime, FileCredentials},
     scope::{build_lead_scope, install_lead_scope},
 };
 use ms_proto::{DerivedFrom, InboundKind, OutboundKind, Scope, ScopeCeiling, SupervisorEventType};
@@ -393,8 +393,9 @@ async fn create_lead(
         "MS_MCP_SERVERS={}",
         serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
     ));
-    let profile = ContainerProfile::for_session(
+    let profile = ms_runtime::profile::container_profile(
         &scope,
+        &scope.limits,
         &config.microswarm.runtime.image,
         &session_dir,
         &network_id,
@@ -924,8 +925,9 @@ async fn create_member(
         "MS_MCP_SERVERS={}",
         serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
     ));
-    let mut profile = ContainerProfile::for_session(
+    let mut profile = ms_runtime::profile::container_profile(
         &scope,
+        &scope.limits,
         &config.microswarm.runtime.image,
         &session_dir,
         &network_id,
