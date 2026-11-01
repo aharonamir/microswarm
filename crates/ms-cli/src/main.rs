@@ -394,9 +394,7 @@ fn doctor(home: &Path) -> Result<(), String> {
         model: &model.model,
         credential: &model.credential,
     });
-    for check in checks {
-        println!("✓ {:<16}{}", check.name, check.detail);
-    }
+    println!("{}", ms_runtime::doctor::render(&checks));
     Ok(())
 }
 
