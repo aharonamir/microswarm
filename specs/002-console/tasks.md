@@ -6,7 +6,7 @@
 
 ## Current execution status
 
-- Not started. `001-microswarm` complete at `6108308` (2026-11-01).
+- Phase 0–1, Checkpoints B–D, and US1–US6 implementation completed; browser suite is green. Quickstart and human acceptance checks remain (2026-11-01).
 
 ## Open questions for the owner (do not block; defaults in brackets)
 
@@ -62,52 +62,52 @@
 - [x] T228 Event follower, ring buffer, broadcast, SSE endpoint and derived `status.changed` — `crates/ms-console/src/events.rs`
 - [x] T229 [P] Frontend base: `index.html` (no inline script/style), `styles.css` tokens from `design/README.md`, `js/dom.js` (the only DOM builder), `js/router.js` (hash routes), `js/api.js` (adds `X-MS-Console`), `js/sse.js` (reconnect + resync), `js/i18n.js`; the global header and responsive frame — `crates/ms-console/web/`
 - [x] T230 [P] Vendor the fonts + OFL licence (per Q3) — `crates/ms-console/web/fonts/`
-- [ ] T231 [P] Add `i18n/en.json` and `i18n/zh.json` with keys for every string in the design reference — `crates/ms-console/web/i18n/`
-- [ ] T232 Adversarial tests: the fake model emits HTML, script, `javascript:` and data-URL payloads, and every API and SSE response carries them as inert JSON strings; a credential set via the API never appears in any response, SSE frame or log — `crates/ms-console/tests/{xss,no_secrets}.rs`
+- [x] T231 [P] Add `i18n/en.json` and `i18n/zh.json` with keys for every string in the design reference — `crates/ms-console/web/i18n/`
+- [x] T232 Adversarial tests: the fake model emits HTML, script, `javascript:` and data-URL payloads, and every API and SSE response carries them as inert JSON strings; a credential set via the API never appears in any response, SSE frame or log — `crates/ms-console/tests/{xss,no_secrets}.rs`
 
 **Checkpoint C:** T218–T221 and T232 green. **Stop and report.**
 
 ## Phase 3 — US1: Chat with a lead (P1) 🎯 MVP
 
-- [ ] T233 [P] [US1] Red API tests: sessions list and groups; session detail with `in_flight`; messages reconstruction and pagination (R-C1); POST message → 202 and SSE `chat.reply`; second send → 409; new session on channel `web`; `pending` → `wait` → final reply; end session → 202 and `session.closed` — `crates/ms-console/tests/api_sessions.rs`
-- [ ] T234 [US1] Chat jobs with the per-session lock (FR-C22–C24) — `crates/ms-console/src/chat.rs`
-- [ ] T235 [US1] Sessions and conversation endpoints — `crates/ms-console/src/read.rs`, `server.rs`
-- [ ] T236 [US1] Sessions page: left rail with New session at the top; main column with header, status banner, labelled messages, team markers, the composer and its channel-aware helper text, End session with confirm; `aria-live` regions — `web/js/pages/sessions.js`
+- [x] T233 [P] [US1] Red API tests: sessions list and groups; session detail with `in_flight`; messages reconstruction and pagination (R-C1); POST message → 202 and SSE `chat.reply`; second send → 409; new session on channel `web`; `pending` → `wait` → final reply; end session → 202 and `session.closed` — `crates/ms-console/tests/api_sessions.rs`
+- [x] T234 [US1] Chat jobs with the per-session lock (FR-C22–C24) — `crates/ms-console/src/chat.rs`
+- [x] T235 [US1] Sessions and conversation endpoints — `crates/ms-console/src/read.rs`, `server.rs`
+- [x] T236 [US1] Sessions page: left rail with New session at the top; main column with header, status banner, labelled messages, team markers, the composer and its channel-aware helper text, End session with confirm; `aria-live` regions — `web/js/pages/sessions.js`
 - [ ] T237 [US1] Quickstart §0–§1 against Docker and the fake model — `specs/002-console/quickstart.md`
 
 ## Phase 4 — US2: Approvals (P1)
 
-- [ ] T238 [P] [US2] Red API tests: list by state; detail for tool_call (binding, args, parsed) and spawn (requested scope); approve/deny map to `approve`/`deny` with the code only; already-resolved → 409; expired → 410 — `crates/ms-console/tests/api_approvals.rs`
-- [ ] T239 [US2] Approvals endpoints; parsed shell structure via `evaluate_shell` (R-C6) — `crates/ms-console/src/read.rs`, `server.rs`
-- [ ] T240 [US2] Approvals page (queue + detail, phone layout with a sticky footer), inline approval cards in Sessions, and the header badge — `web/js/pages/approvals.js`, `web/js/pages/sessions.js`
+- [x] T238 [P] [US2] Red API tests: list by state; detail for tool_call (binding, args, parsed) and spawn (requested scope); approve/deny map to `approve`/`deny` with the code only; already-resolved → 409; expired → 410 — `crates/ms-console/tests/api_approvals.rs`
+- [x] T239 [US2] Approvals endpoints; parsed shell structure via `evaluate_shell` (R-C6) — `crates/ms-console/src/read.rs`, `server.rs`
+- [x] T240 [US2] Approvals page (queue + detail, phone layout with a sticky footer), inline approval cards in Sessions, and the header badge — `web/js/pages/approvals.js`, `web/js/pages/sessions.js`
 - [ ] T241 [US2] Quickstart §2
 
 **Checkpoint D (MVP):** US1 and US2 acceptance scenarios pass; quickstart §0–§2 pass; CI green. **Stop and wait for the owner** before US3.
 
 ## Phase 5 — US3: Live team (P2)
-- [ ] T242 [P] [US3] Red tests: team view and reach summaries; `status.changed` within 500 ms of the supervisor commit (SC-C02, measured with the fixture from T203) — `crates/ms-console/tests/api_team.rs`
-- [ ] T243 [US3] Team view, reach summaries and the latest-activity feed (agent events labelled as observations) — `crates/ms-console/src/read.rs`
-- [ ] T244 [US3] "Who's working" panel and live updates; "Reconnecting…" state — `web/js/pages/sessions.js`
+- [x] T242 [P] [US3] Red tests: team view and reach summaries; `status.changed` within 500 ms of the supervisor commit (SC-C02, measured with the fixture from T203) — `crates/ms-console/tests/{api_team,api_status}.rs`
+- [x] T243 [US3] Team view, reach summaries and the latest-activity feed (agent events labelled as observations) — `crates/ms-console/src/read.rs`
+- [x] T244 [US3] "Who's working" panel and live updates; "Reconnecting…" state — `web/js/pages/sessions.js`
 
 ## Phase 6 — US4: Member scope (P2)
-- [ ] T245 [P] [US4] Red tests: ScopeComparison equals the stored values; narrowed reasons; profile from `container_profile` — `crates/ms-console/tests/api_scope.rs`
-- [ ] T246 [US4] Scope endpoints and the member page, including "Ask the lead to dismiss it" pre-filling the composer — `server.rs`, `web/js/pages/member.js`
+- [x] T245 [P] [US4] Red tests: ScopeComparison equals the stored values; narrowed reasons; profile from `container_profile` — `crates/ms-console/tests/api_scope.rs`
+- [x] T246 [US4] Scope endpoints and the member page, including "Ask the lead to dismiss it" pre-filling the composer — `server.rs`, `web/js/pages/member.js`
 
 ## Phase 7 — US5: Trace (P2)
-- [ ] T247 [P] [US5] Red test: the trace endpoint's events equal `microswarm trace --json` for the same fixture — `crates/ms-console/tests/api_trace.rs`
-- [ ] T248 [US5] Trace endpoint and page: filters, selected-event JSON, copy, export — `web/js/pages/trace.js`
+- [x] T247 [P] [US5] Red test: the trace endpoint's events equal `microswarm trace --json` for the same fixture — `crates/ms-console/tests/api_trace.rs`
+- [x] T248 [US5] Trace endpoint and page: filters, selected-event JSON, copy, export — `web/js/pages/trace.js`
 
 ## Phase 8 — US6: Host (P3)
-- [ ] T249 [P] [US6] Red tests: doctor parity with the CLI; credential names only; set-value never echoed — `crates/ms-console/tests/api_host.rs`
-- [ ] T250 [US6] Host endpoint and page; credential dialog; skills install (path input) — `web/js/pages/host.js`
+- [x] T249 [P] [US6] Red tests: doctor parity with the CLI; credential names only; set-value never echoed — `crates/ms-console/tests/api_host.rs`
+- [x] T250 [US6] Host endpoint and page; credential dialog; skills install (path input) — `web/js/pages/host.js`
 
 ## Phase 9 — Polish
-- [ ] T251 [P] `console-e2e` CI job: Playwright + axe at 1440 and 390 px on all pages; XSS check in a real browser; `MS_REQUIRE_RUNTIME=1` — `tests/e2e/console/`, `.github/workflows/console-e2e.yml`
+- [x] T251 [P] `console-e2e` CI job: Playwright + axe at 1440 and 390 px on all pages; XSS check in a real browser; `MS_REQUIRE_RUNTIME=1` — `tests/e2e/console/`, `.github/workflows/console-e2e.yml`
 - [ ] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/`
-- [ ] T253 [P] Operator docs: starting the console, SSH-tunnel access, cross-channel behaviour (R-C8), the security model — `docs/console.md`
+- [x] T253 [P] Operator docs: starting the console, SSH-tunnel access, cross-channel behaviour (R-C8), the security model — `docs/console.md`
 - [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9)
 - [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`
-- [ ] T256 Adversarial review of `ms-console` against gates I–IX; record findings — `docs/reviews/`
+- [x] T256 Adversarial review of `ms-console` against gates I–IX; record findings — `docs/reviews/`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 

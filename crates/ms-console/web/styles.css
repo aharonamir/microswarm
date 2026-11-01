@@ -53,7 +53,7 @@ a { color: inherit; }
 .message-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .team-marker { padding: 9px 14px; border-radius: 8px; background: var(--tint); color: var(--ink-2); }
 .approval-card { padding: 14px; border: 2px solid var(--seal); border-radius: 8px; background: var(--panel); }
-.approval-card h3 { margin: 4px 0 8px; font-size: 15px; }
+.approval-card h2 { margin: 4px 0 8px; font-size: 15px; }
 .command-block { overflow-x: auto; padding: 12px; border-radius: 6px; color: #F6F2EB; background: var(--ink); white-space: pre-wrap; }
 .approval-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .deny-button { color: var(--seal-ink); border-color: var(--seal); }

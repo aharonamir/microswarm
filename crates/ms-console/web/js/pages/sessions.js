@@ -20,7 +20,7 @@ export async function renderSessions(root, selectedId, t) {
   const sessions = overview.sessions || [];
   const selected = selectedId ? sessions.find(item => item.id === selectedId) : null;
   if (selectedId && !selected && !newDraft) newDraft = false;
-  const sidebar = el("aside", { class: "page-rail panel" }, [
+  const sidebar = el("aside", { class: "page-rail panel", "aria-label": t("sessions.your_sessions") }, [
     el("button", { class: "primary-button new-session", onclick: () => { newDraft = true; requestError = ""; location.hash = "#/sessions"; renderSessions(root, null, t); } }, [`＋ ${t("sessions.new")}`]),
     el("h2", { class: "section-title rail-heading" }, [t("sessions.your_sessions")]),
     el("div", { class: "session-list" }, sessions.length ? sessions.map(item => el("a", { class: "session-link", href: `#/sessions/${item.id}`, "aria-current": item.id === selectedId ? "page" : false }, [
@@ -56,7 +56,7 @@ export async function renderSessions(root, selectedId, t) {
     ]));
     const inlineApprovals = (approvals.approvals || []).filter(item => item.root_session_id === view.root_id).map(item => el("article", { class: "approval-card" }, [
       el("p", { class: "label" }, [t("sessions.approval_title")]),
-      el("h3", {}, [`${item.requesting_role || "Member"} · ${t("sessions.wants_approval")}`]),
+      el("h2", {}, [`${item.requesting_role || "Member"} · ${t("sessions.wants_approval")}`]),
       el("p", { class: "mono" }, [item.code]),
       item.tool_call ? el("pre", { class: "command-block mono" }, [JSON.stringify(item.tool_call.arguments || {}, null, 2)]) : el("p", {}, [item.spawn?.task || ""]),
       el("div", { class: "approval-actions" }, [
@@ -79,7 +79,7 @@ export async function renderSessions(root, selectedId, t) {
       requestError ? el("p", { class: "inline-error", role: "alert" }, [requestError]) : el("span", {}, []),
       composer,
     );
-    const team = el("aside", { class: "page-aside" }, [
+    const team = el("aside", { class: "page-aside", "aria-label": t("sessions.who_working") }, [
       el("h2", { class: "section-title" }, [t("sessions.who_working")]),
       el("p", { class: "muted" }, [t("sessions.team_helper")]),
       el("article", { class: "wall-card" }, [el("strong", {}, [t("sessions.lead")]), el("span", { class: `status-line tone-${view.status_words?.tone || "neutral"}` }, [statusText(view, t)]), el("p", { class: "muted" }, [t("sessions.lead_note")])]),

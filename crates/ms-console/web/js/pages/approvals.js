@@ -10,7 +10,7 @@ export async function renderApprovals(root, selectedId, t) {
   catch (error) { root.append(el("section", { class: "panel page-main" }, [el("h1", { class: "page-title" }, [t("nav.approvals")]), el("p", { role: "alert" }, [error.message])])); return; }
   const approvals = result.approvals || [];
   const selected = selectedId ? approvals.find(item => item.code === selectedId || item.id === selectedId) : approvals[0];
-  const rail = el("aside", { class: "page-rail panel approval-rail" }, [
+  const rail = el("aside", { class: "page-rail panel approval-rail", "aria-label": t("nav.approvals") }, [
     el("h1", { class: "page-title" }, [t("nav.approvals")]),
     el("div", { class: "approval-tabs", role: "tablist" }, ["pending", "decided", "expired"].map(value => el("button", { class: value === state ? "tab active" : "tab", role: "tab", "aria-selected": String(value === state), onclick: async () => { state = value; await renderApprovals(root, null, t); } }, [t(`approvals.${value}`)]))),
     el("div", { class: "session-list" }, approvals.length ? approvals.map(item => el("a", { class: "session-link", href: `#/approvals/${item.code}`, "aria-current": item.code === selected?.code ? "page" : false }, [

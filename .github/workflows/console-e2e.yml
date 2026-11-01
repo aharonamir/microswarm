@@ -1,0 +1,30 @@
+name: Console E2E
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  console-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/e2e/console/package-lock.json
+      - name: Build host binaries
+        run: cargo build --workspace --bins
+      - name: Install browser test dependencies
+        working-directory: tests/e2e/console
+        run: npm ci
+      - name: Install Chromium
+        working-directory: tests/e2e/console
+        run: npx playwright install --with-deps chromium
+      - name: Exercise console pages and accessibility
+        working-directory: tests/e2e/console
+        env:
+          MS_REQUIRE_RUNTIME: "1"
+          MS_CONSOLE_BIN: ${{ github.workspace }}/target/debug/microswarm
+        run: npm test

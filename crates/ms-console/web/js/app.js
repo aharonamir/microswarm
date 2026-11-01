@@ -13,8 +13,26 @@ const app = document.getElementById("app");
 const nav = document.querySelector(".primary-nav");
 let reconnecting = false;
 let supervisorStatus = "checking";
+let renderPending = false;
+let renderTask = null;
 
-async function render() {
+function render() {
+  renderPending = true;
+  if (!renderTask) {
+    renderTask = (async () => {
+      while (renderPending) {
+        renderPending = false;
+        await renderNow();
+      }
+    })().finally(() => {
+      renderTask = null;
+      if (renderPending) render();
+    });
+  }
+  return renderTask;
+}
+
+async function renderNow() {
   await loadLocale(localStorage.getItem("ms-lang") || "en");
   const { page } = currentRoute();
   let pending = 0;
@@ -65,7 +83,8 @@ document.getElementById("language-toggle").addEventListener("click", async event
 onRoute(render);
 connectEvents((type, data) => {
   if (type === "console.reconnecting" || type === "supervisor.down") { reconnecting = true; if (type === "supervisor.down") supervisorStatus = "down"; render(); }
-  else if (type === "console.connected" || type === "supervisor.up") { reconnecting = false; if (type === "supervisor.up") supervisorStatus = "running"; render(); }
+  else if (type === "console.connected") { if (reconnecting) { reconnecting = false; render(); } }
+  else if (type === "supervisor.up") { reconnecting = false; supervisorStatus = "running"; render(); }
   else if (type === "resync") render();
   else if (["chat.pending", "chat.reply", "chat.error", "status.changed", "supervisor"].includes(type)) handleConsoleEvent(type, data, render);
 });
