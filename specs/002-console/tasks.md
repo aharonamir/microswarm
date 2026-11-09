@@ -103,7 +103,7 @@
 
 ## Phase 9 — Polish
 - [x] T251 [P] `console-e2e` CI job: Playwright + axe at 1440 and 390 px on all pages; XSS check in a real browser; `MS_REQUIRE_RUNTIME=1` — `tests/e2e/console/`, `.github/workflows/console-e2e.yml`
-- [ ] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/console-zh-native-review.md`
+- [x] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/console-zh-native-review.md`
 - [x] T253 [P] Operator docs: starting the console, SSH-tunnel access, cross-channel behaviour (R-C8), the security model — `docs/console.md`
 - [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9) — `docs/reviews/console-human-acceptance.md`
 - [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`, `docs/reviews/console-human-acceptance.md`

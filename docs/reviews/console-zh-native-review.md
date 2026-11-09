@@ -1,10 +1,10 @@
 # Native Simplified Chinese review: MicroSwarm Console
 
-Status: **pending native-speaker review**. Review every user-visible Chinese string for naturalness, clarity, and preservation of the English safety meaning. Add approved wording or corrections in the final column. Do not record reviewer identity; dialect/script and date are enough.
+Status: **review complete; approved wording applied** (2026-11-09).
 
 Reviewer: ____________________  
-Dialect/script: Simplified Mandarin / 简体中文  
-Date: ____________________
+Dialect/script: Simplified Mandarin / 简体中文
+Date: 2026-11-09
 
 | Key | English source | Current Chinese | Reviewer notes / approved wording |
 |---|---|---|---|
@@ -23,13 +23,13 @@ Date: ____________________
 | `sessions.none` | No active sessions yet. | 暂无进行中的会话。 | |
 | `sessions.pick_or_new` | Choose a session or start a new one. | 选择会话或开始新会话。 | |
 | `sessions.first_message` | Send a message to start your first session. | 发送消息以开始第一个会话。 | |
-| `sessions.members` | members | 位成员 | |
+| `sessions.members` | members | 成员 | Approved: 成员 |
 | `sessions.chat_helper` | Chat with the lead agent. It brings in team members when it needs them. | 与主代理聊天；它会在需要时邀请团队成员。 | |
 | `sessions.history` | Full history | 完整历史 | |
 | `sessions.end` | End session | 结束会话 | |
 | `sessions.confirm_end` | End this session and stop its members? | 结束此会话并停止所有成员？ | |
 | `sessions.status` | Session status | 会话状态 | |
-| `sessions.review` | Review it | 查看 | |
+| `sessions.review` | Review it | 查看并处理 | Approved: 查看并处理 |
 | `sessions.messages` | Conversation | 对话 | |
 | `sessions.message_label` | Message the lead | 给主代理留言 | |
 | `sessions.placeholder` | Ask a question, give new instructions, or tell it to stop a member… | 提问、发送新指令，或让它停止某个成员… | |
@@ -81,7 +81,7 @@ Date: ____________________
 | `host.skills` | Team skills | 团队技能 | |
 | `host.credentials` | Credentials | 凭据 | |
 | `host.set_value` | Set a value | 设置值 | |
-| `host.values_never_shown` | Values can be set here but never shown. | 可以在这里设置值，但不会显示。 | |
+| `host.values_never_shown` | Values can be set here but never shown. | 可以在这里设置值，但设置后不会显示。 | Approved wording applied. |
 | `host.limits` | Limits and ceiling | 限制与上限 | |
 | `host.edit_host` | edit on the host | 在主机上编辑 | |
 | `common.loading` | Loading… | 正在加载… | |
@@ -97,7 +97,7 @@ Date: ____________________
 | `status.ready` | Ready for your next message | 可以继续发送消息 | |
 | `status.ended_by_you` | Ended by you | 已由你结束 | |
 | `status.ended` | Ended | 已结束 | |
-| `status.ended_idle` | Ended · idle | 已结束 · 空闲超时 | |
+| `status.ended_idle` | Ended · idle | 已结束 · 空闲 | Approved: 已结束 · 空闲 |
 | `status.finished` | Finished | 已完成 | |
 | `status.stopped_safety` | Stopped for safety | 已出于安全原因停止 | |
 | `status.stopped_failure` | Stopped · {reason} | 已停止 · {reason} | |
@@ -115,10 +115,10 @@ Date: ____________________
 | `approvals.parsed_kind.pipeline` | pipeline | 管道命令 | |
 | `approvals.parsed_kind.compound` | compound command | 复合命令 | |
 | `approvals.program` | program | 程序 | |
-| `approvals.requested_scope` | Requested scope | 请求的范围 | |
+| `approvals.requested_scope` | Requested scope | 申请的范围 | Approved: 申请的范围 |
 | `approvals.select` | Choose an approval to inspect. | 选择一个审批请求查看详情。 | |
-| `approvals.spawn` | Member request | 成员请求 | |
-| `sessions.lead_note` | The lead coordinates this session and owns its scope. | 负责人协调此会话并管理其范围。 | |
+| `approvals.spawn` | Member request | 成员创建请求 | Approved: 成员创建请求 |
+| `sessions.lead_note` | The lead coordinates this session and owns its scope. | 主代理协调此会话并管理其范围。 | Approved: 主代理协调此会话并管理其范围。 |
 | `approvals.pending` | Pending | 待处理 | |
 | `trace.choose_session` | Open a session to view its trace. | 打开会话以查看追踪记录。 | |
 | `trace.filters` | Trace filters | 追踪筛选 | |
@@ -128,34 +128,34 @@ Date: ____________________
 | `host.credential_name` | Credential name | 凭据名称 | |
 | `host.save_credential` | Save credential | 保存凭据 | |
 | `host.skill_path` | Skill directory path on this host | 此主机上的技能目录路径 | |
-| `host.skill_path_placeholder` | /path/to/skill | /技能目录路径 | |
+| `host.skill_path_placeholder` | /path/to/skill | /path/to/skill | Approved; restore literal path example. |
 | `host.install_skill` | Install skill | 安装技能 | |
 | `host.credential_saved` | Credential saved. Its value will not be shown. | 凭据已保存，不会显示其值。 | |
 | `host.skill_installed` | Skill installed. | 技能已安装。 | |
 | `host.operation_failed` | The operation could not be completed. | 无法完成此操作。 | |
 | `scope.source` | Derived from | 来源 | |
-| `scope.ask_lead` | Open lead session | 打开负责人会话 | |
+| `scope.ask_lead` | Open lead session | 打开主代理会话 | Approved: 打开主代理会话 |
 | `scope.comparison` | Scope comparison | 范围对比 | |
-| `scope.requested` | Requested | 请求 | |
-| `scope.lead_scope` | Lead scope | 负责人范围 | |
+| `scope.requested` | Requested | 已请求 | Approved: 已请求 |
+| `scope.lead_scope` | Lead scope | 主代理范围 | Approved: 主代理范围 |
 | `scope.granted` | Granted | 已授予 | |
 | `scope.profile` | Container profile | 容器配置 | |
-| `scope.ask_dismiss` | Ask the lead to dismiss it | 请负责人移除此成员 | |
-| `scope.dismiss_prefill` | Please dismiss member {role}. | 请移除成员 {role}。 | |
+| `scope.ask_dismiss` | Ask the lead to dismiss it | 请主代理移除此成员 | Approved: 请主代理移除此成员 |
+| `scope.dismiss_prefill` | Please dismiss member {role}. | 请主代理移除成员 {role}。 | Approved: 请主代理移除成员 {role}。 |
 | `scope.dimension.mounts` | Filesystem mounts | 文件系统挂载 | |
 | `scope.dimension.credentials` | Credentials | 凭据 | |
 | `scope.dimension.tools` | Tools | 工具 | |
 | `scope.dimension.limits` | Limits | 限制 | |
 | `scope.dimension.delegation` | Delegation | 委派 | |
-| `sessions.observation` | Agent observation | 智能体观察 | |
+| `sessions.observation` | Agent observation | 代理观察 | Approved: 代理观察 |
 | `header.supervisor_checking` | Checking supervisor | 正在检查监督器 | |
 | `header.supervisor_down` | Supervisor disconnected | 监督器已断开 | |
-| `common.ready` | Ready | 可以继续发送消息 | |
+| `common.ready` | Ready | 就绪 | Approved: 就绪 |
 | `common.waiting_for_you` | Waiting for you | 等待你的确认 | |
 | `common.waiting_team` | Waiting on the team | 等待团队成员 | |
 | `common.working` | Working | 正在处理 | |
 
 Reviewer conclusion:
 
-- [ ] All translations are natural, clear, and preserve the safety meaning.
-- [ ] Changes are required; approved replacements are recorded above.
+- [x] All translations are natural, clear, and preserve the safety meaning.
+- [x] Required corrections and suggested wording updates are recorded above and applied to `i18n/zh.json`.

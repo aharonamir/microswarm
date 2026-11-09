@@ -123,6 +123,8 @@ Before adding it, move those helpers **and** the shared idle query loops from `s
 
 **Decision:** three people unfamiliar with MicroSwarm, given the Sessions page with one session waiting on an approval. Task: "send the lead a message" and "say what the session is waiting for". Pass if all three do both within 10 s. Record the results here with the date.
 
+**T252 native Simplified Chinese review (2026-11-09):** a native Simplified Chinese speaker reviewed the console catalog and reported nine blocking corrections plus six non-blocking suggestions. Applied all fifteen: use 主代理 consistently for lead references, restore the literal `/path/to/skill` example, correct ended-idle and ready status wording, simplify 成员, and apply the requested wording polish. The review sheet records the approved strings and conclusion; no reviewer identity was recorded.
+
 
 ## Phase 5 verification (2026-11-01)
 
