@@ -88,8 +88,12 @@ fn quickstart_swarm_flow_works_with_reference_team_skill() {
         thread::sleep(Duration::from_millis(50));
     };
     assert_eq!(status, "closed");
-    assert!(support::has_supervisor_event(
-        &harness,
-        "delegation.dismissed"
-    ));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !support::has_supervisor_event(&harness, "delegation.dismissed") {
+        assert!(
+            Instant::now() < deadline,
+            "member dismissal event was not recorded"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
 }
