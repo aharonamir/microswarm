@@ -177,7 +177,7 @@ async function endSession(id, t) {
   await renderSessions(document.getElementById("app"),id,t);
 }
 
-export async function handleConsoleEvent(type, raw, render) {
+export async function handleConsoleEvent(type, raw, render, t) {
   let event;
   try { event=JSON.parse(raw); } catch { return; }
   if (type === "supervisor" && event.event?.type !== "session.closed" && !String(event.event?.type || "").startsWith("approval.")) return;
@@ -185,6 +185,9 @@ export async function handleConsoleEvent(type, raw, render) {
     const lock=pendingLocks.get(event.request_id);
     if (lock) { inFlight.delete(lock); pendingLocks.delete(event.request_id); }
     else completedRequests.add(event.request_id);
+  }
+  if (type === "chat.error") {
+    requestError = t(event.error === "model_not_configured" ? "sessions.model_not_configured" : "sessions.chat_failed");
   }
   if (["chat.pending","chat.reply"].includes(type) && event.session_id && location.hash === "#/sessions") location.hash=`#/sessions/${event.session_id}`;
   await render();

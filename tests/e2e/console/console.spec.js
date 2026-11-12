@@ -138,6 +138,40 @@ test("chat send posts through the console and keeps the session locked while pen
   await page.close();
 });
 
+test("chat errors explain missing model setup and release the composer", async () => {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() {
+        this.listeners = {};
+        window.__consoleEvents = this;
+        setTimeout(() => this.onopen?.(), 0);
+      }
+      addEventListener(type, callback) { this.listeners[type] = callback; }
+      close() {}
+      emit(type, data) { this.listeners[type]?.({ data: JSON.stringify(data), lastEventId: "1" }); }
+    };
+  });
+  await page.route("**/api/v1/**", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "POST" && url.pathname === "/api/v1/sessions") {
+      return route.fulfill({ status: 202, json: { request_id: "e2e-model-error", thread_id: "web-thread", session_id: null } });
+    }
+    return mockApi(route);
+  });
+  await page.goto("/#/sessions");
+  const composer = page.getByLabel("Message the lead");
+  await composer.fill("hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(composer).toHaveValue("");
+  await page.evaluate(() => window.__consoleEvents.emit("chat.error", {
+    type: "chat.error", request_id: "e2e-model-error", session_id: null, error: "model_not_configured",
+  }));
+  await expect(page.getByRole("alert")).toContainText("No model is configured");
+  await expect(composer).toBeEnabled();
+  await page.close();
+});
+
 test("approval decision posts only through its code route", async () => {
   const page = await context.newPage();
   let request;

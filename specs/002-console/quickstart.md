@@ -1,6 +1,10 @@
 # Quickstart: MicroSwarm Console
 
-This is the end-to-end acceptance script. Each section maps to a user story. Run it against Docker with the fake model (integration harness) and once with a real model.
+This is the end-to-end acceptance script. Each section maps to a user story. Automated integration checks use Docker with the fake model; manual browser checks need a configured model endpoint and Docker. Run the manual flow once with a real model as well.
+
+## Prerequisites
+
+Configure a model in the same MicroSwarm home that `microswarmd` will use before starting the supervisor. Run `microswarm init --lang en` in a terminal; the wizard asks for the provider, endpoint, model name, and API key (the key prompt does not echo input). Check the setup with `microswarm doctor`. The console does not configure the model provider or model name.
 
 ## 0 · Start
 

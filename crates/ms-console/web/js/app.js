@@ -86,5 +86,5 @@ connectEvents((type, data) => {
   else if (type === "console.connected") { if (reconnecting) { reconnecting = false; render(); } }
   else if (type === "supervisor.up") { reconnecting = false; supervisorStatus = "running"; render(); }
   else if (type === "resync") render();
-  else if (["chat.pending", "chat.reply", "chat.error", "status.changed", "supervisor"].includes(type)) handleConsoleEvent(type, data, render);
+  else if (["chat.pending", "chat.reply", "chat.error", "status.changed", "supervisor"].includes(type)) handleConsoleEvent(type, data, render, t);
 });

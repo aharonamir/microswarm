@@ -32,7 +32,7 @@ On 2026-11-01, `MS_REQUIRE_RUNTIME=1 MS_TEST_RUNTIME=docker MS_TEST_AGENT_IMAGE=
 | Section | Passed? | Environment/date | Drift or fix |
 |---|---|---|---|
 | 0 — Start | Partial | Operator report, 2026-11-12; environment not provided | Startup worked. Non-loopback refusal occurred but omitted SSH/TLS guidance; fixed in code, needs recheck. |
-| 1 — Chat with a lead | No | Operator report, 2026-11-12; environment not provided | Operator could not complete chat; exact symptom requested, not yet verified. |
+| 1 — Chat with a lead | No | Operator report, 2026-11-12; environment not provided | New web session was created and the composer cleared, but no reply appeared. No model was configured. The console now reports the setup step; repeat §1 after configuring a model. |
 | 2 — Approvals |  |  |  |
 
 ## T255 — clean-host quickstart and adversarial section
