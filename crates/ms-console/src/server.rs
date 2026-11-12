@@ -40,7 +40,7 @@ pub fn validate_listen(listen: SocketAddr) -> Result<(), String> {
     if listen.ip().is_loopback() {
         Ok(())
     } else {
-        Err("console --listen must use a loopback address".into())
+        Err("The console only listens on loopback. Use an SSH tunnel (ssh -L 8790:127.0.0.1:8790 host) or a TLS proxy.".into())
     }
 }
 

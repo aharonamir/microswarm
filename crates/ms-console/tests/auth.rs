@@ -32,6 +32,15 @@ fn login_cookie_has_required_attributes_and_listen_is_loopback_only() {
 }
 
 #[test]
+fn non_loopback_error_includes_ssh_and_tls_guidance() {
+    let error = validate_listen("0.0.0.0:8790".parse::<SocketAddr>().unwrap()).unwrap_err();
+    assert_eq!(
+        error,
+        "The console only listens on loopback. Use an SSH tunnel (ssh -L 8790:127.0.0.1:8790 host) or a TLS proxy."
+    );
+}
+
+#[test]
 fn request_guard_enforces_host_origin_header_and_content_type() {
     assert_eq!(check_request("GET", "attacker.test", None, None, None), 421);
     assert_eq!(
