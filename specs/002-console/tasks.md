@@ -108,6 +108,8 @@
 - [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9) — `docs/reviews/console-human-acceptance.md`
 - [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`, `docs/reviews/console-human-acceptance.md`
 - [x] T256 Adversarial review of `ms-console` against gates I–IX; record findings — `docs/reviews/`
+- [x] T257 Add a one-token provider/model/key connection check to `microswarm init`; fail before saving and keep provider response bodies and keys out of errors — `crates/ms-cli/src/model_check.rs`
+- [x] T258 Distinguish an unreachable supervisor socket from model setup failures in console chat — `crates/ms-console/src/{rpc,chat}.rs`, `web/js/pages/sessions.js`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 

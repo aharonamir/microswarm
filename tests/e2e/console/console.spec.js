@@ -169,6 +169,10 @@ test("chat errors explain missing model setup and release the composer", async (
   }));
   await expect(page.getByRole("alert")).toContainText("No model is configured");
   await expect(composer).toBeEnabled();
+  await page.evaluate(() => window.__consoleEvents.emit("chat.error", {
+    type: "chat.error", request_id: "e2e-supervisor-error", session_id: null, error: "supervisor_unavailable",
+  }));
+  await expect(page.getByRole("alert")).toContainText("Start microswarmd in the same MicroSwarm home");
   await page.close();
 });
 

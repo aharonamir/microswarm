@@ -91,12 +91,12 @@ pub async fn submit(
                         .await
                         {
                             Ok(next) => next,
-                            Err(_) => {
+                            Err(error) => {
                                 emit_error(
                                     &ring,
                                     &request_id,
                                     current_session.as_deref(),
-                                    "supervisor_error",
+                                    error.code(),
                                 )
                                 .await;
                                 break;
@@ -118,15 +118,7 @@ pub async fn submit(
                     break;
                 }
             }
-            Err(_) => {
-                emit_error(
-                    &ring,
-                    &request_id,
-                    session_id.as_deref(),
-                    "supervisor_error",
-                )
-                .await
-            }
+            Err(error) => emit_error(&ring, &request_id, session_id.as_deref(), error.code()).await,
         }
         manager.lock().await.finish(&lock_key, &request_id);
     });

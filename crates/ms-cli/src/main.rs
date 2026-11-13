@@ -8,6 +8,7 @@ use std::{
     process::ExitCode,
 };
 
+mod model_check;
 mod tools;
 mod trace;
 
@@ -52,7 +53,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard] (checks the model connection before saving)\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
@@ -232,6 +233,10 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         println!("Setup cancelled; initialized with existing/default configuration.");
         return Ok(());
     }
+
+    println!("Checking model connection with a one-token request…");
+    model_check::check(provider, &base_url, &model, &key)?;
+    println!("✓ Model connection verified.");
 
     store_local_credential(home, &credential, &key)?;
 

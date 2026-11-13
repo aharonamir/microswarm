@@ -52,6 +52,16 @@ fn init_help_and_empty_sessions_are_available() {
 }
 
 #[test]
+fn init_help_explains_model_connection_check() {
+    let output = Command::new(env!("CARGO_BIN_EXE_microswarm"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("checks the model connection"));
+}
+
+#[test]
 fn tools_add_list_and_remove_edit_tools_toml() {
     let dir = home();
     let init = Command::new(env!("CARGO_BIN_EXE_microswarm"))

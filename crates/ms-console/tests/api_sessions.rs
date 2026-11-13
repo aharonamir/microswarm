@@ -72,6 +72,30 @@ async fn new_session_returns_accepted_with_request_and_thread_ids() {
 }
 
 #[tokio::test]
+async fn chat_names_unavailable_supervisor_when_socket_cannot_be_reached() {
+    let home = home();
+    let chats = Arc::new(Mutex::new(ChatManager::default()));
+    let ring = Arc::new(Mutex::new(EventRing::new(8)));
+    let mut events = ring.lock().await.subscribe();
+    submit(
+        home.clone(),
+        None,
+        "thread-test".into(),
+        "hello".into(),
+        chats,
+        ring,
+    )
+    .await
+    .unwrap();
+    let event = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.data["error"], "supervisor_unavailable");
+    fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test]
 async fn new_web_session_uses_supervisor_chat_with_web_channel() {
     let home = home();
     let listener = UnixListener::bind(home.join("supervisor.sock")).unwrap();

@@ -187,7 +187,10 @@ export async function handleConsoleEvent(type, raw, render, t) {
     else completedRequests.add(event.request_id);
   }
   if (type === "chat.error") {
-    requestError = t(event.error === "model_not_configured" ? "sessions.model_not_configured" : "sessions.chat_failed");
+    const key = event.error === "model_not_configured" ? "sessions.model_not_configured"
+      : event.error === "supervisor_unavailable" ? "sessions.supervisor_unavailable"
+      : "sessions.chat_failed";
+    requestError = t(key);
   }
   if (["chat.pending","chat.reply"].includes(type) && event.session_id && location.hash === "#/sessions") location.hash=`#/sessions/${event.session_id}`;
   await render();

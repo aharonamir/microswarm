@@ -7,20 +7,36 @@ use tokio::{
     sync::Mutex,
 };
 
-pub async fn request(home: &Path, request: &Value) -> Result<Value, String> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RpcError {
+    SupervisorUnavailable,
+    Io,
+    InvalidResponse,
+}
+
+impl RpcError {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::SupervisorUnavailable => "supervisor_unavailable",
+            Self::Io | Self::InvalidResponse => "supervisor_error",
+        }
+    }
+}
+
+pub async fn request(home: &Path, request: &Value) -> Result<Value, RpcError> {
     let socket = home.join("supervisor.sock");
     let mut stream = UnixStream::connect(&socket)
         .await
-        .map_err(|e| e.to_string())?;
-    let mut bytes = serde_json::to_vec(request).map_err(|e| e.to_string())?;
+        .map_err(|_| RpcError::SupervisorUnavailable)?;
+    let mut bytes = serde_json::to_vec(request).map_err(|_| RpcError::InvalidResponse)?;
     bytes.push(b'\n');
-    stream.write_all(&bytes).await.map_err(|e| e.to_string())?;
+    stream.write_all(&bytes).await.map_err(|_| RpcError::Io)?;
     let mut line = String::new();
     BufReader::new(stream)
         .read_line(&mut line)
         .await
-        .map_err(|e| e.to_string())?;
-    serde_json::from_str(&line).map_err(|e| e.to_string())
+        .map_err(|_| RpcError::Io)?;
+    serde_json::from_str(&line).map_err(|_| RpcError::InvalidResponse)
 }
 
 pub async fn follow(home: std::path::PathBuf, ring: Arc<Mutex<EventRing>>) {

@@ -4,7 +4,7 @@ This is the end-to-end acceptance script. Each section maps to a user story. Aut
 
 ## Prerequisites
 
-Configure a model in the same MicroSwarm home that `microswarmd` will use before starting the supervisor. Run `microswarm init --lang en` in a terminal; the wizard asks for the provider, endpoint, model name, and API key (the key prompt does not echo input). Check the setup with `microswarm doctor`. The console does not configure the model provider or model name.
+Configure a model in the same MicroSwarm home that `microswarmd` will use before starting the supervisor. Run `microswarm init --lang en` in a terminal; the wizard asks for the provider, endpoint, model name, and API key (the key prompt does not echo input). Before saving, it sends a one-token completion request to verify the provider, model, and key; this uses a small amount of model quota. `microswarm doctor` checks local setup but does not contact the provider. The console does not configure the model provider or model name.
 
 ## 0 · Start
 
