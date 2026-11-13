@@ -649,16 +649,6 @@ fn should_send_chat_line(input: &str) -> bool {
     !input.trim().is_empty()
 }
 
-#[cfg(test)]
-mod chat_input_tests {
-    #[test]
-    fn blank_chat_line_is_not_sent() {
-        assert!(!super::should_send_chat_line(""));
-        assert!(!super::should_send_chat_line("   "));
-        assert!(super::should_send_chat_line("hello"));
-    }
-}
-
 fn send_chat_request(
     writer: &mut BufWriter<UnixStream>,
     _reader: &mut BufReader<UnixStream>,
@@ -687,4 +677,14 @@ fn rpc(home: &Path, request: serde_json::Value) -> Result<serde_json::Value, Str
         return Err(error.to_owned());
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod chat_input_tests {
+    #[test]
+    fn blank_chat_line_is_not_sent() {
+        assert!(!super::should_send_chat_line(""));
+        assert!(!super::should_send_chat_line("   "));
+        assert!(super::should_send_chat_line("hello"));
+    }
 }
