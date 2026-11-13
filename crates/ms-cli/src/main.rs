@@ -538,6 +538,10 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
     let mut lock = stdin.lock();
     loop {
         input.clear();
+        if stdin.is_terminal() {
+            print!("you › ");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
         if lock
             .read_line(&mut input)
             .map_err(|error| error.to_string())?
@@ -642,15 +646,12 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
 }
 
 fn should_send_chat_line(input: &str) -> bool {
-    // Preserve the current behavior until T260's regression test is enabled.
-    let _ = input;
-    true
+    !input.trim().is_empty()
 }
 
 #[cfg(test)]
 mod chat_input_tests {
     #[test]
-    #[ignore = "red: T260 — blank Enter must not create a chat session"]
     fn blank_chat_line_is_not_sent() {
         assert!(!super::should_send_chat_line(""));
         assert!(!super::should_send_chat_line("   "));
