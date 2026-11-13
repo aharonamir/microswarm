@@ -40,6 +40,35 @@ pub struct RecoveryConfig {
     pub restart_max: u8,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ContainerDisposition {
+    Adopt,
+    RemoveStopped,
+    Ignore,
+}
+
+fn container_disposition(
+    session: Option<&SessionInfo>,
+    container: &crate::ManagedContainer,
+    session_dir_exists: bool,
+) -> ContainerDisposition {
+    let Some(session) = session else {
+        return ContainerDisposition::Ignore;
+    };
+    if session.status == "stopping"
+        || !session_dir_exists
+        || session.container_id.as_deref() != Some(container.id.as_str())
+        || container.session_id.as_deref() != Some(session.id.as_str())
+    {
+        return ContainerDisposition::Ignore;
+    }
+    if container.running {
+        ContainerDisposition::Adopt
+    } else {
+        ContainerDisposition::RemoveStopped
+    }
+}
+
 pub async fn scan(home: &Path, runtime: &ContainerRuntime) -> Result<BootScan, String> {
     let mut store = SupervisorStore::open(home.join("supervisor.db")).map_err(|e| e.to_string())?;
     let all_sessions = {
@@ -83,14 +112,24 @@ pub async fn scan(home: &Path, runtime: &ContainerRuntime) -> Result<BootScan, S
             .session_id
             .as_deref()
             .and_then(|id| by_id.get(id))
-            .filter(|s| s.container_id.as_deref() == Some(container.id.as_str()))
-            .filter(|s| s.status != "stopping" && home.join("sessions").join(&s.id).is_dir());
-        if let Some(session) = matched {
-            if container.running {
+            .copied();
+        let disposition = container_disposition(
+            matched,
+            &container,
+            matched.is_some_and(|session| home.join("sessions").join(&session.id).is_dir()),
+        );
+        match disposition {
+            ContainerDisposition::Adopt => {
+                let session = matched.expect("adopted container has a matching session");
                 matched_ids.insert(session.id.clone());
                 adopted.push(((*session).clone(), container));
+                continue;
             }
-            continue;
+            ContainerDisposition::RemoveStopped => {
+                runtime.remove_stopped_container(&container.id).await?;
+                continue;
+            }
+            ContainerDisposition::Ignore => {}
         }
         // A runtime daemon may serve several MicroSwarm homes. Reconcile only
         // containers named by this home's authoritative session database.
@@ -427,4 +466,59 @@ fn notify_member(home: &Path, lead: &str, member: &str, reason: &str) -> Result<
         )
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_exact_stopped_session_containers_are_cleanup_candidates() {
+        let session = SessionInfo {
+            id: "session-1".into(),
+            root: "session-1".into(),
+            role: "lead".into(),
+            kind: "lead".into(),
+            status: "crashed".into(),
+            container_id: Some("container-1".into()),
+            restart_count: 0,
+        };
+        let container = crate::ManagedContainer {
+            id: "container-1".into(),
+            session_id: Some("session-1".into()),
+            running: false,
+        };
+        assert_eq!(
+            container_disposition(Some(&session), &container, true),
+            ContainerDisposition::RemoveStopped
+        );
+        let mut running = container.clone();
+        running.running = true;
+        assert_eq!(
+            container_disposition(Some(&session), &running, true),
+            ContainerDisposition::Adopt
+        );
+        let mut unrelated = container.clone();
+        unrelated.id = "container-2".into();
+        assert_eq!(
+            container_disposition(Some(&session), &unrelated, true),
+            ContainerDisposition::Ignore
+        );
+        let mut wrong_session = container.clone();
+        wrong_session.session_id = Some("session-2".into());
+        assert_eq!(
+            container_disposition(Some(&session), &wrong_session, true),
+            ContainerDisposition::Ignore
+        );
+        let mut stopping = session.clone();
+        stopping.status = "stopping".into();
+        assert_eq!(
+            container_disposition(Some(&stopping), &container, true),
+            ContainerDisposition::Ignore
+        );
+        assert_eq!(
+            container_disposition(Some(&session), &container, false),
+            ContainerDisposition::Ignore
+        );
+    }
 }

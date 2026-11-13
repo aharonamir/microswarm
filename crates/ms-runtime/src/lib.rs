@@ -250,6 +250,13 @@ impl ContainerRuntime {
             .map_err(|error| format!("cannot start agent container: {error}"))
     }
 
+    pub async fn remove_stopped_container(&self, container_id: &str) -> Result<(), String> {
+        self.docker
+            .remove_container(container_id, None)
+            .await
+            .map_err(|error| format!("cannot remove stopped agent container: {error}"))
+    }
+
     pub async fn stop(&self, container_id: &str, grace: Duration) -> Result<(), String> {
         let seconds = i32::try_from(grace.as_secs()).unwrap_or(i32::MAX).max(1);
         let options = bollard::query_parameters::StopContainerOptionsBuilder::default()
