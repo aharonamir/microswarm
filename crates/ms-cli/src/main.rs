@@ -567,6 +567,9 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         while input.ends_with(['\n', '\r']) {
             input.pop();
         }
+        if !should_send_chat_line(&input) {
+            continue;
+        }
         let request = json!({"op":"chat", "session_id":session_id, "text":input});
         send_chat_request(&mut writer, &mut reader, request)?;
         let mut response = String::new();
@@ -636,6 +639,23 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn should_send_chat_line(input: &str) -> bool {
+    // Preserve the current behavior until T260's regression test is enabled.
+    let _ = input;
+    true
+}
+
+#[cfg(test)]
+mod chat_input_tests {
+    #[test]
+    #[ignore = "red: T260 — blank Enter must not create a chat session"]
+    fn blank_chat_line_is_not_sent() {
+        assert!(!super::should_send_chat_line(""));
+        assert!(!super::should_send_chat_line("   "));
+        assert!(super::should_send_chat_line("hello"));
+    }
 }
 
 fn send_chat_request(

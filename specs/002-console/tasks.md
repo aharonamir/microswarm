@@ -111,6 +111,7 @@
 - [x] T257 Add a one-token provider/model/key connection check to `microswarm init`; fail before saving and keep provider response bodies and keys out of errors — `crates/ms-cli/src/model_check.rs`
 - [x] T258 Distinguish an unreachable supervisor socket from model setup failures in console chat — `crates/ms-console/src/{rpc,chat}.rs`, `web/js/pages/sessions.js`
 - [x] T259 Remove an exact matched, stopped managed container before boot recovery recreates its session — `crates/ms-runtime/src/{lib,recovery}.rs`
+- [ ] T260 [P] CLI chat prompt and blank-line guard; a blank Enter must not create or fail a session — `crates/ms-cli/src/main.rs`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 
