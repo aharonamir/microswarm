@@ -654,8 +654,8 @@ fn should_send_chat_line(input: &str) -> bool {
 }
 
 fn is_incomplete_approval_command(input: &str) -> bool {
-    let _ = input;
-    false
+    let mut parts = input.split_whitespace();
+    matches!(parts.next(), Some("/approve" | "/deny")) && parts.next().is_none()
 }
 
 fn send_chat_request(
@@ -698,11 +698,12 @@ mod chat_input_tests {
     }
 
     #[test]
-    #[ignore = "red: T261 — bare approval commands must not be sent as user messages"]
     fn approval_command_requires_a_code() {
         assert!(super::is_incomplete_approval_command("/approve"));
         assert!(super::is_incomplete_approval_command("/deny   "));
         assert!(!super::is_incomplete_approval_command("/approve BC3V"));
-        assert!(!super::is_incomplete_approval_command("please approve this"));
+        assert!(!super::is_incomplete_approval_command(
+            "please approve this"
+        ));
     }
 }
