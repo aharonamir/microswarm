@@ -2,11 +2,13 @@
 
 **Input:** [spec.md](./spec.md) · [plan.md](./plan.md) · [research.md](./research.md) · [data-model.md](./data-model.md) · [contracts/](./contracts/) · [design/README.md](./design/README.md) · [quickstart.md](./quickstart.md)
 
+**Release sign-off:** [MicroSwarm release compliance tests](../../docs/release-compliance-tests.md). T237, T241, T254, and T255 are intentionally left unchecked for later manual testing.
+
 **Format:** `[ID] [P?] [Story] Description — path`. Tests come first: a test task's tests compile, are marked `#[ignore = "red: T2xx — reason"]`, and fail before their implementation task starts. Rules in `AGENTS.md` apply unchanged.
 
 ## Current execution status
 
-- Phase 0–1, Checkpoints B–D, and US1–US6 implementation completed; browser suite is green. Quickstart and human acceptance checks remain (2026-11-01).
+- Phase 0–1, Checkpoints B–D, and US1–US6 implementation completed; browser suite is green. T237, T241, T254, and T255 remain open for later manual acceptance and are tracked in the [release compliance checklist](../../docs/release-compliance-tests.md) (2026-11-14).
 
 ## Open questions for the owner (do not block; defaults in brackets)
 
