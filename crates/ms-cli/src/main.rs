@@ -575,10 +575,8 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         if !should_send_chat_line(&input) {
             continue;
         }
-        let approval_input = approval_command_with_current_code(
-            &input,
-            pending_approval_code.as_deref(),
-        );
+        let approval_input =
+            approval_command_with_current_code(&input, pending_approval_code.as_deref());
         if is_incomplete_approval_command(&input) && approval_input.is_none() {
             println!("Usage: /approve CODE or /deny CODE (use the code from the approval prompt).");
             continue;
@@ -669,13 +667,40 @@ fn is_incomplete_approval_command(input: &str) -> bool {
 }
 
 fn approval_command_with_current_code(input: &str, code: Option<&str>) -> Option<String> {
-    let _ = (input, code);
-    None
+    if !is_incomplete_approval_command(input) {
+        return None;
+    }
+    let code = code.filter(|code| is_valid_approval_code(code))?;
+    let command = input.split_whitespace().next()?;
+    Some(format!("{command} {code}"))
 }
 
 fn approval_code_from_prompt(prompt: &str) -> Option<&str> {
-    let _ = prompt;
-    None
+    let instructions = prompt
+        .rsplit_once("Reply:")
+        .map(|(_, instructions)| instructions)
+        .or_else(|| {
+            prompt
+                .rsplit_once("回复：")
+                .map(|(_, instructions)| instructions)
+        })?;
+    let mut words = instructions.split_whitespace();
+    if words.next()? != "/approve" {
+        return None;
+    }
+    let code = words.next()?;
+    if !matches!(words.next()?, "or" | "或") || words.next()? != "/deny" {
+        return None;
+    }
+    let deny_code = words.next()?.trim_end_matches(['.', '。']);
+    (code == deny_code && is_valid_approval_code(code)).then_some(code)
+}
+
+fn is_valid_approval_code(code: &str) -> bool {
+    code.len() == 4
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
 }
 
 fn send_chat_request(
@@ -728,7 +753,6 @@ mod chat_input_tests {
     }
 
     #[test]
-    #[ignore = "red: T262 — bare approval commands should use the code in the current prompt"]
     fn bare_approval_uses_current_code() {
         assert_eq!(
             super::approval_command_with_current_code("/approve", Some("BC3V")),
@@ -749,10 +773,11 @@ mod chat_input_tests {
     }
 
     #[test]
-    #[ignore = "red: T262 — parse the code from the supervisor approval prompt"]
     fn approval_code_is_parsed_from_english_and_chinese_prompts() {
         assert_eq!(
-            super::approval_code_from_prompt("Approve web.fetch? Reply: /approve BC3V or /deny BC3V."),
+            super::approval_code_from_prompt(
+                "Approve web.fetch? Reply: /approve BC3V or /deny BC3V."
+            ),
             Some("BC3V")
         );
         assert_eq!(

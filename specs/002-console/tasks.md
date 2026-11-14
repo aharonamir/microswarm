@@ -113,7 +113,7 @@
 - [x] T259 Remove an exact matched, stopped managed container before boot recovery recreates its session — `crates/ms-runtime/src/{lib,recovery}.rs`
 - [x] T260 [P] CLI chat prompt and blank-line guard; a blank Enter must not create or fail a session — `crates/ms-cli/src/main.rs`
 - [x] T261 [P] Incomplete approval commands show usage and preserve the pending turn — `crates/ms-cli/src/main.rs`
-- [ ] T262 [P] CLI bare approve/deny uses the code from the current supervisor prompt — `crates/ms-cli/src/main.rs`
+- [x] T262 [P] CLI bare approve/deny uses the code from the current supervisor prompt — `crates/ms-cli/src/main.rs`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 
