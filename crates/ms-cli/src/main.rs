@@ -374,6 +374,11 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     .map_err(|error| format!("{}: {error}", config_path.display()))?;
 
     println!("✓ Model and web search settings saved.");
+    if search_settings.is_some() {
+        println!(
+            "Search is enabled for new sessions. Rebuild the configured agent image if it predates web.search, restart microswarmd, and start a new session."
+        );
+    }
     Ok(())
 }
 
@@ -488,13 +493,21 @@ fn doctor(home: &Path) -> Result<(), String> {
             config.microswarm.runtime.image
         ));
     }
-    let checks = ms_runtime::doctor::run(ms_runtime::doctor::DoctorInput {
-        config_path: &config_dir.display().to_string(),
-        runtime_socket: &config.microswarm.runtime.socket,
-        agent_image: &config.microswarm.runtime.image,
-        model: &model.model,
-        credential: &model.credential,
-    });
+    let checks =
+        ms_runtime::doctor::run(ms_runtime::doctor::DoctorInput {
+            config_path: &config_dir.display().to_string(),
+            runtime_socket: &config.microswarm.runtime.socket,
+            agent_image: &config.microswarm.runtime.image,
+            model: &model.model,
+            credential: &model.credential,
+            search: config.microswarm.search.as_ref().map(|search| {
+                ms_runtime::doctor::SearchInput {
+                    provider: &search.provider,
+                    credential: &search.credential,
+                    credential_present: home.join("credentials").join(&search.credential).is_file(),
+                }
+            }),
+        });
     println!("{}", ms_runtime::doctor::render(&checks));
     Ok(())
 }
@@ -676,12 +689,8 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
             session_id = Some(id.to_owned());
         }
         if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
-            if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
-                println!("{prompt}");
-                pending_approval_code = approval_code_from_prompt(prompt).map(str::to_owned);
-            } else {
-                pending_approval_code = None;
-            }
+            print_approval_prompt(&response);
+            pending_approval_code = approval_code_from_response(&response);
             if let (Some(id), Some(after)) = (
                 response
                     .get("session_id")
@@ -713,9 +722,8 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
                 println!("agent › {text}");
             }
             if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
-                if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
-                    println!("{prompt}");
-                }
+                print_approval_prompt(&response);
+                pending_approval_code = approval_code_from_response(&response);
                 if let (Some(id), Some(after)) = (
                     response
                         .get("session_id")
@@ -767,6 +775,20 @@ fn approval_code_from_prompt(prompt: &str) -> Option<&str> {
     }
     let deny_code = words.next()?.trim_end_matches(['.', '。']);
     (code == deny_code && is_valid_approval_code(code)).then_some(code)
+}
+
+fn approval_code_from_response(response: &serde_json::Value) -> Option<String> {
+    response
+        .get("prompt")
+        .and_then(serde_json::Value::as_str)
+        .and_then(approval_code_from_prompt)
+        .map(str::to_owned)
+}
+
+fn print_approval_prompt(response: &serde_json::Value) {
+    if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
+        println!("{prompt}");
+    }
 }
 
 fn is_valid_approval_code(code: &str) -> bool {

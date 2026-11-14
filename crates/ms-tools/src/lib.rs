@@ -194,7 +194,7 @@ impl FirstPartyTools {
 
     #[rmcp::tool(
         name = "web.search",
-        description = "Search the current web using the host-configured search provider; returns source URLs and snippets."
+        description = "Use this for questions about current, recent, latest, or live information. Search for sources before answering; use web.fetch only to inspect a specific URL returned by search. Returns source URLs and snippets."
     )]
     async fn web_search_tool(
         &self,

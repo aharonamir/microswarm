@@ -427,12 +427,29 @@ pub fn host(home: &Path) -> Value {
         .and_then(|v| v.get("credential"))
         .and_then(toml::Value::as_str)
         .unwrap_or("model credential");
+    let search_config = config.get("search");
+    let search_provider = search_config
+        .and_then(|value| value.get("provider"))
+        .and_then(toml::Value::as_str);
+    let search_credential = search_config
+        .and_then(|value| value.get("credential"))
+        .and_then(toml::Value::as_str);
+    let search_credential_present =
+        search_credential.is_some_and(|name| home.join("credentials").join(name).is_file());
+    let search_enabled = configured_tool_in_scope(&config, "microswarm-tools", "web.search");
     let checks = ms_runtime::doctor::run(ms_runtime::doctor::DoctorInput {
         config_path: config_file.to_string_lossy().as_ref(),
         runtime_socket: socket,
         agent_image: image,
         model,
         credential,
+        search: search_provider
+            .zip(search_credential)
+            .map(|(provider, credential)| ms_runtime::doctor::SearchInput {
+                provider,
+                credential,
+                credential_present: search_credential_present,
+            }),
     });
     let doctor = checks
         .iter()
@@ -448,7 +465,27 @@ pub fn host(home: &Path) -> Value {
         .filter_map(|name| name.as_str().map(|name| json!({"name":name,"used_by":[]})))
         .collect::<Vec<_>>();
     let channels=config.get("channels").and_then(toml::Value::as_array).cloned().unwrap_or_default().iter().map(|channel|json!({"kind":channel.get("kind").and_then(toml::Value::as_str).unwrap_or("unknown"),"detail":"Configured","enabled":true})).collect::<Vec<_>>();
-    json!({"host":{"doctor":doctor,"channels":channels,"tools":[],"skills":[],"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":{}}})
+    json!({"host":{"doctor":doctor,"channels":channels,"tools":[{"id":"web.search","provider":search_provider,"configured":search_provider.is_some(),"credential_present":search_credential_present,"enabled":search_enabled}],"skills":[],"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":{}}})
+}
+
+fn configured_tool_in_scope(config: &toml::Value, server: &str, tool: &str) -> bool {
+    config
+        .get("lead")
+        .and_then(|lead| lead.get("scope"))
+        .and_then(|scope| scope.get("tools"))
+        .and_then(toml::Value::as_array)
+        .is_some_and(|grants| {
+            grants.iter().any(|grant| {
+                grant.get("server").and_then(toml::Value::as_str) == Some(server)
+                    && (grant.get("tools").and_then(toml::Value::as_str) == Some("*")
+                        || grant
+                            .get("tools")
+                            .and_then(toml::Value::as_array)
+                            .is_some_and(|tools| {
+                                tools.iter().any(|name| name.as_str() == Some(tool))
+                            }))
+            })
+        })
 }
 
 pub fn scope_summary(scope: &Value) -> String {

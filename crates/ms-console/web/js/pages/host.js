@@ -9,6 +9,20 @@ export async function renderHost(root, t) {
   catch (error) { root.append(el("section", { class: "panel page-main" }, [el("p", { role: "alert" }, [error.message])])); return; }
   const doctor = el("section", { class: "panel host-section" }, [el("h1", { class: "page-title" }, [t("host.doctor")]), ...(data.doctor || []).map(check => el("article", { class: "host-row" }, [el("strong", {}, [check.check]), el("span", {}, [check.result]), el("p", { class: "muted" }, [check.detail || ""])]))]);
   const channels = el("section", { class: "panel host-section" }, [el("h2", { class: "section-title" }, [t("host.channels")]), ...(data.channels || []).map(item => el("p", {}, [`${item.kind}: ${item.detail}`]))]);
+  const tools = el("section", { class: "panel host-section" }, [
+    el("h2", { class: "section-title" }, [t("host.tools")]),
+    ...(data.tools || []).map(item => {
+      const provider = item.provider === "tavily" ? "Tavily" : item.provider === "brave" ? "Brave Search" : "";
+      const detail = !item.configured ? t("host.search_unconfigured")
+        : !item.credential_present ? t("host.search_missing")
+          : !item.enabled ? t("host.search_out_of_scope")
+            : t("host.search_ready", { provider });
+      return el("article", { class: "host-row" }, [
+        el("strong", {}, [item.id]), el("span", {}, [item.configured && item.credential_present && item.enabled ? t("common.ready") : t("host.search_not_ready")]),
+        el("p", { class: "muted" }, [detail]), el("p", { class: "muted" }, [t("host.search_action")]),
+      ]);
+    }),
+  ]);
   const credentials = el("section", { class: "panel host-section" }, [
     el("h2", { class: "section-title" }, [t("host.credentials")]),
     el("p", { class: "muted" }, [t("host.values_never_shown")]),
@@ -22,7 +36,7 @@ export async function renderHost(root, t) {
   const skills = el("section", { class: "panel host-section" }, [el("h2", { class: "section-title" }, [t("host.skills")]), ...(data.skills || []).map(skill => el("p", {}, [`${skill.name} · ${skill.version}`])),
     el("form", { class: "host-form", onsubmit: event => installSkill(event, root, t) }, [el("label", { class: "label", for: "skill-path" }, [t("host.skill_path")]), el("input", { id: "skill-path", name: "path", required: true, placeholder: t("host.skill_path_placeholder") }), el("button", { class: "secondary-button", type: "submit" }, [t("host.install_skill")])]),
   ]);
-  root.append(el("header", { class: "host-header" }, [el("h1", { class: "page-title" }, [t("nav.host")]), message ? el("p", { role: "status" }, [message]) : el("span", {}, [])]), doctor, channels, credentials, skills,
+  root.append(el("header", { class: "host-header" }, [el("h1", { class: "page-title" }, [t("nav.host")]), message ? el("p", { role: "status" }, [message]) : el("span", {}, [])]), doctor, channels, tools, credentials, skills,
     el("section", { class: "panel host-section" }, [el("h2", { class: "section-title" }, [t("host.limits")]), el("pre", { class: "command-block mono" }, [JSON.stringify({ limits: data.limits, ceiling: data.ceiling }, null, 2)])]),
   );
 }

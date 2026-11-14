@@ -147,6 +147,25 @@ test("Host validates credential names in Chromium", async () => {
   await page.close();
 });
 
+test("Host shows when web.search is configured for new sessions", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/host") {
+      return route.fulfill({ status: 200, json: { host: {
+        doctor: [{ check: "web search", result: "pass", detail: "Tavily configured; web-search credential is present" }],
+        tools: [{ id: "web.search", provider: "tavily", configured: true, credential_present: true, enabled: true }], channels: [], skills: [], credentials: [], limits: {}, ceiling: {},
+      } } });
+    }
+    return mockApi(route);
+  });
+  await page.goto("/#/host");
+  await expect(page.getByText("web.search", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Tavily is configured, its credential/)).toBeVisible();
+  await expect(page.getByText(/restart microswarmd.*new session/i)).toBeVisible();
+  await page.close();
+});
+
 test("chat send posts through the console and keeps the session locked while pending", async () => {
   const page = await context.newPage();
   let request;

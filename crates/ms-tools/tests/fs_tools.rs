@@ -30,6 +30,30 @@ async fn first_party_server_exposes_web_search() {
     fs::remove_dir_all(base).unwrap();
 }
 
+#[tokio::test]
+async fn web_search_description_prefers_search_for_current_information() {
+    let (base, work) = temp_work();
+    let (server_io, client_io) = tokio::io::duplex(16_384);
+    let server_task = tokio::spawn(async move {
+        ms_tools::FirstPartyTools::with_proxy(work, "http://127.0.0.1:1")
+            .serve(server_io)
+            .await
+            .unwrap()
+            .waiting()
+            .await
+            .unwrap();
+    });
+    let client = TestClient.serve(client_io).await.unwrap();
+    let tools = client.peer().list_all_tools().await.unwrap();
+    let search = tools.iter().find(|tool| tool.name == "web.search").unwrap();
+    let description = search.description.as_deref().unwrap_or_default();
+    assert!(description.contains("current"));
+    assert!(description.contains("web.fetch"));
+    drop(client);
+    server_task.await.unwrap();
+    fs::remove_dir_all(base).unwrap();
+}
+
 fn temp_work() -> (PathBuf, PathBuf) {
     let path = std::env::temp_dir().join(format!(
         "ms-tools-{}-{}",

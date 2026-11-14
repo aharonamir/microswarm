@@ -121,6 +121,9 @@
 - [x] T267 Reserve "Already decided on another channel" for approvals this browser did not decide — `web/js/pages/{approvals,sessions}.js`, `tests/e2e/console/console.spec.js`
 - [x] T268 Show closed leads under "Ended today" with the end reason and trace link — `web/js/pages/sessions.js`, `tests/e2e/console/console.spec.js`
 - [x] T269 Escape the credential-name character-class hyphen for Chromium's HTML pattern parser — `web/js/pages/host.js`, `tests/e2e/console/console.spec.js`
+- [x] T270 Refresh the CLI's current approval code when a wait returns another approval — `crates/ms-cli/src/main.rs`, `crates/ms-cli/tests/chat_approvals.rs`
+- [x] T271 Report optional search configuration and credential presence in CLI doctor and the console Host page without exposing values — `crates/ms-runtime/src/doctor.rs`, `crates/ms-cli/src/main.rs`, `crates/ms-console/`
+- [x] T272 Explain image rebuild, daemon restart, and new-session requirements after search setup; guide the model to use web.search for current information — `crates/ms-cli/src/main.rs`, `crates/ms-tools/src/lib.rs`, `specs/002-console/quickstart.md`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 
