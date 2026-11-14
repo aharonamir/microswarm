@@ -138,6 +138,34 @@ test("chat send posts through the console and keeps the session locked while pen
   await page.close();
 });
 
+test.skip("red: T266 — a new web session opened from / selects its first reply", async () => {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { this.listeners = {}; window.__consoleEvents = this; setTimeout(() => this.onopen?.(), 0); }
+      addEventListener(type, callback) { this.listeners[type] = callback; }
+      close() {}
+      emit(type, data) { this.listeners[type]?.({ data: JSON.stringify(data), lastEventId: "1" }); }
+    };
+  });
+  await page.route("**/api/v1/**", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "POST" && url.pathname === "/api/v1/sessions") {
+      return route.fulfill({ status: 202, json: { request_id: "new-web-session", session_id: null, thread_id: "web-thread" } });
+    }
+    return mockApi(route);
+  });
+  await page.goto("/");
+  await page.getByLabel("Message the lead").fill("hello");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.evaluate(() => window.__consoleEvents.emit("chat.pending", {
+    type: "chat.pending", request_id: "new-web-session", session_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  }));
+  await expect(page).toHaveURL(`http://127.0.0.1:8792/#/sessions/${ROOT}`);
+  await expect(page.getByRole("heading", { name: hostile })).toBeVisible();
+  await page.close();
+});
+
 test("chat errors explain missing model setup and release the composer", async () => {
   const page = await context.newPage();
   await page.addInitScript(() => {
