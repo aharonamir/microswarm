@@ -27,9 +27,8 @@ async fn check_async(provider: &str, key: &str, endpoint: &str) -> Result<(), St
             .bearer_auth(key)
             .json(&json!({"query": "Wikipedia", "max_results": 1, "search_depth": "basic"})),
         "brave" => client
-            .post(endpoint)
-            .header("x-subscription-token", key)
-            .json(&json!({"q": "Wikipedia", "count": 1})),
+            .get(format!("{endpoint}?q=Wikipedia&count=1"))
+            .header("x-subscription-token", key),
         _ => return Err("unsupported web search provider".into()),
     };
     let mut response = request.send().await.map_err(|error| {
@@ -115,6 +114,11 @@ mod tests {
                     .to_ascii_lowercase()
                     .contains(&expected_header.to_ascii_lowercase())
             );
+            if provider == "brave" {
+                assert!(request.starts_with("GET /search?q=Wikipedia&count=1 HTTP/1.1"));
+            } else {
+                assert!(request.starts_with("POST /search HTTP/1.1"));
+            }
         }
     }
 }

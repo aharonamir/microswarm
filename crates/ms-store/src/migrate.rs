@@ -14,7 +14,7 @@ const SESSION_SCHEMA: &str = include_str!("../../../specs/001-microswarm/contrac
 const SUPERVISOR_SCHEMA: &str =
     include_str!("../../../specs/001-microswarm/contracts/supervisor-db.sql");
 const SESSION_SCHEMA_VERSION: i64 = 1;
-const SUPERVISOR_SCHEMA_VERSION: i64 = 2;
+const SUPERVISOR_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug)]
 pub enum StoreError {
@@ -271,10 +271,21 @@ fn open_database(
         }
         1 if schema_version == SUPERVISOR_SCHEMA_VERSION => {
             connection.execute_batch("ALTER TABLE sessions ADD COLUMN scope_json TEXT CHECK (scope_json IS NULL OR json_valid(scope_json)); PRAGMA user_version=2;")?;
+            migrate_supervisor_v2(&connection)?;
+        }
+        2 if schema_version == SUPERVISOR_SCHEMA_VERSION => {
+            migrate_supervisor_v2(&connection)?;
         }
         other => return Err(StoreError::UnsupportedSchemaVersion(other)),
     }
     Ok(connection)
+}
+
+fn migrate_supervisor_v2(connection: &Connection) -> Result<(), StoreError> {
+    connection.execute_batch(
+        "ALTER TABLE approvals ADD COLUMN proxy_used_at TEXT; PRAGMA user_version=3;",
+    )?;
+    Ok(())
 }
 
 fn open_existing(path: PathBuf, flags: OpenFlags) -> Result<Connection, StoreError> {

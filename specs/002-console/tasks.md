@@ -126,6 +126,9 @@
 - [x] T270 Refresh the CLI's current approval code when a wait returns another approval — `crates/ms-cli/src/main.rs`, `crates/ms-cli/tests/chat_approvals.rs`
 - [x] T271 Report optional search configuration and credential presence in CLI doctor and the console Host page without exposing values — `crates/ms-runtime/src/doctor.rs`, `crates/ms-cli/src/main.rs`, `crates/ms-console/`
 - [x] T272 Explain image rebuild, daemon restart, and new-session requirements after search setup; guide the model to use web.search for current information — `crates/ms-cli/src/main.rs`, `crates/ms-tools/src/lib.rs`, `specs/002-console/quickstart.md`
+- [x] T273 Use Brave's GET query format in the scoped search proxy and init connection check — `crates/ms-supervisor/src/proxy.rs`, `crates/ms-cli/src/search_check.rs`
+- [x] T274 Require and atomically consume a matching supervisor approval before an Ask-gated proxy search — `crates/ms-store/`, `crates/ms-supervisor/src/proxy.rs`
+- [x] T275 Preserve an unsent Sessions composer draft across event-driven renders — `crates/ms-console/web/js/`, `tests/e2e/console/console.spec.js`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 

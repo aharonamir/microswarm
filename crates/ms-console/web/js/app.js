@@ -35,6 +35,9 @@ function render() {
 async function renderNow() {
   await loadLocale(localStorage.getItem("ms-lang") || "en");
   const { page } = currentRoute();
+  const composer = page === "sessions" ? document.getElementById("message-input") : null;
+  const composerDraft = composer?.value;
+  const composerRoute = location.hash;
   let pending = 0;
   try { pending = Number((await api("/overview")).pending_approvals || 0); } catch { /* The page view reports its own connection error. */ }
   clear(nav);
@@ -49,6 +52,13 @@ async function renderNow() {
   if (reconnecting) app.append(el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
   if (page === "sessions") {
     await renderSessions(app, currentRoute().parts[0] || null, t);
+    if (composerDraft !== undefined && composerRoute === location.hash) {
+      const nextComposer = document.getElementById("message-input");
+      if (nextComposer) {
+        nextComposer.value = composerDraft;
+        nextComposer.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
     return;
   }
   if (page === "approvals") {

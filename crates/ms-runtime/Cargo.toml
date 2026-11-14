@@ -8,11 +8,18 @@ license.workspace = true
 [dependencies]
 bollard = { version = "=0.21.1", default-features = false, features = ["pipe"] }
 futures-util = "0.3.34"
+http = "1.3.1"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", default-features = false, features = ["client", "server", "http1"] }
+hyper-rustls = { version = "0.27.10", default-features = false, features = ["http1", "webpki-tokio", "ring", "tls12"] }
+hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "server", "service", "http1", "tokio"] }
 ms-proto = { path = "../ms-proto" }
 ms-store = { path = "../ms-store" }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1.0.228", features = ["derive"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde_json = "1.0.145"
-tokio = { version = "1.53.2", features = ["io-util", "time"] }
+tokio = { version = "1.53.2", features = ["io-util", "net", "rt", "time"] }
 
 [lib]
 path = "src/lib.rs"

@@ -188,6 +188,29 @@ test("chat send posts through the console and keeps the session locked while pen
   await page.close();
 });
 
+test("status events preserve an unsent composer draft", async () => {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { this.listeners = {}; window.__consoleEvents = this; setTimeout(() => this.onopen?.(), 0); }
+      addEventListener(type, callback) { this.listeners[type] = callback; }
+      close() {}
+      emit(type, data) { this.listeners[type]?.({ data: JSON.stringify(data), lastEventId: "1" }); }
+    };
+  });
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.goto(`/#/sessions/${ROOT}`);
+  const composer = page.getByLabel("Message the lead");
+  await composer.fill("keep this unsent message");
+  await page.evaluate(() => { window.__originalComposer = document.getElementById("message-input"); });
+  await page.evaluate(() => window.__consoleEvents.emit("status.changed", {
+    type: "status.changed", session_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  }));
+  await page.waitForFunction(() => document.getElementById("message-input") !== window.__originalComposer);
+  await expect(composer).toHaveValue("keep this unsent message");
+  await page.close();
+});
+
 test("a new web session opened from / selects its first reply", async () => {
   const page = await context.newPage();
   await page.addInitScript(() => {

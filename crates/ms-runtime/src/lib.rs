@@ -14,6 +14,7 @@ pub mod doctor;
 pub mod events;
 pub mod lifecycle;
 pub mod profile;
+pub mod proxy;
 pub mod recovery;
 pub mod retention;
 pub mod router;

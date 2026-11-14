@@ -1,5 +1,5 @@
 -- MicroSwarm supervisor.db  (writer: supervisor only)
--- PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA user_version=2;
+-- PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA user_version=3;
 -- synchronous=FULL here (vs NORMAL for session files): this file holds the state that has
 -- no other source of truth after a crash.
 
@@ -72,7 +72,8 @@ CREATE TABLE approvals (
   expires_at             TEXT NOT NULL,
   created_at             TEXT NOT NULL,
   resolved_at            TEXT,
-  reissued_as            TEXT REFERENCES approvals(id)
+  reissued_as            TEXT REFERENCES approvals(id),
+  proxy_used_at          TEXT
 );
 CREATE UNIQUE INDEX approvals_pending_code ON approvals(code) WHERE status = 'pending';
 

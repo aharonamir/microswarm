@@ -9,6 +9,7 @@ const olderPages = new Map();
 let newDraft = false;
 let requestError = "";
 let composerPrefill = "";
+const composerDrafts = new Map();
 let renderVersion = 0;
 
 const statusText = (view, t) => t(view?.status_words?.key || "", view?.status_words?.args) || view?.status_words?.en || "Unknown";
@@ -124,6 +125,8 @@ export async function renderSessions(root, selectedId, t) {
 }
 
 function composerView({ sessionId, isNew, disabled, t }) {
+  const draftKey = sessionId || "new";
+  const initialText = composerPrefill || composerDrafts.get(draftKey) || "";
   const form = el("form", { class: "composer", onsubmit: async event => {
     event.preventDefault();
     const textarea = form.querySelector("textarea");
@@ -139,16 +142,18 @@ function composerView({ sessionId, isNew, disabled, t }) {
       else pendingLocks.set(result.request_id, lock);
       accepted = true;
       textarea.value = "";
+      composerDrafts.delete(draftKey);
       if (result.session_id) location.hash = `#/sessions/${result.session_id}`;
       await renderSessions(document.getElementById("app"), result.session_id || selectedFromLocation() || sessionId, t);
     } catch (error) { inFlight.delete(lock); requestError = error.code === "session_busy" ? t("sessions.busy") : error.message; }
     finally { if (!accepted) inFlight.delete(lock); await renderSessions(document.getElementById("app"), selectedFromLocation() || sessionId, t); }
   } }, [
     el("label", { class: "label", for: "message-input" }, [t("sessions.message_label")]),
-    el("textarea", { id: "message-input", rows: 2, placeholder: t("sessions.placeholder"), maxlength: "8000", disabled, value: composerPrefill }),
+    el("textarea", { id: "message-input", rows: 2, placeholder: t("sessions.placeholder"), maxlength: "8000", disabled, value: initialText, oninput: event => composerDrafts.set(draftKey, event.currentTarget.value) }),
     el("div", { class: "composer-row" }, [el("span", { class: "muted" }, [sessionId ? t("sessions.replies_here") : t("sessions.no_mirror")]), el("button", { class: "primary-button", type: "submit", disabled }, [t("sessions.send")])]),
     disabled ? el("p", { class: "muted" }, [t("sessions.still_answering")]) : el("span", {}, []),
   ]);
+  if (composerPrefill) composerDrafts.set(draftKey, composerPrefill);
   composerPrefill = "";
   return form;
 }

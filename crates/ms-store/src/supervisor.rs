@@ -1,11 +1,12 @@
 use crate::{StoreError, open_supervisor_db};
-use ms_proto::SupervisorEvent;
+use ms_proto::{ApprovalBinding, SupervisorEvent};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 use std::path::Path;
 
 pub struct SupervisorStore {
     connection: Connection,
+    path: std::path::PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -87,16 +88,23 @@ pub struct SessionLifecycleUpdate {
 
 impl SupervisorStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let path = path.as_ref().to_owned();
         Ok(Self {
-            connection: open_supervisor_db(path)?,
+            connection: open_supervisor_db(&path)?,
+            path,
         })
     }
 
     pub fn open_readonly(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let path = path.as_ref().to_owned();
         let connection =
-            Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+            Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        Ok(Self { connection })
+        Ok(Self { connection, path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     pub fn insert_session(&mut self, session: &SessionRecord) -> Result<(), StoreError> {
@@ -387,6 +395,56 @@ impl SupervisorStore {
             "UPDATE approvals SET status=?2, resolved_at=?3 WHERE id=?1 AND status='pending'",
             params![id, status, resolved_at],
         )? == 1)
+    }
+
+    pub fn consume_approved_search(
+        &mut self,
+        session_id: &str,
+        query: &str,
+        count: u8,
+        consumed_at: &str,
+    ) -> Result<bool, StoreError> {
+        let mut candidates = vec![serde_json::json!({"query":query,"count":count})];
+        if count == 5 {
+            candidates.push(serde_json::json!({"query":query}));
+        }
+        let bindings = candidates
+            .iter()
+            .map(|arguments| {
+                ApprovalBinding::for_call("microswarm-tools", "web.search", Some(arguments))
+            })
+            .collect::<Vec<_>>();
+        let transaction = self.connection.transaction()?;
+        let mut statement = transaction.prepare(
+            "SELECT id, payload FROM approvals WHERE requesting_session_id=?1 AND kind='tool_call' AND status='approved' AND proxy_used_at IS NULL ORDER BY created_at",
+        )?;
+        let rows = statement.query_map([session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut matched_id = None;
+        for row in rows {
+            let (id, payload) = row?;
+            let payload: Value = serde_json::from_str(&payload)?;
+            let approved: Option<ApprovalBinding> = payload
+                .get("binding")
+                .cloned()
+                .and_then(|binding| serde_json::from_value(binding).ok());
+            if approved.is_some_and(|approved| bindings.contains(&approved)) {
+                matched_id = Some(id);
+                break;
+            }
+        }
+        drop(statement);
+        let consumed = if let Some(id) = matched_id {
+            transaction.execute(
+                "UPDATE approvals SET proxy_used_at=?2 WHERE id=?1 AND status='approved' AND proxy_used_at IS NULL",
+                params![id, consumed_at],
+            )? == 1
+        } else {
+            false
+        };
+        transaction.commit()?;
+        Ok(consumed)
     }
 
     pub fn upsert_team_role(&mut self, role: &TeamRoleRecord) -> Result<(), StoreError> {

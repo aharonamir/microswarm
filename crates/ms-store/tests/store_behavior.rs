@@ -57,14 +57,14 @@ fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
     assert_eq!(
         db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
             .unwrap(),
-        2
+        3
     );
     drop(db);
 
     let old_path = dir.join("old-supervisor.db");
     let old = Connection::open(&old_path).unwrap();
     old.execute_batch(
-        "CREATE TABLE sessions(id TEXT PRIMARY KEY, scope_hash TEXT); PRAGMA user_version=1;",
+        "CREATE TABLE sessions(id TEXT PRIMARY KEY, scope_hash TEXT); CREATE TABLE approvals(id TEXT); PRAGMA user_version=1;",
     )
     .unwrap();
     drop(old);
@@ -73,7 +73,7 @@ fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
         migrated
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .unwrap(),
-        2
+        3
     );
     let has_scope_json: bool = migrated
         .query_row(
@@ -83,6 +83,14 @@ fn open_helpers_apply_wal_and_reject_unknown_schema_versions() {
         )
         .unwrap();
     assert!(has_scope_json);
+    let has_proxy_used_at: bool = migrated
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('approvals') WHERE name='proxy_used_at')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(has_proxy_used_at);
 
     let bad_path = dir.join("bad.db");
     let bad = Connection::open(&bad_path).unwrap();
