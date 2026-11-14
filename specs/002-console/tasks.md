@@ -114,6 +114,9 @@
 - [x] T260 [P] CLI chat prompt and blank-line guard; a blank Enter must not create or fail a session — `crates/ms-cli/src/main.rs`
 - [x] T261 [P] Incomplete approval commands show usage and preserve the pending turn — `crates/ms-cli/src/main.rs`
 - [x] T262 [P] CLI bare approve/deny uses the code from the current supervisor prompt — `crates/ms-cli/src/main.rs`
+- [x] T263 Add first-party `web.search` MCP tool with query and result count — `crates/ms-tools/src/lib.rs`
+- [x] T264 Route Tavily and Brave searches through the scoped supervisor proxy; reserve the search credential for that route — `crates/ms-supervisor/src/{config,proxy,service}.rs`
+- [x] T265 Offer Tavily or Brave in `microswarm init`, verify the connection, and document setup — `crates/ms-cli/src/`, `quickstart.md`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
 

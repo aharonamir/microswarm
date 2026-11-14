@@ -9,6 +9,7 @@ use std::{
 };
 
 mod model_check;
+mod search_check;
 mod tools;
 mod trace;
 
@@ -53,7 +54,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard] (checks the model connection before saving)\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard] (checks the model connection before saving; optional Tavily or Brave web search)\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
@@ -220,6 +221,43 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         }
     };
 
+    let old_search_provider = config_string(&existing, &["search", "provider"], "");
+    let search_default = match old_search_provider {
+        "tavily" => "2",
+        "brave" => "3",
+        _ => "1",
+    };
+    let search_provider = loop {
+        let choice = prompt(
+            "Web search: [1] None  [2] Tavily  [3] Brave Search",
+            search_default,
+        )?;
+        match choice.as_str() {
+            "1" | "none" => break None,
+            "2" | "tavily" => break Some("tavily"),
+            "3" | "brave" => break Some("brave"),
+            _ => println!("Choose 1, 2, or 3."),
+        }
+    };
+    let search_settings = if let Some(search_provider) = search_provider {
+        let search_key = rpassword::prompt_password("Search API key (input hidden): ")
+            .map_err(|error| format!("cannot read search API key: {error}"))?;
+        if search_key.is_empty() {
+            return Err("search API key cannot be empty; configuration was not changed".into());
+        }
+        let search_credential = prompt(
+            "Search credential label (not the API key)",
+            config_string(&existing, &["search", "credential"], "web-search"),
+        )?;
+        validate_credential_name(&search_credential)?;
+        if search_credential == credential {
+            return Err("search and model must use different credential labels".into());
+        }
+        Some((search_provider, search_credential, search_key))
+    } else {
+        None
+    };
+
     println!(
         "\nModel: {provider} / {model}\nEndpoint: {base_url}\nCredential label: {credential}\nRuntime: {runtime_socket}\nAgent image: {image}"
     );
@@ -228,6 +266,12 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     } else {
         println!("Mount: none");
     }
+    println!(
+        "Web search: {}",
+        search_settings
+            .as_ref()
+            .map_or("none", |settings| settings.0)
+    );
     let confirm = prompt("Save these settings? [Y/n]", "y")?;
     if !matches!(confirm.as_str(), "y" | "Y" | "yes" | "YES" | "") {
         println!("Setup cancelled; initialized with existing/default configuration.");
@@ -238,7 +282,16 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     model_check::check(provider, &base_url, &model, &key)?;
     println!("✓ Model connection verified.");
 
+    if let Some((provider, _, key)) = &search_settings {
+        println!("Checking {provider} search connection with one result…");
+        search_check::check(provider, key)?;
+        println!("✓ Web search connection verified.");
+    }
+
     store_local_credential(home, &credential, &key)?;
+    if let Some((_, name, key)) = &search_settings {
+        store_local_credential(home, name, key)?;
+    }
 
     let mut config: toml::Value = toml::from_str(&source)
         .map_err(|error| format!("cannot update {}: {error}", config_path.display()))?;
@@ -261,6 +314,15 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         }))
         .map_err(|error| error.to_string())?,
     );
+    if let Some((provider, name, _)) = &search_settings {
+        root.insert(
+            "search".into(),
+            toml::Value::try_from(serde_json::json!({"provider": provider, "credential": name}))
+                .map_err(|error| error.to_string())?,
+        );
+    } else {
+        root.remove("search");
+    }
     let lead = root
         .get_mut("lead")
         .and_then(toml::Value::as_table_mut)
@@ -279,6 +341,17 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         .any(|entry| entry.as_str() == Some(&credential))
     {
         credentials.push(toml::Value::String(credential.clone()));
+    }
+    if let Some(old_name) = existing
+        .get("search")
+        .and_then(|search| search.get("credential"))
+        .and_then(toml::Value::as_str)
+        && old_name != credential
+    {
+        credentials.retain(|entry| entry.as_str() != Some(old_name));
+    }
+    if let Some((_, name, _)) = &search_settings {
+        credentials.push(toml::Value::String(name.clone()));
     }
     if let Some(mode) = mount_mode {
         let mounts = scope
@@ -300,7 +373,7 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     )
     .map_err(|error| format!("{}: {error}", config_path.display()))?;
 
-    println!("✓ Model settings and host credential saved.");
+    println!("✓ Model and web search settings saved.");
     Ok(())
 }
 

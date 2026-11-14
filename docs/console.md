@@ -8,6 +8,8 @@ microswarm console
 
 The console uses the model configured for the supervisor; it does not select a provider or model. Before starting the supervisor, run `microswarm init --lang en` in a terminal using the same MicroSwarm home. The setup wizard asks for the provider, endpoint, model name, and API key; API-key input is hidden. Before saving, it sends a one-token completion request to verify the provider, model, and key. This uses a small amount of model quota. `microswarm doctor` checks local setup but does not contact the provider.
 
+Init can also configure `web.search` with Tavily or Brave Search. Its hidden API-key prompt stores the key as a host credential, and init verifies it with a one-result query. Restart the supervisor after changing the search provider; only new sessions receive the configured credential. Search calls use the session's tool policy and approval flow.
+
 The console binds to `127.0.0.1:8790` by default and prints a one-time sign-in link. Open it once within ten minutes. The link is exchanged for an HttpOnly, SameSite=Strict cookie and removed from the address bar. To reach a remote host, forward the local port with SSH:
 
 ```sh

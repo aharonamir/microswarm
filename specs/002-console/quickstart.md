@@ -6,6 +6,8 @@ This is the end-to-end acceptance script. Each section maps to a user story. Aut
 
 Configure a model in the same MicroSwarm home that `microswarmd` will use before starting the supervisor. Run `microswarm init --lang en` in a terminal; the wizard asks for the provider, endpoint, model name, and API key (the key prompt does not echo input). Before saving, it sends a one-token completion request to verify the provider, model, and key; this uses a small amount of model quota. `microswarm doctor` checks local setup but does not contact the provider. The console does not configure the model provider or model name.
 
+The same wizard offers optional Tavily or Brave Search for the first-party `web.search` tool. Choose a provider and enter its API key at the hidden prompt. Init checks the provider with a one-result search, which may use one search credit, then stores the key under the chosen credential label. Search queries require the session's normal tool approval. Restart `microswarmd` after changing search settings; new sessions receive the configured search credential. Existing sessions keep their stored scope.
+
 ## 0 · Start
 
 ```console
