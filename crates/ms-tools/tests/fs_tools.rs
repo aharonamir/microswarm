@@ -9,6 +9,28 @@ struct TestClient;
 
 impl rmcp::ClientHandler for TestClient {}
 
+#[tokio::test]
+#[ignore = "red: T263 — web.search is not registered yet"]
+async fn first_party_server_exposes_web_search() {
+    let (base, work) = temp_work();
+    let (server_io, client_io) = tokio::io::duplex(16_384);
+    let server_task = tokio::spawn(async move {
+        ms_tools::FirstPartyTools::with_proxy(work, "http://127.0.0.1:1")
+            .serve(server_io)
+            .await
+            .unwrap()
+            .waiting()
+            .await
+            .unwrap();
+    });
+    let client = TestClient.serve(client_io).await.unwrap();
+    let tools = client.peer().list_all_tools().await.unwrap();
+    assert!(tools.iter().any(|tool| tool.name == "web.search"));
+    drop(client);
+    server_task.await.unwrap();
+    fs::remove_dir_all(base).unwrap();
+}
+
 fn temp_work() -> (PathBuf, PathBuf) {
     let path = std::env::temp_dir().join(format!(
         "ms-tools-{}-{}",
