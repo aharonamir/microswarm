@@ -8,7 +8,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::{TokioExecutor, TokioIo},
 };
-use ms_proto::Scope;
+use ms_proto::{Permission, Scope};
 pub use ms_runtime::CredentialProvider;
 use ms_store::{StoreError, SupervisorStore};
 use serde::Deserialize;
@@ -28,6 +28,14 @@ pub struct ProxyRoutes {
     pub model_credential: Option<String>,
     pub anthropic_model: bool,
     pub tools: BTreeMap<String, String>,
+    pub search: Option<SearchRoute>,
+}
+
+#[derive(Clone)]
+pub struct SearchRoute {
+    pub provider: String,
+    pub credential: String,
+    pub endpoint: String,
 }
 
 #[derive(Clone)]
@@ -139,7 +147,48 @@ impl SessionProxy {
         let path = parts.uri.path();
         let mut method = parts.method.clone();
         let mut outbound_body = body.clone();
-        let (target, credential_name) = if path == "/fetch" {
+        let (target, credential_name) = if path == "/search" {
+            #[derive(Deserialize)]
+            struct Search {
+                query: String,
+                count: u8,
+            }
+            let Some(search) = routes.search.as_ref() else {
+                return response(StatusCode::NOT_FOUND, "web search is not configured");
+            };
+            if parts.method != Method::POST || credential_name.is_some() {
+                return response(StatusCode::BAD_REQUEST, "invalid search request");
+            }
+            if !self.scope.tools.iter().any(|grant| {
+                grant.server == "microswarm-tools"
+                    && grant.tools.contains("web.search")
+                    && grant
+                        .overrides
+                        .get("web.search")
+                        .copied()
+                        .unwrap_or(grant.policy)
+                        != Permission::Deny
+            }) {
+                return response(StatusCode::FORBIDDEN, "web.search is outside session scope");
+            }
+            let input: Search = match serde_json::from_slice(&body) {
+                Ok(input) => input,
+                Err(_) => return response(StatusCode::BAD_REQUEST, "invalid search request"),
+            };
+            if input.query.trim().is_empty()
+                || input.query.len() > 600
+                || input.query.split_whitespace().count() > 75
+                || !(1..=10).contains(&input.count)
+            {
+                return response(StatusCode::BAD_REQUEST, "invalid search query or count");
+            }
+            outbound_body = Bytes::from(if search.provider == "brave" {
+                serde_json::json!({"q": input.query, "count": input.count}).to_string()
+            } else {
+                serde_json::json!({"query": input.query, "max_results": input.count, "search_depth": "basic"}).to_string()
+            });
+            (search.endpoint.clone(), Some(search.credential.as_str()))
+        } else if path == "/fetch" {
             #[derive(Deserialize)]
             struct Fetch {
                 url: String,
@@ -174,6 +223,14 @@ impl SessionProxy {
             (append_path(base, &parts.uri), Some(name.as_str()))
         };
 
+        if routes.search.as_ref().is_some_and(|search| {
+            path != "/search" && credential_name == Some(search.credential.as_str())
+        }) {
+            return response(
+                StatusCode::FORBIDDEN,
+                "search credential is reserved for web.search",
+            );
+        }
         if !self.credential_allowed(credential_name) {
             return response(StatusCode::FORBIDDEN, "credential is outside session scope");
         }
@@ -188,9 +245,12 @@ impl SessionProxy {
         };
         let mut builder = Request::builder().method(method).uri(upstream);
         for (name, value) in &parts.headers {
-            if name != header::HOST && name != "x-ms-credential" {
+            if path != "/search" && name != header::HOST && name != "x-ms-credential" {
                 builder = builder.header(name, value);
             }
+        }
+        if path == "/search" {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
         }
         if let Some(name) = credential_name {
             let Some(secret) = credentials.resolve(name) else {
@@ -199,12 +259,22 @@ impl SessionProxy {
                     "configured credential is unavailable",
                 );
             };
-            let header_name =
-                if routes.anthropic_model && path != "/fetch" && !path.starts_with("/mcp/") {
-                    "x-api-key"
-                } else {
-                    "authorization"
-                };
+            let header_name = if path == "/search"
+                && routes
+                    .search
+                    .as_ref()
+                    .is_some_and(|route| route.provider == "brave")
+            {
+                "x-subscription-token"
+            } else if routes.anthropic_model
+                && path != "/fetch"
+                && path != "/search"
+                && !path.starts_with("/mcp/")
+            {
+                "x-api-key"
+            } else {
+                "authorization"
+            };
             let value = if header_name == "authorization" {
                 format!("Bearer {secret}")
             } else {

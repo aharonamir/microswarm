@@ -1,6 +1,6 @@
 use crate::{
     config::{ConfigSet, SpawnPolicy, ToolTransport, load_config_dir},
-    proxy::{ProxyRoutes, SessionProxy},
+    proxy::{ProxyRoutes, SearchRoute, SessionProxy},
     runtime::{ContainerRuntime, FileCredentials},
     scope::{build_lead_scope, install_lead_scope},
 };
@@ -1333,6 +1333,15 @@ pub(super) fn proxy_routes(config: &ConfigSet) -> ProxyRoutes {
         model_upstream: model.map(|model| model.base_url.clone()),
         model_credential: model.map(|model| model.credential.clone()),
         anthropic_model: model.is_some_and(|model| model.provider == "anthropic"),
+        search: config.microswarm.search.as_ref().map(|search| SearchRoute {
+            provider: search.provider.clone(),
+            credential: search.credential.clone(),
+            endpoint: match search.provider.as_str() {
+                "brave" => "https://api.search.brave.com/res/v1/web/search",
+                _ => "https://api.tavily.com/search",
+            }
+            .into(),
+        }),
         tools: config
             .tools
             .servers

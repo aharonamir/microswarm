@@ -64,9 +64,12 @@ provider = "openai-compatible"
 base_url = "https://model.example/v1"
 model = "fake-model"
 credential = "model-key"
+[search]
+provider = "tavily"
+credential = "web-search"
 [lead.scope]
 mounts = [{ host = "/tmp", path = "/work", mode = "rw" }]
-credentials = ["model-key"]
+credentials = ["model-key", "web-search"]
 tools = [{ server = "fake", tools = "*", policy = "ask" }]
 delegation = { enabled = true, max_members = 4 }
 [[channels]]
@@ -116,9 +119,22 @@ credential = "model-key"
     assert_eq!(config.ceiling.credentials, ["root-key".to_owned()].into());
     assert_eq!(config.tools.servers[0].id, "fake");
     assert_eq!(
+        config.microswarm.search.as_ref().unwrap().provider,
+        "tavily"
+    );
+    assert_eq!(
         config.tools.servers[0].credential.as_deref(),
         Some("model-key")
     );
+
+    let valid = fs::read_to_string(dir.join("microswarm.toml")).unwrap();
+    write_config(
+        &dir,
+        "microswarm.toml",
+        &valid.replace("provider = \"tavily\"", "provider = \"unknown\""),
+    );
+    assert!(load_config_dir(&dir).is_err());
+    write_config(&dir, "microswarm.toml", &valid);
 
     write_config(
         &dir,

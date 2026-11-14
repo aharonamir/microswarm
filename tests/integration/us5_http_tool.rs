@@ -146,6 +146,7 @@ async fn http_mcp_tool_reaches_upstream_only_through_session_proxy() {
             model_upstream: None,
             model_credential: None,
             anthropic_model: false,
+            search: None,
             tools: BTreeMap::from([("weather".into(), format!("http://{upstream_address}/mcp"))]),
         },
         Arc::new(NoCredentials),

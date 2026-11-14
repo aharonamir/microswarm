@@ -30,6 +30,7 @@ pub struct MicroswarmConfig {
     #[serde(default)]
     pub limits: LimitsConfig,
     pub model: Option<ModelConfig>,
+    pub search: Option<SearchConfig>,
     pub lead: LeadConfig,
     #[serde(default)]
     pub channels: Vec<ChannelConfig>,
@@ -151,6 +152,12 @@ pub struct ModelConfig {
     pub provider: String,
     pub base_url: String,
     pub model: String,
+    pub credential: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SearchConfig {
+    pub provider: String,
     pub credential: String,
 }
 
@@ -394,6 +401,24 @@ impl ConfigSet {
                 return Err(ConfigError(
                     "model credential must be a valid name granted in lead.scope.credentials"
                         .into(),
+                ));
+            }
+        }
+        if let Some(search) = &app.search {
+            if !matches!(search.provider.as_str(), "tavily" | "brave") {
+                return Err(ConfigError(
+                    "search.provider must be tavily or brave".into(),
+                ));
+            }
+            if !ms_channels::valid_credential_name(&search.credential)
+                || !app.lead.scope.credentials.contains(&search.credential)
+                || app
+                    .model
+                    .as_ref()
+                    .is_some_and(|model| model.credential == search.credential)
+            {
+                return Err(ConfigError(
+                    "search credential must be a separate valid name granted in lead.scope.credentials".into(),
                 ));
             }
         }
