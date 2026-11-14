@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { clear, el } from "../dom.js";
+import { markDecisionHere } from "./approvals.js";
 
 let inFlight = new Set();
 const pendingLocks = new Map();
@@ -8,16 +9,21 @@ const olderPages = new Map();
 let newDraft = false;
 let requestError = "";
 let composerPrefill = "";
+let renderVersion = 0;
 
 const statusText = (view, t) => t(view?.status_words?.key || "", view?.status_words?.args) || view?.status_words?.en || "Unknown";
 const timeText = value => { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
 
 export async function renderSessions(root, selectedId, t) {
+  const version = ++renderVersion;
+  const current = () => version === renderVersion && (!location.hash || location.hash.startsWith("#/sessions"));
   clear(root);
-  let overview;
-  try { overview = await api("/sessions?group=active"); }
-  catch (error) { root.append(el("section", { class: "panel page-main" }, [el("h1", { class: "page-title" }, [t("nav.sessions")]), el("p", { role: "alert" }, [error.message])])); return; }
+  let overview, endedOverview;
+  try { [overview, endedOverview] = await Promise.all([api("/sessions?group=active"), api("/sessions?group=ended")]); }
+  catch (error) { if (current()) root.append(el("section", { class: "panel page-main" }, [el("h1", { class: "page-title" }, [t("nav.sessions")]), el("p", { role: "alert" }, [error.message])])); return; }
+  if (!current()) return;
   const sessions = overview.sessions || [];
+  const ended = endedOverview.sessions || [];
   const selected = selectedId ? sessions.find(item => item.id === selectedId) : null;
   if (selectedId && !selected && !newDraft) newDraft = false;
   const sidebar = el("aside", { class: "page-rail panel", "aria-label": t("sessions.your_sessions") }, [
@@ -28,6 +34,14 @@ export async function renderSessions(root, selectedId, t) {
       el("span", { class: `status-line tone-${item.status_words?.tone || "neutral"}` }, [el("span", { class: "status-dot" }), statusText(item, t)]),
       el("span", { class: "session-meta" }, [`${item.member_count || 0} ${t("sessions.members")} · ${item.channel || "web"}`]),
     ])) : [el("p", { class: "muted empty-copy" }, [t("sessions.none")])]),
+    ...(ended.length ? [
+      el("h2", { class: "section-title rail-heading" }, [t("sessions.ended_today")]),
+      el("div", { class: "session-list ended-list" }, ended.map(item => el("a", { class: "session-link", href: `#/trace/${item.root_id || item.id}` }, [
+        el("strong", {}, [item.title || t("sessions.new")]),
+        el("span", { class: "status-line tone-neutral" }, [statusText(item, t)]),
+        el("span", { class: "session-meta" }, [`${item.member_count || 0} ${t("sessions.members")} · ${item.channel || "web"}`]),
+      ]))),
+    ] : []),
   ]);
 
   let detail = null;
@@ -43,6 +57,7 @@ export async function renderSessions(root, selectedId, t) {
       messages.next_before = older.nextBefore;
     }
   }
+  if (!current()) return;
   const main = el("section", { class: "page-main session-main" });
   if (selected && detail) {
     const view = detail.session;
@@ -60,8 +75,8 @@ export async function renderSessions(root, selectedId, t) {
       el("p", { class: "mono" }, [item.code]),
       item.tool_call ? el("pre", { class: "command-block mono" }, [JSON.stringify(item.tool_call.arguments || {}, null, 2)]) : el("p", {}, [item.spawn?.task || ""]),
       el("div", { class: "approval-actions" }, [
-        el("button", { class: "secondary-button", onclick: () => decide(item.code, "approve", t) }, [t("approvals.approve")]),
-        el("button", { class: "secondary-button deny-button", onclick: () => decide(item.code, "deny", t) }, [t("approvals.deny")]),
+        el("button", { class: "secondary-button", onclick: () => decide(item, "approve", t) }, [t("approvals.approve")]),
+        el("button", { class: "secondary-button deny-button", onclick: () => decide(item, "deny", t) }, [t("approvals.deny")]),
         el("a", { href: "#/approvals" }, [t("approvals.more_details")]),
       ]),
     ]));
@@ -163,8 +178,8 @@ async function loadOlder(sessionId, cursor, t) {
   await renderSessions(document.getElementById("app"), sessionId, t);
 }
 
-async function decide(code, decision, t) {
-  try { await api(`/approvals/${code}/${decision}`, { method: "POST", body: "{}" }); }
+async function decide(approval, decision, t) {
+  try { await api(`/approvals/${approval.code}/${decision}`, { method: "POST", body: "{}" }); markDecisionHere(approval.id); }
   catch (error) { requestError = error.message; }
   const route=location.hash.match(/^#\/sessions(?:\/([^/]+))?/);
   await renderSessions(document.getElementById("app"),route?.[1]||null,t);
@@ -192,6 +207,6 @@ export async function handleConsoleEvent(type, raw, render, t) {
       : "sessions.chat_failed";
     requestError = t(key);
   }
-  if (["chat.pending","chat.reply"].includes(type) && event.session_id && location.hash === "#/sessions") location.hash=`#/sessions/${event.session_id}`;
+  if (["chat.pending","chat.reply"].includes(type) && event.session_id && (!location.hash || location.hash === "#/sessions")) location.hash=`#/sessions/${event.session_id}`;
   await render();
 }

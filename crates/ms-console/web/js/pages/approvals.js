@@ -2,6 +2,18 @@ import { api } from "../api.js";
 import { clear, el } from "../dom.js";
 
 let state = "pending";
+const localDecisions = new Set();
+
+export function markDecisionHere(id) {
+  if (!id) return;
+  localDecisions.add(id);
+  try { sessionStorage.setItem(`ms-console-decided:${id}`, "1"); } catch { /* Private browsing may disable storage. */ }
+}
+
+function wasDecidedHere(id) {
+  if (localDecisions.has(id)) return true;
+  try { return sessionStorage.getItem(`ms-console-decided:${id}`) === "1"; } catch { return false; }
+}
 
 export async function renderApprovals(root, selectedId, t) {
   clear(root);
@@ -48,17 +60,17 @@ export async function renderApprovals(root, selectedId, t) {
     el("div", { class: "approval-detail-scroll" }, [
       el("div", { class: "approval-meta" }, [`${t("approvals.asked_by")} ${detail.requesting_role || t("approvals.member")} · ${detail.code}`]),
       ...detailBody,
-      detail.state === "approved" || detail.state === "denied" ? el("p", { class: "muted" }, [t("approvals.already_decided")]) : el("span", {}, []),
+      (detail.state === "approved" || detail.state === "denied") && !wasDecidedHere(detail.id) ? el("p", { class: "muted" }, [t("approvals.already_decided")]) : el("span", {}, []),
     ]),
     pending ? el("footer", { class: "approval-footer" }, [
-      el("button", { class: "secondary-button deny-button", onclick: () => decide(detail.code, "deny", root, selectedId, t) }, [t("approvals.deny")]),
-      el("button", { class: "primary-button", onclick: () => decide(detail.code, "approve", root, selectedId, t) }, [t("approvals.approve_call")]),
+      el("button", { class: "secondary-button deny-button", onclick: () => decide(detail, "deny", root, selectedId, t) }, [t("approvals.deny")]),
+      el("button", { class: "primary-button", onclick: () => decide(detail, "approve", root, selectedId, t) }, [t("approvals.approve_call")]),
     ]) : el("span", {}, []),
   ]));
 }
 
-async function decide(code, action, root, selectedId, t) {
-  try { await api(`/approvals/${code}/${action}`, { method: "POST", body: "{}" }); }
+async function decide(approval, action, root, selectedId, t) {
+  try { await api(`/approvals/${approval.code}/${action}`, { method: "POST", body: "{}" }); markDecisionHere(approval.id); }
   catch (error) { root.append(el("p", { class: "inline-error", role: "alert" }, [error.code === "already_resolved" ? t("approvals.already_decided") : error.message])); }
   await renderApprovals(root, selectedId, t);
 }

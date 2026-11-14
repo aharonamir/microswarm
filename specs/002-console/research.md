@@ -125,6 +125,8 @@ Before adding it, move those helpers **and** the shared idle query loops from `s
 
 **T252 native Simplified Chinese review (2026-11-09):** a native Simplified Chinese speaker reviewed the console catalog and reported nine blocking corrections plus six non-blocking suggestions. Applied all fifteen: use 主代理 consistently for lead references, restore the literal `/path/to/skill` example, correct ended-idle and ready status wording, simplify 成员, and apply the requested wording polish. The review sheet records the approved strings and conclusion; no reviewer identity was recorded.
 
+**T252 follow-up (2026-11-14):** the same review process covered the three later chat error strings. The owner relayed native-speaker approval of the final plain-text wording in `docs/reviews/console-zh-native-review.md`; `主目录` remains the established term and inline backticks are omitted because translations render as text nodes. T254 still requires three first-time operators and remains a next-step check.
+
 
 ## Phase 5 verification (2026-11-01)
 

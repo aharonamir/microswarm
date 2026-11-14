@@ -18,9 +18,9 @@ Open this link once (valid 10 min): http://127.0.0.1:8790/login?token=4f1c…e9a
 ```
 
 Check:
-- Opening the link lands on `/#/sessions`, and the URL no longer contains the token.
-- Opening the same link again shows "This link was already used. Run `microswarm console` again for a new one."
-- `microswarm console --listen 0.0.0.0:8790` exits with a non-zero code and the message "The console only listens on loopback. Use an SSH tunnel (`ssh -L 8790:127.0.0.1:8790 host`) or a TLS proxy."
+- Opening the link lands on the Sessions view at `/`, and the URL no longer contains the token.
+- Opening the same link again returns 401 with "Run microswarm console again for a new link."
+- `microswarm console --listen 0.0.0.0:8790` exits with a non-zero code and includes "The console only listens on loopback. Use an SSH tunnel (ssh -L 8790:127.0.0.1:8790 host) or a TLS proxy."
 
 ## 1 · Chat with a lead (US1)
 

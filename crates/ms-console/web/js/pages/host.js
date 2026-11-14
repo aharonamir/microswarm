@@ -14,7 +14,7 @@ export async function renderHost(root, t) {
     el("p", { class: "muted" }, [t("host.values_never_shown")]),
     ...(data.credentials || []).map(item => el("p", { class: "credential-row" }, [el("strong", {}, [item.name]), el("span", { class: "muted" }, [(item.used_by || []).join(", ")])])),
     el("form", { class: "host-form", onsubmit: event => setCredential(event, root, t) }, [
-      el("label", { class: "label", for: "credential-name" }, [t("host.credential_name")]), el("input", { id: "credential-name", name: "name", required: true, pattern: "[A-Za-z0-9_-]+" }),
+      el("label", { class: "label", for: "credential-name" }, [t("host.credential_name")]), el("input", { id: "credential-name", name: "name", required: true, pattern: "[A-Za-z0-9_\\-]+" }),
       el("label", { class: "label", for: "credential-value" }, [t("host.set_value")]), el("input", { id: "credential-value", name: "value", type: "password", required: true, autocomplete: "new-password" }),
       el("button", { class: "primary-button", type: "submit" }, [t("host.save_credential")]),
     ]),

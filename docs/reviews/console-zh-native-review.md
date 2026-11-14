@@ -1,10 +1,10 @@
 # Native Simplified Chinese review: MicroSwarm Console
 
-Status: **follow-up review needed** for two strings added after the completed review (2026-11-12).
+Status: **complete**. The native Simplified Chinese speaker confirmed the three follow-up strings on 2026-11-14.
 
-Reviewer: ____________________  
+Reviewer: Anonymous native Simplified Chinese speaker (owner-relayed confirmation)
 Dialect/script: Simplified Mandarin / 简体中文
-Date: 2026-11-09
+Date: 2026-11-09; follow-up 2026-11-14
 
 | Key | English source | Current Chinese | Reviewer notes / approved wording |
 |---|---|---|---|
@@ -34,9 +34,9 @@ Date: 2026-11-09
 | `sessions.message_label` | Message the lead | 给主代理留言 | |
 | `sessions.placeholder` | Ask a question, give new instructions, or tell it to stop a member… | 提问、发送新指令，或让它停止某个成员… | |
 | `sessions.send` | Send | 发送 | |
-| `sessions.model_not_configured` | No model is configured. Run microswarm init --lang en in the same MicroSwarm home, then try again. | 尚未配置模型。请在同一 MicroSwarm 主目录中运行 microswarm init --lang en，然后重试。 | Pending native review (added 2026-11-12). |
-| `sessions.chat_failed` | The message could not be completed. Check the supervisor and model setup, then try again. | 消息未能完成。请检查监督器和模型配置后重试。 | Pending native review (added 2026-11-12). |
-| `sessions.supervisor_unavailable` | The supervisor is unavailable. Start microswarmd in the same MicroSwarm home, then try again. | 监督器当前不可用。请在同一个 MicroSwarm 主目录中启动 microswarmd，然后重试。 | Pending native review (added 2026-11-13). |
+| `sessions.model_not_configured` | No model is configured. Run microswarm init --lang en in the same MicroSwarm home, then try again. | 尚未配置模型。请在同一个 MicroSwarm 主目录中运行 microswarm init --lang en，然后重试。 | Approved 2026-11-14; no inline backticks because the DOM renders plain text. |
+| `sessions.chat_failed` | The message could not be completed. Check the supervisor and model setup, then try again. | 消息发送失败。请检查监督器与模型配置，然后重试。 | Approved 2026-11-14. |
+| `sessions.supervisor_unavailable` | The supervisor is unavailable. Start microswarmd in the same MicroSwarm home, then try again. | 监督器当前不可用。请在同一个 MicroSwarm 主目录中启动 microswarmd，然后重试。 | Approved 2026-11-14; no inline backticks because the DOM renders plain text. |
 | `sessions.replies_here` | Replies appear here. | 回复会显示在这里。 | |
 | `sessions.no_mirror` | Replies appear here. They are not mirrored to the session's original channel. | 回复会显示在这里，不会转发到会话最初使用的渠道。 | |
 | `sessions.still_answering` | The lead is still answering your last message. | 主代理仍在处理上一条消息。 | |
@@ -160,5 +160,5 @@ Date: 2026-11-09
 
 Reviewer conclusion:
 
-- [ ] All translations are natural, clear, and preserve the safety meaning, including the two new keys above.
+- [x] All translations are natural, clear, and preserve the safety meaning, including the three follow-up keys above.
 - [x] Required corrections and suggested wording updates are recorded above and applied to `i18n/zh.json`.

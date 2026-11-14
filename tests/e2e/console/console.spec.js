@@ -80,6 +80,25 @@ test("console reaches the Sessions page within two seconds", () => {
   expect(startupMs).toBeLessThan(2000);
 });
 
+test("ended sessions remain visible with reason and trace link", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/sessions" && url.searchParams.get("group") === "active") {
+      return route.fulfill({ status: 200, json: { sessions: [] } });
+    }
+    if (url.pathname === "/api/v1/sessions" && url.searchParams.get("group") === "ended") {
+      return route.fulfill({ status: 200, json: { sessions: [{ ...session, status_words: { key: "status.ended_by_you", tone: "neutral", en: "Ended by you", args: {} } }] } });
+    }
+    return mockApi(route);
+  });
+  await page.goto("/#/sessions");
+  await expect(page.getByRole("heading", { name: "Ended today" })).toBeVisible();
+  const ended = page.getByRole("link", { name: /Ended by you/ });
+  await expect(ended).toHaveAttribute("href", `#/trace/${ROOT}`);
+  await page.close();
+});
+
 test("status updates reach the browser DOM with p95 below 500 ms", async () => {
   const latencies = [];
   const page = await context.newPage();
@@ -116,6 +135,18 @@ test("hostile agent text stays inert in a real browser", async () => {
   await page.close();
 });
 
+test("Host validates credential names in Chromium", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.goto("/#/host");
+  const name = page.getByRole("textbox", { name: "Credential name" });
+  await name.fill("bad/name");
+  await expect.poll(() => name.evaluate(input => input.checkValidity())).toBe(false);
+  await name.fill("web-search");
+  await expect.poll(() => name.evaluate(input => input.checkValidity())).toBe(true);
+  await page.close();
+});
+
 test("chat send posts through the console and keeps the session locked while pending", async () => {
   const page = await context.newPage();
   let request;
@@ -138,7 +169,7 @@ test("chat send posts through the console and keeps the session locked while pen
   await page.close();
 });
 
-test.skip("red: T266 — a new web session opened from / selects its first reply", async () => {
+test("a new web session opened from / selects its first reply", async () => {
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.EventSource = class {
@@ -162,7 +193,8 @@ test.skip("red: T266 — a new web session opened from / selects its first reply
     type: "chat.pending", request_id: "new-web-session", session_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   }));
   await expect(page).toHaveURL(`http://127.0.0.1:8792/#/sessions/${ROOT}`);
-  await expect(page.getByRole("heading", { name: hostile })).toBeVisible();
+  await expect(page.locator(".session-main h1")).toHaveCount(1);
+  await expect(page.locator(".session-main h1")).toHaveText(hostile);
   await page.close();
 });
 
@@ -207,11 +239,21 @@ test("chat errors explain missing model setup and release the composer", async (
 test("approval decision posts only through its code route", async () => {
   const page = await context.newPage();
   let request;
+  let resolved = false;
   await page.route("**/api/v1/**", async route => {
     const url = new URL(route.request().url());
     if (route.request().method() === "POST" && url.pathname === "/api/v1/approvals/A1B2/approve") {
       request = route.request();
+      resolved = true;
       return route.fulfill({ status: 200, json: { decision: "approved" } });
+    }
+    if (resolved && url.pathname === "/api/v1/approvals") {
+      const approved = { ...(await mockApiValue()).approvals[0], state: "approved" };
+      return route.fulfill({ status: 200, json: { approvals: url.searchParams.get("state") === "decided" ? [approved] : [] } });
+    }
+    if (resolved && url.pathname === "/api/v1/approvals/A1B2") {
+      const approved = { ...(await mockApiValue()).approvals[0], state: "approved" };
+      return route.fulfill({ status: 200, json: { approval: approved } });
     }
     return mockApi(route);
   });
@@ -220,6 +262,9 @@ test("approval decision posts only through its code route", async () => {
   await expect.poll(() => request?.url()).toContain("/api/v1/approvals/A1B2/approve");
   expect(request.postDataJSON()).toEqual({});
   expect(request.headers()["x-ms-console"]).toBeTruthy();
+  await page.getByRole("tab", { name: "Decided" }).click();
+  await expect(page.getByRole("link", { name: /A1B2 approved/ })).toBeVisible();
+  await expect(page.getByText("Already decided on another channel")).toHaveCount(0);
   await page.close();
 });
 
@@ -229,7 +274,7 @@ async function mockApi(route, activeSession = session) {
   if (route.request().method() !== "GET") return route.fulfill({ status: 204, body: "" });
   let body = {};
   if (url.pathname === "/api/v1/overview") body = { pending_approvals: 1 };
-  else if (url.pathname === "/api/v1/sessions") body = { sessions: [activeSession] };
+  else if (url.pathname === "/api/v1/sessions") body = { sessions: url.searchParams.get("group") === "ended" ? [] : [activeSession] };
   else if (url.pathname === `/api/v1/sessions/${ROOT}`) body = { session: activeSession, team: [{ ...activeSession, id: MEMBER, role: "reviewer", scope: { mounts: [] } }], banner: { tone: activeSession.status_words.tone, detail: "Supervisor status" } };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/messages`) body = { items: [{ kind: "user", at: new Date().toISOString(), text: hostile }, { kind: "lead", at: new Date().toISOString(), text: "Lead reply" }], next_before: null };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/activity`) body = { events: [{ observation: true, agent_role: "reviewer", type: "tool.result", at: new Date().toISOString(), data: { text: hostile } }] };
