@@ -533,6 +533,7 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
     let mut writer = BufWriter::new(stream);
     let mut session_id = option_value(args, "--session").map(str::to_owned);
     let mut pending_wait: Option<(String, i64)> = None;
+    let mut pending_approval_code: Option<String> = None;
     let mut input = String::new();
     let stdin = io::stdin();
     let mut lock = stdin.lock();
@@ -574,11 +575,16 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         if !should_send_chat_line(&input) {
             continue;
         }
-        if is_incomplete_approval_command(&input) {
+        let approval_input = approval_command_with_current_code(
+            &input,
+            pending_approval_code.as_deref(),
+        );
+        if is_incomplete_approval_command(&input) && approval_input.is_none() {
             println!("Usage: /approve CODE or /deny CODE (use the code from the approval prompt).");
             continue;
         }
-        let request = json!({"op":"chat", "session_id":session_id, "text":input});
+        let request_text = approval_input.as_deref().unwrap_or(&input);
+        let request = json!({"op":"chat", "session_id":session_id, "text":request_text});
         send_chat_request(&mut writer, &mut reader, request)?;
         let mut response = String::new();
         reader
@@ -601,6 +607,9 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
             if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
                 println!("{prompt}");
+                pending_approval_code = approval_code_from_prompt(prompt).map(str::to_owned);
+            } else {
+                pending_approval_code = None;
             }
             if let (Some(id), Some(after)) = (
                 response
@@ -611,8 +620,9 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
                 pending_wait = Some((id.to_owned(), after));
             }
         } else if pending_wait.is_some()
-            && (input.starts_with("/approve ") || input.starts_with("/deny "))
+            && (request_text.starts_with("/approve ") || request_text.starts_with("/deny "))
         {
+            pending_approval_code = None;
             let (pending_session, after_id) = pending_wait.take().expect("checked pending wait");
             send_chat_request(
                 &mut writer,
@@ -656,6 +666,16 @@ fn should_send_chat_line(input: &str) -> bool {
 fn is_incomplete_approval_command(input: &str) -> bool {
     let mut parts = input.split_whitespace();
     matches!(parts.next(), Some("/approve" | "/deny")) && parts.next().is_none()
+}
+
+fn approval_command_with_current_code(input: &str, code: Option<&str>) -> Option<String> {
+    let _ = (input, code);
+    None
+}
+
+fn approval_code_from_prompt(prompt: &str) -> Option<&str> {
+    let _ = prompt;
+    None
 }
 
 fn send_chat_request(
@@ -705,5 +725,40 @@ mod chat_input_tests {
         assert!(!super::is_incomplete_approval_command(
             "please approve this"
         ));
+    }
+
+    #[test]
+    #[ignore = "red: T262 — bare approval commands should use the code in the current prompt"]
+    fn bare_approval_uses_current_code() {
+        assert_eq!(
+            super::approval_command_with_current_code("/approve", Some("BC3V")),
+            Some("/approve BC3V".into())
+        );
+        assert_eq!(
+            super::approval_command_with_current_code(" /deny  ", Some("BC3V")),
+            Some("/deny BC3V".into())
+        );
+        assert_eq!(
+            super::approval_command_with_current_code("/approve", None),
+            None
+        );
+        assert_eq!(
+            super::approval_command_with_current_code("/approve OTHER", Some("BC3V")),
+            None
+        );
+    }
+
+    #[test]
+    #[ignore = "red: T262 — parse the code from the supervisor approval prompt"]
+    fn approval_code_is_parsed_from_english_and_chinese_prompts() {
+        assert_eq!(
+            super::approval_code_from_prompt("Approve web.fetch? Reply: /approve BC3V or /deny BC3V."),
+            Some("BC3V")
+        );
+        assert_eq!(
+            super::approval_code_from_prompt("批准 web.fetch？回复：/approve 7KLM 或 /deny 7KLM。"),
+            Some("7KLM")
+        );
+        assert_eq!(super::approval_code_from_prompt("Approve web.fetch?"), None);
     }
 }
