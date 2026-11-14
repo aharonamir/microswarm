@@ -10,7 +10,6 @@ struct TestClient;
 impl rmcp::ClientHandler for TestClient {}
 
 #[tokio::test]
-#[ignore = "red: T263 — web.search is not registered yet"]
 async fn first_party_server_exposes_web_search() {
     let (base, work) = temp_work();
     let (server_io, client_io) = tokio::io::duplex(16_384);

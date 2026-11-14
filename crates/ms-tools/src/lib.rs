@@ -76,6 +76,14 @@ struct FetchArgs {
     credential: Option<String>,
 }
 
+#[derive(Debug, serde::Deserialize, rmcp::schemars::JsonSchema)]
+struct SearchArgs {
+    /// Search terms; the configured search provider returns current web results.
+    query: String,
+    /// Maximum results, from 1 to 10. Defaults to 5.
+    count: Option<u8>,
+}
+
 #[derive(Debug, Clone)]
 pub struct FirstPartyTools {
     tool_router: rmcp::handler::server::router::tool::ToolRouter<Self>,
@@ -183,6 +191,36 @@ impl FirstPartyTools {
         )
         .await
     }
+
+    #[rmcp::tool(
+        name = "web.search",
+        description = "Search the current web using the host-configured search provider; returns source URLs and snippets."
+    )]
+    async fn web_search_tool(
+        &self,
+        args: rmcp::handler::server::wrapper::Parameters<SearchArgs>,
+    ) -> Result<String, rmcp::ErrorData> {
+        if args.0.query.trim().is_empty() || args.0.query.len() > 600 {
+            return Err(rmcp::ErrorData::invalid_params(
+                "query must contain 1 to 600 characters",
+                None,
+            ));
+        }
+        let count = args.0.count.unwrap_or(5);
+        if !(1..=10).contains(&count) {
+            return Err(rmcp::ErrorData::invalid_params(
+                "count must be between 1 and 10",
+                None,
+            ));
+        }
+        post_via_proxy(
+            self.proxy_url.as_deref(),
+            "search",
+            serde_json::json!({"query": args.0.query, "count": count}),
+            None,
+        )
+        .await
+    }
 }
 
 fn tool_error(error: ToolError) -> rmcp::ErrorData {
@@ -208,6 +246,15 @@ async fn fetch_via_proxy(
             None,
         ));
     }
+    post_via_proxy(proxy, "fetch", serde_json::json!({"url": url}), credential).await
+}
+
+async fn post_via_proxy(
+    proxy: Option<&str>,
+    path: &str,
+    payload: serde_json::Value,
+    credential: Option<&str>,
+) -> Result<String, rmcp::ErrorData> {
     let proxy =
         proxy.ok_or_else(|| rmcp::ErrorData::internal_error("MS_PROXY_URL is missing", None))?;
     let proxy_uri = proxy.parse::<http::Uri>().map_err(|error| {
@@ -219,10 +266,10 @@ async fn fetch_via_proxy(
             None,
         ));
     }
-    let endpoint = format!("{}/fetch", proxy.trim_end_matches('/'))
+    let endpoint = format!("{}/{path}", proxy.trim_end_matches('/'))
         .parse::<http::Uri>()
         .map_err(|error| {
-            rmcp::ErrorData::internal_error(format!("invalid fetch proxy endpoint: {error}"), None)
+            rmcp::ErrorData::internal_error(format!("invalid proxy endpoint: {error}"), None)
         })?;
     let mut request = http::Request::builder()
         .method(http::Method::POST)
@@ -236,7 +283,7 @@ async fn fetch_via_proxy(
     }
     let request = request
         .body(http_body_util::Full::new(hyper::body::Bytes::from(
-            serde_json::json!({"url": url}).to_string(),
+            payload.to_string(),
         )))
         .map_err(|error| rmcp::ErrorData::internal_error(error.to_string(), None))?;
     let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
