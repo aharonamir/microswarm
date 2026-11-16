@@ -1,6 +1,6 @@
 # MicroSwarm Constitution
 
-**Version:** 1.0.0 · **Ratified:** 2026-10-07 · **Last amended:** 2026-10-07
+**Version:** 1.1.0 · **Ratified:** 2026-10-07 · **Last amended:** 2026-11-01
 
 MicroSwarm is a thin, containerized, multi-agent harness: open for extension, closed for attack. These principles bind every spec, plan, task and pull request. A plan that violates one must say so in its Complexity Tracking table and justify it, or it does not pass the gate.
 
@@ -68,6 +68,15 @@ When the system does not know, it denies.
 
 Memory tiers, skill evolution, reward, evaluation, failure *interpretation* and behavioural baselining live on the host plane. The core runs and reports; it does not reflect.
 
+### IX. Operator surfaces hold no authority of their own
+
+Operator surfaces (the CLI, the console, and any future UI) are clients of the supervisor, never peers of it.
+
+- They act only through supervisor socket operations, and read MicroSwarm state read-only. They never connect to the container-runtime socket, never write `supervisor.db` or session files, and never read credential values.
+- Agent-originated content (replies, events, tool arguments) is untrusted data. It is rendered as text, never executed, never turned into links or markup, and never used to authorize anything.
+- A network-facing surface listens on loopback only, requires an authenticated session for every request, checks `Host` and `Origin`, and serves a strict Content-Security-Policy.
+- Each surface has its own line budget: `ms-console` ≤ 4,000 Rust lines, and its web assets ≤ 3,500 lines of JS + CSS, with no npm runtime dependencies and no build step. Exceeding it requires an amendment.
+
 ---
 
 ## Additional constraints
@@ -97,6 +106,7 @@ Memory tiers, skill evolution, reward, evaluation, failure *interpretation* and 
 | VI | Events | Does every new state transition emit a typed event at source? |
 | VII | Fail closed | What happens on unknown input, unknown exit, or restart? Is the answer "deny"? |
 | VIII | Dumb core | Does anything cognitive land inside the container? |
+| IX | Operator surfaces | Does the surface act only through supervisor ops, read state read-only, render agent content as text, and stay on loopback with auth, Host/Origin checks and CSP? |
 
 ## Governance
 

@@ -8,6 +8,8 @@ use std::{
     process::ExitCode,
 };
 
+mod model_check;
+mod search_check;
 mod tools;
 mod trace;
 
@@ -45,13 +47,14 @@ fn run(args: Vec<String>) -> Result<(), String> {
         )
         .map(|_| ()),
         "chat" => chat(&home, &args[1..]),
+        "console" => console(&home, &args[1..]),
         other => Err(format!("unknown command {other:?}; run microswarm --help")),
     }
 }
 
 fn print_help() {
     println!(
-        "microswarm <init|doctor|chat|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard]\n  doctor\n  chat [--session ID]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
+        "microswarm <init|doctor|chat|console|sessions|trace|skills|tools|approve|deny|creds> [options]\n\nCommands:\n  init [--home DIR] [--lang en|zh] [--wizard|--no-wizard] (checks the model connection before saving; optional Tavily or Brave web search)\n  doctor\n  chat [--session ID]\n  console [--listen 127.0.0.1:8790]\n  sessions [--all] [--json]\n  trace <session_id> [--json] [--events TYPES]\n  skills install <directory>\n  tools add <id> --stdio \"<command>\" | --http <https-url>\n  tools list\n  tools remove <id>\n  creds set <name> | creds list\n  approve <code> | deny <code>"
     );
 }
 
@@ -59,6 +62,29 @@ fn option_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     args.windows(2)
         .find(|pair| pair[0] == name)
         .map(|pair| pair[1].as_str())
+}
+
+fn console(home: &Path, args: &[String]) -> Result<(), String> {
+    let mut listen = "127.0.0.1:8790";
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--listen" => {
+                index += 1;
+                listen = args.get(index).ok_or("--listen requires an IP:PORT")?;
+            }
+            other => return Err(format!("unknown console option {other:?}")),
+        }
+        index += 1;
+    }
+    let address = listen
+        .parse()
+        .map_err(|_| "--listen must be an IP:PORT address".to_owned())?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
+    runtime.block_on(ms_console::server::run(home.to_path_buf(), address))
 }
 
 fn init(home: &Path, args: &[String]) -> Result<(), String> {
@@ -195,6 +221,43 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         }
     };
 
+    let old_search_provider = config_string(&existing, &["search", "provider"], "");
+    let search_default = match old_search_provider {
+        "tavily" => "2",
+        "brave" => "3",
+        _ => "1",
+    };
+    let search_provider = loop {
+        let choice = prompt(
+            "Web search: [1] None  [2] Tavily  [3] Brave Search",
+            search_default,
+        )?;
+        match choice.as_str() {
+            "1" | "none" => break None,
+            "2" | "tavily" => break Some("tavily"),
+            "3" | "brave" => break Some("brave"),
+            _ => println!("Choose 1, 2, or 3."),
+        }
+    };
+    let search_settings = if let Some(search_provider) = search_provider {
+        let search_key = rpassword::prompt_password("Search API key (input hidden): ")
+            .map_err(|error| format!("cannot read search API key: {error}"))?;
+        if search_key.is_empty() {
+            return Err("search API key cannot be empty; configuration was not changed".into());
+        }
+        let search_credential = prompt(
+            "Search credential label (not the API key)",
+            config_string(&existing, &["search", "credential"], "web-search"),
+        )?;
+        validate_credential_name(&search_credential)?;
+        if search_credential == credential {
+            return Err("search and model must use different credential labels".into());
+        }
+        Some((search_provider, search_credential, search_key))
+    } else {
+        None
+    };
+
     println!(
         "\nModel: {provider} / {model}\nEndpoint: {base_url}\nCredential label: {credential}\nRuntime: {runtime_socket}\nAgent image: {image}"
     );
@@ -203,13 +266,32 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     } else {
         println!("Mount: none");
     }
+    println!(
+        "Web search: {}",
+        search_settings
+            .as_ref()
+            .map_or("none", |settings| settings.0)
+    );
     let confirm = prompt("Save these settings? [Y/n]", "y")?;
     if !matches!(confirm.as_str(), "y" | "Y" | "yes" | "YES" | "") {
         println!("Setup cancelled; initialized with existing/default configuration.");
         return Ok(());
     }
 
+    println!("Checking model connection with a one-token request…");
+    model_check::check(provider, &base_url, &model, &key)?;
+    println!("✓ Model connection verified.");
+
+    if let Some((provider, _, key)) = &search_settings {
+        println!("Checking {provider} search connection with one result…");
+        search_check::check(provider, key)?;
+        println!("✓ Web search connection verified.");
+    }
+
     store_local_credential(home, &credential, &key)?;
+    if let Some((_, name, key)) = &search_settings {
+        store_local_credential(home, name, key)?;
+    }
 
     let mut config: toml::Value = toml::from_str(&source)
         .map_err(|error| format!("cannot update {}: {error}", config_path.display()))?;
@@ -232,6 +314,15 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         }))
         .map_err(|error| error.to_string())?,
     );
+    if let Some((provider, name, _)) = &search_settings {
+        root.insert(
+            "search".into(),
+            toml::Value::try_from(serde_json::json!({"provider": provider, "credential": name}))
+                .map_err(|error| error.to_string())?,
+        );
+    } else {
+        root.remove("search");
+    }
     let lead = root
         .get_mut("lead")
         .and_then(toml::Value::as_table_mut)
@@ -250,6 +341,17 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
         .any(|entry| entry.as_str() == Some(&credential))
     {
         credentials.push(toml::Value::String(credential.clone()));
+    }
+    if let Some(old_name) = existing
+        .get("search")
+        .and_then(|search| search.get("credential"))
+        .and_then(toml::Value::as_str)
+        && old_name != credential
+    {
+        credentials.retain(|entry| entry.as_str() != Some(old_name));
+    }
+    if let Some((_, name, _)) = &search_settings {
+        credentials.push(toml::Value::String(name.clone()));
     }
     if let Some(mode) = mount_mode {
         let mounts = scope
@@ -271,7 +373,12 @@ fn configure_wizard(home: &Path, lang: &str) -> Result<(), String> {
     )
     .map_err(|error| format!("{}: {error}", config_path.display()))?;
 
-    println!("✓ Model settings and host credential saved.");
+    println!("✓ Model and web search settings saved.");
+    if search_settings.is_some() {
+        println!(
+            "Search is enabled for new sessions. Rebuild the configured agent image if it predates web.search, restart microswarmd, and start a new session."
+        );
+    }
     Ok(())
 }
 
@@ -386,14 +493,22 @@ fn doctor(home: &Path) -> Result<(), String> {
             config.microswarm.runtime.image
         ));
     }
-    println!("✓ configuration   {}", config_dir.display());
-    println!("✓ runtime socket  {}", config.microswarm.runtime.socket);
-    println!("✓ agent image     {}", config.microswarm.runtime.image);
-    println!("✓ model           {} via session proxy", model.model);
-    println!(
-        "✓ credential      {} is present on the host",
-        model.credential
-    );
+    let checks =
+        ms_runtime::doctor::run(ms_runtime::doctor::DoctorInput {
+            config_path: &config_dir.display().to_string(),
+            runtime_socket: &config.microswarm.runtime.socket,
+            agent_image: &config.microswarm.runtime.image,
+            model: &model.model,
+            credential: &model.credential,
+            search: config.microswarm.search.as_ref().map(|search| {
+                ms_runtime::doctor::SearchInput {
+                    provider: &search.provider,
+                    credential: &search.credential,
+                    credential_present: home.join("credentials").join(&search.credential).is_file(),
+                }
+            }),
+        });
+    println!("{}", ms_runtime::doctor::render(&checks));
     Ok(())
 }
 
@@ -504,11 +619,16 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
     let mut writer = BufWriter::new(stream);
     let mut session_id = option_value(args, "--session").map(str::to_owned);
     let mut pending_wait: Option<(String, i64)> = None;
+    let mut pending_approval_code: Option<String> = None;
     let mut input = String::new();
     let stdin = io::stdin();
     let mut lock = stdin.lock();
     loop {
         input.clear();
+        if stdin.is_terminal() {
+            print!("you › ");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
         if lock
             .read_line(&mut input)
             .map_err(|error| error.to_string())?
@@ -538,7 +658,17 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         while input.ends_with(['\n', '\r']) {
             input.pop();
         }
-        let request = json!({"op":"chat", "session_id":session_id, "text":input});
+        if !should_send_chat_line(&input) {
+            continue;
+        }
+        let approval_input =
+            approval_command_with_current_code(&input, pending_approval_code.as_deref());
+        if is_incomplete_approval_command(&input) && approval_input.is_none() {
+            println!("Usage: /approve CODE or /deny CODE (use the code from the approval prompt).");
+            continue;
+        }
+        let request_text = approval_input.as_deref().unwrap_or(&input);
+        let request = json!({"op":"chat", "session_id":session_id, "text":request_text});
         send_chat_request(&mut writer, &mut reader, request)?;
         let mut response = String::new();
         reader
@@ -559,9 +689,8 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
             session_id = Some(id.to_owned());
         }
         if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
-            if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
-                println!("{prompt}");
-            }
+            print_approval_prompt(&response);
+            pending_approval_code = approval_code_from_response(&response);
             if let (Some(id), Some(after)) = (
                 response
                     .get("session_id")
@@ -571,8 +700,9 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
                 pending_wait = Some((id.to_owned(), after));
             }
         } else if pending_wait.is_some()
-            && (input.starts_with("/approve ") || input.starts_with("/deny "))
+            && (request_text.starts_with("/approve ") || request_text.starts_with("/deny "))
         {
+            pending_approval_code = None;
             let (pending_session, after_id) = pending_wait.take().expect("checked pending wait");
             send_chat_request(
                 &mut writer,
@@ -592,9 +722,8 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
                 println!("agent › {text}");
             }
             if response.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
-                if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
-                    println!("{prompt}");
-                }
+                print_approval_prompt(&response);
+                pending_approval_code = approval_code_from_response(&response);
                 if let (Some(id), Some(after)) = (
                     response
                         .get("session_id")
@@ -607,6 +736,66 @@ fn chat(home: &Path, args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn should_send_chat_line(input: &str) -> bool {
+    !input.trim().is_empty()
+}
+
+fn is_incomplete_approval_command(input: &str) -> bool {
+    let mut parts = input.split_whitespace();
+    matches!(parts.next(), Some("/approve" | "/deny")) && parts.next().is_none()
+}
+
+fn approval_command_with_current_code(input: &str, code: Option<&str>) -> Option<String> {
+    if !is_incomplete_approval_command(input) {
+        return None;
+    }
+    let code = code.filter(|code| is_valid_approval_code(code))?;
+    let command = input.split_whitespace().next()?;
+    Some(format!("{command} {code}"))
+}
+
+fn approval_code_from_prompt(prompt: &str) -> Option<&str> {
+    let instructions = prompt
+        .rsplit_once("Reply:")
+        .map(|(_, instructions)| instructions)
+        .or_else(|| {
+            prompt
+                .rsplit_once("回复：")
+                .map(|(_, instructions)| instructions)
+        })?;
+    let mut words = instructions.split_whitespace();
+    if words.next()? != "/approve" {
+        return None;
+    }
+    let code = words.next()?;
+    if !matches!(words.next()?, "or" | "或") || words.next()? != "/deny" {
+        return None;
+    }
+    let deny_code = words.next()?.trim_end_matches(['.', '。']);
+    (code == deny_code && is_valid_approval_code(code)).then_some(code)
+}
+
+fn approval_code_from_response(response: &serde_json::Value) -> Option<String> {
+    response
+        .get("prompt")
+        .and_then(serde_json::Value::as_str)
+        .and_then(approval_code_from_prompt)
+        .map(str::to_owned)
+}
+
+fn print_approval_prompt(response: &serde_json::Value) {
+    if let Some(prompt) = response.get("prompt").and_then(serde_json::Value::as_str) {
+        println!("{prompt}");
+    }
+}
+
+fn is_valid_approval_code(code: &str) -> bool {
+    code.len() == 4
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
 }
 
 fn send_chat_request(
@@ -637,4 +826,59 @@ fn rpc(home: &Path, request: serde_json::Value) -> Result<serde_json::Value, Str
         return Err(error.to_owned());
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod chat_input_tests {
+    #[test]
+    fn blank_chat_line_is_not_sent() {
+        assert!(!super::should_send_chat_line(""));
+        assert!(!super::should_send_chat_line("   "));
+        assert!(super::should_send_chat_line("hello"));
+    }
+
+    #[test]
+    fn approval_command_requires_a_code() {
+        assert!(super::is_incomplete_approval_command("/approve"));
+        assert!(super::is_incomplete_approval_command("/deny   "));
+        assert!(!super::is_incomplete_approval_command("/approve BC3V"));
+        assert!(!super::is_incomplete_approval_command(
+            "please approve this"
+        ));
+    }
+
+    #[test]
+    fn bare_approval_uses_current_code() {
+        assert_eq!(
+            super::approval_command_with_current_code("/approve", Some("BC3V")),
+            Some("/approve BC3V".into())
+        );
+        assert_eq!(
+            super::approval_command_with_current_code(" /deny  ", Some("BC3V")),
+            Some("/deny BC3V".into())
+        );
+        assert_eq!(
+            super::approval_command_with_current_code("/approve", None),
+            None
+        );
+        assert_eq!(
+            super::approval_command_with_current_code("/approve OTHER", Some("BC3V")),
+            None
+        );
+    }
+
+    #[test]
+    fn approval_code_is_parsed_from_english_and_chinese_prompts() {
+        assert_eq!(
+            super::approval_code_from_prompt(
+                "Approve web.fetch? Reply: /approve BC3V or /deny BC3V."
+            ),
+            Some("BC3V")
+        );
+        assert_eq!(
+            super::approval_code_from_prompt("批准 web.fetch？回复：/approve 7KLM 或 /deny 7KLM。"),
+            Some("7KLM")
+        );
+        assert_eq!(super::approval_code_from_prompt("Approve web.fetch?"), None);
+    }
 }

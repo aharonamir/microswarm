@@ -1,6 +1,6 @@
 use ms_proto::{SupervisorEvent, SupervisorEventType};
 use ms_store::SupervisorStore;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -67,8 +67,9 @@ pub async fn stream<W: AsyncWrite + Unpin>(
                 .collect::<BTreeMap<_, _>>()
         })
         .unwrap_or_default();
+    let mut replay = true;
     loop {
-        for event in merged_events(home)? {
+        for event in merged_events(home, replay)? {
             let session = event["session_id"]
                 .as_str()
                 .ok_or("event has no session_id")?
@@ -89,11 +90,34 @@ pub async fn stream<W: AsyncWrite + Unpin>(
         if !follow {
             return Ok(());
         }
+        replay = false;
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
-fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
+fn merged_events(home: &Path, replay_existing: bool) -> Result<Vec<Value>, String> {
+    let ledger_path = home.join("event-stream.db");
+    let ledger_existed = ledger_path.exists();
+    let mut ledger = Connection::open(&ledger_path).map_err(|error| error.to_string())?;
+    if !ledger_existed {
+        std::fs::set_permissions(&ledger_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
+    }
+    ledger
+        .busy_timeout(Duration::from_secs(5))
+        .map_err(|error| error.to_string())?;
+    ledger.execute_batch("CREATE TABLE IF NOT EXISTS merged_events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, source TEXT NOT NULL, source_seq INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(session_id,seq), UNIQUE(session_id,source,source_seq)); CREATE TABLE IF NOT EXISTS event_sources (source_key TEXT PRIMARY KEY, source_seq INTEGER NOT NULL);")
+        .map_err(|error| error.to_string())?;
+    // Upgrade existing ledgers without replaying already merged source history.
+    ledger.execute("INSERT OR IGNORE INTO event_sources(source_key,source_seq) SELECT 'supervisor',COALESCE(MAX(source_seq),0) FROM merged_events WHERE source='supervisor'", [])
+        .map_err(|error| error.to_string())?;
+    let supervisor_cursor: i64 = ledger
+        .query_row(
+            "SELECT source_seq FROM event_sources WHERE source_key='supervisor'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
     let db_path = home.join("supervisor.db");
     let database = Connection::open_with_flags(
         &db_path,
@@ -101,12 +125,13 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
     )
     .map_err(|error| error.to_string())?;
     let mut rows = Vec::<EventRow>::new();
+    let mut supervisor_max = supervisor_cursor;
     {
         let mut statement = database
-            .prepare("SELECT seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data FROM supervisor_events")
+            .prepare("SELECT seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data FROM supervisor_events WHERE seq > ?1 ORDER BY seq")
             .map_err(|error| error.to_string())?;
         let events = statement
-            .query_map([], |row| {
+            .query_map([supervisor_cursor], |row| {
                 let seq: i64 = row.get(0)?;
                 let ts: String = row.get(1)?;
                 let ts_mono: i64 = row.get(2)?;
@@ -121,6 +146,7 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
         for row in events {
             let (seq, ts, ts_mono, session, root, role, kind, data) =
                 row.map_err(|error| error.to_string())?;
+            supervisor_max = supervisor_max.max(seq);
             rows.push(EventRow {
                 order_time: wall_time(&database, &ts)?,
                 source: "supervisor",
@@ -147,6 +173,7 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| error.to_string())?
     };
+    let mut source_cursors = BTreeMap::from([("supervisor".to_owned(), supervisor_max)]);
     for (session, root, role) in sessions {
         let path: PathBuf = home.join("sessions").join(&session).join("out/events.db");
         if !path.is_file() {
@@ -157,13 +184,23 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
         .map_err(|error| format!("{}: {error}", path.display()))?;
+        let source_key = format!("agent:{session}");
+        let previous: i64 = ledger.query_row("SELECT source_seq FROM event_sources WHERE source_key=?1", [&source_key], |row| row.get(0)).optional().map_err(|error| error.to_string())?.unwrap_or_else(|| {
+            ledger.query_row("SELECT COALESCE(MAX(source_seq),0) FROM merged_events WHERE source='agent' AND session_id=?1", [&session], |row| row.get(0)).unwrap_or(0)
+        });
+        ledger
+            .execute(
+                "INSERT OR IGNORE INTO event_sources(source_key,source_seq) VALUES (?1,?2)",
+                rusqlite::params![source_key, previous],
+            )
+            .map_err(|error| error.to_string())?;
         let mut statement = events_db
             .prepare(
-                "SELECT seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data FROM events",
+                "SELECT seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data FROM events WHERE seq > ?1 ORDER BY seq",
             )
             .map_err(|error| error.to_string())?;
         let events = statement
-            .query_map([], |row| {
+            .query_map([previous], |row| {
                 let seq: i64 = row.get(0)?;
                 let ts: String = row.get(1)?;
                 let ts_mono: i64 = row.get(2)?;
@@ -178,6 +215,7 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
         for row in events {
             let (seq, ts, ts_mono, claimed_session, claimed_root, claimed_role, kind, data) =
                 row.map_err(|error| error.to_string())?;
+            source_cursors.insert(source_key.clone(), seq.max(previous));
             if claimed_session != session || claimed_root != root || claimed_role != role {
                 continue;
             }
@@ -205,14 +243,10 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
                     .cmp(&right.value["session_id"].as_str()),
             )
     });
-    let ledger_path = home.join("event-stream.db");
-    let mut ledger = Connection::open(&ledger_path).map_err(|error| error.to_string())?;
-    std::fs::set_permissions(&ledger_path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|error| error.to_string())?;
-    ledger
-        .busy_timeout(Duration::from_secs(5))
-        .map_err(|error| error.to_string())?;
-    ledger.execute_batch("CREATE TABLE IF NOT EXISTS merged_events (id INTEGER PRIMARY KEY, session_id TEXT NOT NULL, seq INTEGER NOT NULL, source TEXT NOT NULL, source_seq INTEGER NOT NULL, body TEXT NOT NULL, UNIQUE(session_id,seq), UNIQUE(session_id,source,source_seq));")
+    let start_id: i64 = ledger
+        .query_row("SELECT COALESCE(MAX(id),0) FROM merged_events", [], |row| {
+            row.get(0)
+        })
         .map_err(|error| error.to_string())?;
     let transaction = ledger.transaction().map_err(|error| error.to_string())?;
     let mut sequence = BTreeMap::<String, i64>::new();
@@ -243,21 +277,74 @@ fn merged_events(home: &Path) -> Result<Vec<Value>, String> {
             .map_err(|error| error.to_string())?;
         sequence.insert(session, next + 1);
     }
+    for (source, seq) in source_cursors {
+        transaction
+            .execute(
+                "UPDATE event_sources SET source_seq=MAX(source_seq,?2) WHERE source_key=?1",
+                rusqlite::params![source, seq],
+            )
+            .map_err(|error| error.to_string())?;
+    }
     transaction.commit().map_err(|error| error.to_string())?;
-    let mut statement = ledger
-        .prepare("SELECT body FROM merged_events ORDER BY id")
-        .map_err(|error| error.to_string())?;
-    statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| error.to_string())?
-        .map(|row| {
-            serde_json::from_str(&row.map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())
-        })
+    let query = if replay_existing {
+        "SELECT body FROM merged_events ORDER BY id"
+    } else {
+        "SELECT body FROM merged_events WHERE id > ?1 ORDER BY id"
+    };
+    let mut statement = ledger.prepare(query).map_err(|error| error.to_string())?;
+    let values = if replay_existing {
+        statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    } else {
+        statement
+            .query_map([start_id], |row| row.get::<_, String>(0))
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?
+    };
+    values
+        .into_iter()
+        .map(|row| serde_json::from_str(&row).map_err(|error| error.to_string()))
         .collect()
 }
 
 fn wall_time(db: &Connection, ts: &str) -> Result<f64, String> {
     db.query_row("SELECT julianday(?1)", [ts], |row| row.get(0))
         .map_err(|error| error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn incremental_ledger_persists_source_cursors() {
+        let home = std::env::temp_dir().join(format!(
+            "ms-runtime-event-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        let supervisor = Connection::open(home.join("supervisor.db")).unwrap();
+        supervisor.execute_batch("CREATE TABLE sessions(id TEXT,root_id TEXT,role TEXT); CREATE TABLE supervisor_events(seq INTEGER,ts TEXT,ts_mono INTEGER,session_id TEXT,root_session_id TEXT,agent_role TEXT,type TEXT,data TEXT);").unwrap();
+        drop(supervisor);
+        merged_events(&home, false).unwrap();
+        let ledger = Connection::open(home.join("event-stream.db")).unwrap();
+        let cursor: Option<i64> = ledger
+            .query_row(
+                "SELECT source_seq FROM event_sources WHERE source_key='supervisor'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        assert!(cursor.is_some(), "supervisor source cursor should exist");
+        drop(ledger);
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }

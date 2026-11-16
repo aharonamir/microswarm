@@ -17,3 +17,5 @@ specs/001-microswarm/
 ```
 
 Runtime integration tests print a skip when neither Docker nor Podman is reachable, or when the configured agent image is not present. A dedicated runtime CI job must build the image and set `MS_REQUIRE_RUNTIME=1` so missing prerequisites fail instead of silently skipping coverage.
+
+Before signing off a release, follow the [release compliance test checklist](docs/release-compliance-tests.md).

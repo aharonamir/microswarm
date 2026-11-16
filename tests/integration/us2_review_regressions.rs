@@ -19,8 +19,23 @@ fn member_role_instructions_are_mounted_read_only_and_sent_to_the_model() {
             .status
             .success()
     );
-    let member = support::members(&harness).remove(0);
-    let container = harness.containers_for(&member.0).unwrap().remove(0);
+    let member = support::wait_for_member(&harness);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let container = loop {
+        if let Some(container) = harness
+            .containers_for(&member.0)
+            .unwrap()
+            .into_iter()
+            .next()
+        {
+            break container;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "member container was not created"
+        );
+        thread::sleep(Duration::from_millis(50));
+    };
     let runtime = match harness.runtime {
         support::harness::Runtime::Docker => "docker",
         support::harness::Runtime::Podman => "podman",
@@ -77,7 +92,7 @@ fn initial_member_task_reply_is_routed_to_the_lead() {
             .status
             .success()
     );
-    let member = support::members(&harness).remove(0);
+    let member = support::wait_for_member(&harness);
     let lead = ms_store::open_session_dir(
         harness
             .home
@@ -88,7 +103,7 @@ fn initial_member_task_reply_is_routed_to_the_lead() {
     let deadline = Instant::now() + Duration::from_secs(5);
     let reply = loop {
         let result = lead.inbound().query_row(
-            "SELECT body FROM inbound WHERE kind='delegation_result' ORDER BY id DESC LIMIT 1",
+            "SELECT body FROM inbound WHERE kind='delegation_result' AND json_extract(body,'$.initial_reply') IS NOT NULL ORDER BY id DESC LIMIT 1",
             [],
             |row| row.get::<_, String>(0),
         );
@@ -174,7 +189,7 @@ fn timed_out_send_stops_the_member_container() {
         "chat failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let member = support::members(&harness).remove(0);
+    let member = support::wait_for_member(&harness);
     let store =
         ms_store::SupervisorStore::open_readonly(harness.home.join("supervisor.db")).unwrap();
     let (status, reason): (String, Option<String>) = store

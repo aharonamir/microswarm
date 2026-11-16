@@ -17,6 +17,8 @@ jobs:
         run: scripts/dep-gate.sh
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Lint web assets
+        run: scripts/web-lint.sh
       - name: Lint
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build host binaries for integration tests
@@ -48,6 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install musl linker
         run: |
           sudo apt-get update

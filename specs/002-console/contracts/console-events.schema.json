@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://microswarm.dev/schemas/console-event/v1.json",
+  "title": "Console SSE event payload (the `data:` line)",
+  "description": "SSE `event:` names map to the oneOf branches below by `type`. Agent-sourced content inside `event` is untrusted and must be rendered as text only.",
+  "type": "object",
+  "required": ["type", "at"],
+  "properties": {
+    "type": {
+      "enum": ["supervisor", "agent", "status.changed", "chat.reply", "chat.pending", "chat.error", "resync", "supervisor.down", "supervisor.up"]
+    },
+    "at": { "type": "string", "format": "date-time" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "type": { "enum": ["supervisor", "agent"] },
+        "event": { "$ref": "https://microswarm.dev/schemas/event/v1.json", "description": "Verbatim merged event from event_stream (001 events.schema.json)." }
+      },
+      "required": ["event"]
+    },
+    {
+      "properties": {
+        "type": { "const": "status.changed" },
+        "session_id": { "type": "string" },
+        "root_session_id": { "type": "string" },
+        "status_words": {
+          "type": "object",
+          "required": ["key", "tone"],
+          "properties": {
+            "key": { "type": "string", "description": "i18n key, e.g. status.waiting_for_you" },
+            "args": { "type": "object" },
+            "tone": { "enum": ["attention", "active", "ok", "neutral", "warn", "danger"] }
+          }
+        },
+        "open_approvals": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["session_id", "root_session_id", "status_words"]
+    },
+    {
+      "properties": {
+        "type": { "enum": ["chat.reply", "chat.pending", "chat.error"] },
+        "request_id": { "type": "string" },
+        "session_id": { "type": ["string", "null"] },
+        "text": { "type": "string", "description": "Lead reply text (untrusted) for chat.reply; supervisor notice for chat.error." },
+        "approval_id": { "type": "string", "description": "chat.pending only, when an approval is open." },
+        "error": { "enum": ["timeout", "session_closed", "supervisor_error", "model_not_configured"] }
+      },
+      "required": ["request_id"]
+    },
+    {
+      "properties": { "type": { "enum": ["resync", "supervisor.down", "supervisor.up"] } }
+    }
+  ]
+}
