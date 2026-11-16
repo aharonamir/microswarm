@@ -65,6 +65,7 @@ fn unsupported_and_malformed_inbound_are_acknowledged_with_error_events() {
         role: "lead".into(),
         proxy_url: None,
         scope,
+        system_instruction: String::new(),
         store: SessionStore::open_dir(PathBuf::from(&dir)).unwrap(),
     };
     let runtime = tokio::runtime::Builder::new_current_thread()

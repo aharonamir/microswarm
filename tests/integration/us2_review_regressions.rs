@@ -8,7 +8,51 @@ use std::{
 };
 
 #[test]
-fn member_role_instructions_are_mounted_read_only_and_sent_to_the_model() {
+fn lead_control_contains_operator_instructions_and_intersecting_team_roster() {
+    let Some(harness) = support::start_with_skill() else {
+        return;
+    };
+    std::fs::write(
+        harness.home.join("config/lead.md"),
+        "Keep the final report concise.",
+    )
+    .unwrap();
+    assert!(harness.chat(None, &["hello"]).unwrap().status.success());
+    let store =
+        ms_store::SupervisorStore::open_readonly(harness.home.join("supervisor.db")).unwrap();
+    let lead_id: String = store
+        .connection()
+        .query_row("SELECT id FROM sessions WHERE kind='lead'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let control = harness.home.join("sessions").join(lead_id).join("control");
+    assert_eq!(
+        std::fs::read_to_string(control.join("instructions.md")).unwrap(),
+        "Keep the final report concise."
+    );
+    let roster: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(control.join("team.json")).unwrap()).unwrap();
+    let roles = roster
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|role| role["role"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(roles, vec!["forbidden", "researcher", "tester"]);
+    assert_eq!(
+        roster[1]["description"],
+        "Deterministic roles used by MicroSwarm US2 tests."
+    );
+    assert!(
+        !std::fs::read_to_string(control.join("instructions.md"))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn member_role_instructions_are_copied_to_read_only_control_and_sent_to_the_model() {
     let Some(harness) = support::start_with_skill() else {
         return;
     };
@@ -52,11 +96,20 @@ fn member_role_instructions_are_mounted_read_only_and_sent_to_the_model() {
     assert!(mounts.status.success());
     let mounts = String::from_utf8_lossy(&mounts.stdout);
     assert!(
-        mounts
+        !mounts
             .lines()
-            .any(|line| line == "/skills/us2-test-team/role.md false"),
-        "role instructions mount missing or writable: {mounts}"
+            .any(|line| line.starts_with("/skills/") && line.ends_with("role.md false")),
+        "role instructions should be copied into control, not mounted separately: {mounts}"
     );
+    let copied = std::fs::read_to_string(
+        harness
+            .home
+            .join("sessions")
+            .join(&member.0)
+            .join("control/instructions.md"),
+    )
+    .unwrap();
+    assert!(copied.contains("Research the requested files and report concise findings."));
 
     let session =
         ms_store::open_session_dir(harness.home.join("sessions").join(&member.0)).unwrap();

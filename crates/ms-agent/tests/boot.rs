@@ -93,6 +93,23 @@ fn role_kind_is_separate_from_event_role_name() {
         )
         .unwrap();
     assert_eq!(agent_role, "researcher");
+    let ready_data: String = host
+        .events()
+        .query_row(
+            "SELECT data FROM events WHERE type='agent.ready'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let ready_data: serde_json::Value = serde_json::from_str(&ready_data).unwrap();
+    assert_eq!(ready_data["prompt_version"], "v3/v2");
+    assert!(
+        ready_data["prompt_sha256"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+    assert_eq!(ready_data["prompt_truncated"], false);
     drop(host);
     let _ = fs::remove_dir_all(session_dir);
 }

@@ -355,6 +355,14 @@ async fn create_lead(
         last_active_at: utc_now(),
     };
     install_lead_scope(store, record, &session_dir, &scope)?;
+    let lead_instructions = home.join("config/lead.md");
+    ms_runtime::control::copy_session_instructions(
+        &session_dir,
+        lead_instructions
+            .is_file()
+            .then_some(lead_instructions.as_path()),
+    )?;
+    ms_runtime::control::write_team_roster(store, home, &session_dir, &scope)?;
     emit_supervisor_event(
         store,
         &id,
@@ -885,6 +893,9 @@ async fn create_member(
         last_active_at: utc_now(),
     };
     crate::scope::install_member_scope(store, record, &session_dir, &scope)?;
+    let instruction_source =
+        (skill.is_some() && !instructions.is_empty()).then(|| Path::new(instructions));
+    ms_runtime::control::copy_session_instructions(&session_dir, instruction_source)?;
     let task_id = session
         .append_inbound(
             &InboundKind::Task,
@@ -941,7 +952,7 @@ async fn create_member(
         "MS_MCP_SERVERS={}",
         serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
     ));
-    let mut profile = ms_runtime::profile::container_profile(
+    let profile = ms_runtime::profile::container_profile(
         &scope,
         &scope.limits,
         &config.microswarm.runtime.image,
@@ -950,19 +961,6 @@ async fn create_member(
         &host_gateway,
         &container_user,
     )?;
-    if let Some(skill) = skill {
-        let instruction_path = fs::canonicalize(instructions)
-            .map_err(|error| format!("cannot resolve role instructions: {error}"))?;
-        if !instruction_path.is_file() {
-            return Err("role instructions are not a file".into());
-        }
-        profile.mounts.push(crate::runtime::MountSpec {
-            source: instruction_path.display().to_string(),
-            target: format!("/skills/{skill}/role.md"),
-            read_only: true,
-        });
-        env.push(format!("MS_ROLE_INSTRUCTIONS=/skills/{skill}/role.md"));
-    }
     let container_id = runtime.create_container(&profile, &env).await?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {

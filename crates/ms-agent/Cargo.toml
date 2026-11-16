@@ -15,6 +15,7 @@ ms-store = { path = "../ms-store" }
 ms-shell = { path = "../ms-shell" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.145"
+sha2 = "0.10.9"
 rmcp = { version = "=3.5.1", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest", "reqwest"] }
 tokio = { version = "1.53.2", features = ["macros", "net", "rt", "signal", "time"] }
 
