@@ -57,6 +57,10 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/member.js"),
         ),
+        "/js/pages/overview.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/overview.js"),
+        ),
         "/i18n/en.json" => (
             "application/json; charset=utf-8",
             include_bytes!("../web/i18n/en.json"),

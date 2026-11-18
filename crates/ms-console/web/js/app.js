@@ -8,6 +8,7 @@ import { renderApprovals } from "./pages/approvals.js";
 import { renderTrace } from "./pages/trace.js";
 import { renderHost } from "./pages/host.js";
 import { renderMember } from "./pages/member.js";
+import { renderOverview } from "./pages/overview.js";
 
 const app = document.getElementById("app");
 const nav = document.querySelector(".primary-nav");
@@ -41,7 +42,7 @@ async function renderNow() {
   let pending = 0;
   try { pending = Number((await api("/overview")).pending_approvals || 0); } catch { /* The page view reports its own connection error. */ }
   clear(nav);
-  for (const route of ["sessions", "approvals", "trace", "host"]) nav.append(el("a", { href: `#/${route}`, "data-route": route, "aria-current": route === page ? "page" : false }, [
+  for (const route of ["overview", "sessions", "approvals", "trace", "host"]) nav.append(el("a", { href: `#/${route}`, "data-route": route, "aria-current": route === page ? "page" : false }, [
     t(`nav.${route}`),
     ...(route === "approvals" ? [el("span", { class: "badge", hidden: pending < 1 }, [String(pending)])] : []),
   ]));
@@ -50,6 +51,7 @@ async function renderNow() {
   supervisorChip.append(el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));
   clear(app);
   if (reconnecting) app.append(el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
+  if (page === "overview") { await renderOverview(app, t); return; }
   if (page === "sessions") {
     await renderSessions(app, currentRoute().parts[0] || null, t);
     if (composerDraft !== undefined && composerRoute === location.hash) {
