@@ -2,7 +2,7 @@
 
 Use this sheet to complete T237, T241, T252, T254, and T255. Record only anonymized participant labels and environment details. Never include credential values, tokens, or personal names.
 
-The per-version release checklist is [release-compliance-tests.md](../release-compliance-tests.md). T237, T241, T254, and T255 remain TODO there until their manual evidence is recorded.
+The per-version release checklist is [release-compliance-tests.md](../release-compliance-tests.md). The procedure and acceptance criteria for the four deferred checks are in the [004 manual-checks work order](../../specs/004-manual-checks/tasks.md). T237, T241, T254, and T255 remain TODO until their manual evidence is recorded.
 
 ## Next checks
 

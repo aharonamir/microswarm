@@ -2,13 +2,13 @@
 
 **Input:** [spec.md](./spec.md) · [plan.md](./plan.md) · [research.md](./research.md) · [data-model.md](./data-model.md) · [contracts/](./contracts/) · [design/README.md](./design/README.md) · [quickstart.md](./quickstart.md)
 
-**Release sign-off:** [MicroSwarm release compliance tests](../../docs/release-compliance-tests.md). T237, T241, T254, and T255 are intentionally left unchecked for later manual testing.
+**Release sign-off:** [MicroSwarm release compliance tests](../../docs/release-compliance-tests.md). T237, T241, T254, and T255 remain open and are carried forward in the [004 manual-checks work order](../004-manual-checks/tasks.md).
 
 **Format:** `[ID] [P?] [Story] Description — path`. Tests come first: a test task's tests compile, are marked `#[ignore = "red: T2xx — reason"]`, and fail before their implementation task starts. Rules in `AGENTS.md` apply unchanged.
 
 ## Current execution status
 
-- Phase 0–1, Checkpoints B–D, and US1–US6 implementation completed; browser suite is green. T237, T241, T254, and T255 remain open for later manual acceptance and are tracked in the [release compliance checklist](../../docs/release-compliance-tests.md) (2026-11-14).
+- Phase 0–1, Checkpoints B–D, and US1–US6 implementation completed; browser suite is green. T237, T241, T254, and T255 remain open for later manual acceptance and are tracked in the [004 manual-checks work order](../004-manual-checks/tasks.md) and [release compliance checklist](../../docs/release-compliance-tests.md) (2026-11-14).
 
 ## Open questions for the owner (do not block; defaults in brackets)
 
@@ -75,14 +75,14 @@
 - [x] T234 [US1] Chat jobs with the per-session lock (FR-C22–C24) — `crates/ms-console/src/chat.rs`
 - [x] T235 [US1] Sessions and conversation endpoints — `crates/ms-console/src/read.rs`, `server.rs`
 - [x] T236 [US1] Sessions page: left rail with New session at the top; main column with header, status banner, labelled messages, team markers, the composer and its channel-aware helper text, End session with confirm; `aria-live` regions — `web/js/pages/sessions.js`
-- [ ] T237 [US1] Quickstart §0–§1 against Docker and the fake model — `specs/002-console/quickstart.md`, `docs/reviews/console-human-acceptance.md`
+- [ ] T237 [US1] Quickstart §0–§1 against Docker and the fake model — carried forward to [`004-manual-checks/tasks.md`](../004-manual-checks/tasks.md); evidence in `docs/reviews/console-human-acceptance.md`
 
 ## Phase 4 — US2: Approvals (P1)
 
 - [x] T238 [P] [US2] Red API tests: list by state; detail for tool_call (binding, args, parsed) and spawn (requested scope); approve/deny map to `approve`/`deny` with the code only; already-resolved → 409; expired → 410 — `crates/ms-console/tests/api_approvals.rs`
 - [x] T239 [US2] Approvals endpoints; parsed shell structure via `evaluate_shell` (R-C6) — `crates/ms-console/src/read.rs`, `server.rs`
 - [x] T240 [US2] Approvals page (queue + detail, phone layout with a sticky footer), inline approval cards in Sessions, and the header badge — `web/js/pages/approvals.js`, `web/js/pages/sessions.js`
-- [ ] T241 [US2] Quickstart §2 — `specs/002-console/quickstart.md`, `docs/reviews/console-human-acceptance.md`
+- [ ] T241 [US2] Quickstart §2 — carried forward to [`004-manual-checks/tasks.md`](../004-manual-checks/tasks.md); evidence in `docs/reviews/console-human-acceptance.md`
 
 **Checkpoint D (MVP):** US1 and US2 acceptance scenarios pass; quickstart §0–§2 pass; CI green. **Stop and wait for the owner** before US3.
 
@@ -107,8 +107,8 @@
 - [x] T251 [P] `console-e2e` CI job: Playwright + axe at 1440 and 390 px on all pages; XSS check in a real browser; `MS_REQUIRE_RUNTIME=1` — `tests/e2e/console/`, `.github/workflows/console-e2e.yml`
 - [x] T252 [P] Native zh review of `i18n/zh.json` (same process as T099) — `docs/reviews/console-zh-native-review.md`
 - [x] T253 [P] Operator docs: starting the console, SSH-tunnel access, cross-channel behaviour (R-C8), the security model — `docs/console.md`
-- [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9) — `docs/reviews/console-human-acceptance.md`
-- [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — `quickstart.md`, `docs/reviews/console-human-acceptance.md`
+- [ ] T254 [P] Usability check for SC-C08 with 3 people; record it in `research.md` (R-C9) — carried forward to [`004-manual-checks/tasks.md`](../004-manual-checks/tasks.md)
+- [ ] T255 Run quickstart §0–§6 and the adversarial section on a clean host; fix drift — carried forward to [`004-manual-checks/tasks.md`](../004-manual-checks/tasks.md)
 - [x] T256 Adversarial review of `ms-console` against gates I–IX; record findings — `docs/reviews/`
 - [x] T257 Add a one-token provider/model/key connection check to `microswarm init`; fail before saving and keep provider response bodies and keys out of errors — `crates/ms-cli/src/model_check.rs`
 - [x] T258 Distinguish an unreachable supervisor socket from model setup failures in console chat — `crates/ms-console/src/{rpc,chat}.rs`, `web/js/pages/sessions.js`
@@ -131,6 +131,14 @@
 - [x] T275 Preserve an unsent Sessions composer draft across event-driven renders — `crates/ms-console/web/js/`, `tests/e2e/console/console.spec.js`
 
 **Checkpoint E:** all stories pass, SC-C01…C08 recorded, CI and `console-e2e` green. **Stop and report.**
+
+## Phase 10 — Console UI redesign
+
+- [x] T276 [P] Add browser coverage for populated sessions, approvals, members, trace, host and error states; cover desktop, tablet, 390 px and 320 px — `tests/e2e/console/`
+- [x] T277 Redesign navigation and add attention/activity Overview using existing API data — `web/js/app.js`, `web/js/pages/overview.js`, `web/styles.css`, `i18n/`
+- [x] T278 Make Sessions a clear conversation workspace; keep composer reachable and preserve drafts, scroll position and focus through live updates — `web/js/pages/sessions.js`, `web/styles.css`
+- [x] T279 Improve responsive team, approvals, member scope, trace and host information hierarchy; retain raw detail/export access — `web/js/pages/`, `web/styles.css`
+- [ ] T280 Verify keyboard, screen reader updates, touch, zoom, reduced motion, long content and both locales; update design reference — automated checks and design notes complete; manual screen-reader review remains — `tests/e2e/console/`, `design/README.md`
 
 ## Dependencies
 
