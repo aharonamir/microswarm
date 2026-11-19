@@ -8,3 +8,4 @@ pub mod read;
 pub mod rpc;
 pub mod server;
 pub mod status;
+pub mod views;
