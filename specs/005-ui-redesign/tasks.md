@@ -51,7 +51,7 @@
   Files: `C/src/views/steps.rs` tests
 - [x] T314 Implement `views/steps.rs` — `C/src/views/steps.rs`
 - [x] T315 Phases: red tests for the 4 rules and the degraded case, then implement — `C/src/views/phases.rs`
-- [ ] T316 Timeline: red tests for spans (gap merge, waiting supersedes working), marks, the tick cap, stats and `since`, then implement — `C/src/views/timeline.rs`
+- [x] T316 Timeline: red tests for spans (gap merge, waiting supersedes working), marks, the tick cap, stats and `since`, then implement — `C/src/views/timeline.rs`
 - [ ] T317 Team: red tests for grouping by lead turn, anchors, the state mapping table and `more`, then implement — `C/src/views/team.rs`
 - [ ] T318 Reach: red tests for every `NarrowedReason` word, derivation chips (struck/lowered), the lead variant and container words, then implement on top of `read::scope` — `C/src/views/reach.rs`
 - [ ] T319 Home: red tests, then implement `HomeView` — `C/src/views/home.rs`
