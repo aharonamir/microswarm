@@ -1,3 +1,4 @@
+pub mod home;
 pub mod phases;
 pub mod reach;
 pub mod sentences;
