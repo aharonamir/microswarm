@@ -1,0 +1,253 @@
+{
+  "last_seq": 24,
+  "next_before_seq": null,
+  "phases": [
+    {
+      "phase_id": "phase-1",
+      "started_at": "2026-11-19T14:12:15.000Z",
+      "step_ids": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV:2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV:3",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV:4",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW:1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAW:7",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX:10",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX:13",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAX:14"
+      ],
+      "title_args": {
+        "count": 2
+      },
+      "title_key": "phase.parallel"
+    }
+  ],
+  "steps": [
+    {
+      "agent": {
+        "colour_index": 0,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "initial": "L",
+        "kind": "lead",
+        "role": "lead"
+      },
+      "at": "2026-11-19T14:12:13.000Z",
+      "decision": {
+        "value": "reduced"
+      },
+      "ended_at": "2026-11-19T14:12:15.000Z",
+      "event_seqs": [
+        2,
+        1,
+        3
+      ],
+      "kind": "spawn",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "reach": "no file access",
+          "role": "researcher"
+        },
+        "key": "step.spawn"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
+    },
+    {
+      "agent": {
+        "colour_index": 0,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "initial": "L",
+        "kind": "lead",
+        "role": "lead"
+      },
+      "at": "2026-11-19T14:12:14.000Z",
+      "decision": {
+        "value": "reduced"
+      },
+      "ended_at": "2026-11-19T14:12:16.000Z",
+      "event_seqs": [
+        3,
+        2,
+        4
+      ],
+      "kind": "spawn",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "reach": "no file access",
+          "role": "tester"
+        },
+        "key": "step.spawn"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:3"
+    },
+    {
+      "agent": {
+        "colour_index": 0,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "initial": "L",
+        "kind": "lead",
+        "role": "lead"
+      },
+      "at": "2026-11-19T14:12:18.000Z",
+      "event_seqs": [
+        4
+      ],
+      "kind": "model",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {},
+        "key": "step.replied"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:4"
+    },
+    {
+      "agent": {
+        "colour_index": 1,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "initial": "R",
+        "kind": "member",
+        "role": "researcher"
+      },
+      "at": "2026-11-19T14:12:19.000Z",
+      "decision": {
+        "rule": "tool policy",
+        "value": "allowed"
+      },
+      "duration_ms": 160,
+      "ended_at": "2026-11-19T14:12:19.000Z",
+      "event_seqs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "kind": "tool",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "first": "refresh.rs",
+          "n": 1
+        },
+        "key": "step.read_many"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:1"
+    },
+    {
+      "agent": {
+        "colour_index": 1,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "initial": "R",
+        "kind": "member",
+        "role": "researcher"
+      },
+      "at": "2026-11-19T14:12:19.000Z",
+      "decision": {
+        "rule": "tool policy",
+        "value": "allowed"
+      },
+      "duration_ms": 80,
+      "ended_at": "2026-11-19T14:12:19.000Z",
+      "event_seqs": [
+        7,
+        8,
+        9
+      ],
+      "kind": "tool",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "path": "refresh.rs"
+        },
+        "key": "step.read"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:7"
+    },
+    {
+      "agent": {
+        "colour_index": 2,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "initial": "T",
+        "kind": "member",
+        "role": "tester"
+      },
+      "at": "2026-11-19T14:12:19.000Z",
+      "decision": {
+        "rule": "tool policy",
+        "value": "allowed"
+      },
+      "duration_ms": 80,
+      "ended_at": "2026-11-19T14:12:19.000Z",
+      "event_seqs": [
+        10,
+        11,
+        12
+      ],
+      "kind": "tool",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "path": "refresh.rs"
+        },
+        "key": "step.read"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:10"
+    },
+    {
+      "agent": {
+        "colour_index": 2,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "initial": "T",
+        "kind": "member",
+        "role": "tester"
+      },
+      "at": "2026-11-19T14:12:19.000Z",
+      "event_seqs": [
+        13
+      ],
+      "kind": "tool",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "command": "cargo test -p auth"
+        },
+        "key": "step.shell"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:13"
+    },
+    {
+      "agent": {
+        "colour_index": 2,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "initial": "T",
+        "kind": "member",
+        "role": "tester"
+      },
+      "approval": {
+        "code": "K7QF",
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+        "state": "pending"
+      },
+      "at": "2026-11-19T14:12:19.000Z",
+      "decision": {
+        "rule": "tool policy",
+        "value": "denied_by_policy"
+      },
+      "event_seqs": [
+        14,
+        15,
+        20
+      ],
+      "kind": "tool",
+      "phase_id": "phase-1",
+      "sentence": {
+        "args": {
+          "host": "example.com"
+        },
+        "key": "step.fetch"
+      },
+      "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:14"
+    }
+  ]
+}

@@ -52,13 +52,13 @@
 - [x] T314 Implement `views/steps.rs` — `C/src/views/steps.rs`
 - [x] T315 Phases: red tests for the 4 rules and the degraded case, then implement — `C/src/views/phases.rs`
 - [x] T316 Timeline: red tests for spans (gap merge, waiting supersedes working), marks, the tick cap, stats and `since`, then implement — `C/src/views/timeline.rs`
-- [ ] T317 Team: red tests for grouping by lead turn, anchors, the state mapping table and `more`, then implement — `C/src/views/team.rs`
-- [ ] T318 Reach: red tests for every `NarrowedReason` word, derivation chips (struck/lowered), the lead variant and container words, then implement on top of `read::scope` — `C/src/views/reach.rs`
-- [ ] T319 Home: red tests, then implement `HomeView` — `C/src/views/home.rs`
-- [ ] T320 Extend the approval detail with `agent`, `sentence`, `brief`, `policy`, `facts`, `runs_in` and `spawn_preview` (scope intersection via `ms_proto`, nothing written) — `C/src/read.rs`, `C/src/views/`
-- [ ] T321 Extend messages with `based_on_role` and `team_group_id` — `C/src/read.rs`
-- [ ] T322 Add the GET routes in contracts/console-http-additions.md, plus the memo cache (LRU 32, keyed by last seq). Route tests cover shapes, `400` on bad ids, `404` on unknown ids, `421` on a bad Host, `401` without a cookie, and the path-containment check — `C/src/server.rs`, `C/tests/`
-- [ ] T323 Performance test on the `load` fixture: the team view in < 150 ms, the first steps page in < 300 ms, and the timeline in < 300 ms, measured warm in release mode on CI (generous thresholds; the test prints the timings) — `C/tests/perf_views.rs`
+- [x] T317 Team: red tests for grouping by lead turn, anchors, the state mapping table and `more`, then implement — `C/src/views/team.rs`
+- [x] T318 Reach: red tests for every `NarrowedReason` word, derivation chips (struck/lowered), the lead variant and container words, then implement on top of `read::scope` — `C/src/views/reach.rs`
+- [x] T319 Home: red tests, then implement `HomeView` — `C/src/views/home.rs`
+- [x] T320 Extend the approval detail with `agent`, `sentence`, `brief`, `policy`, `facts`, `runs_in` and `spawn_preview` (scope intersection via `ms_proto`, nothing written) — `C/src/read.rs`, `C/src/views/`
+- [x] T321 Extend messages with `based_on_role` and `team_group_id` — `C/src/read.rs`
+- [x] T322 Add the GET routes in contracts/console-http-additions.md, plus the memo cache (LRU 32, keyed by last seq). Route tests cover shapes, `400` on bad ids, `404` on unknown ids, `421` on a bad Host, `401` without a cookie, and the path-containment check — `C/src/server.rs`, `C/tests/`
+- [x] T323 Performance test on the `load` fixture: the team view in < 150 ms, the first steps page in < 300 ms, and the timeline in < 300 ms, measured warm in release mode on CI (generous thresholds; the test prints the timings) — `C/tests/perf_views.rs`
 
 **Checkpoint A:** stop and report:
 - the JSON of `/team`, `/steps?limit=20`, `/timeline` and `/members/<tester>/reach` for the `demo` fixture;

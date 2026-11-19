@@ -1,0 +1,106 @@
+{
+  "agents": [
+    {
+      "colour_index": 0,
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "initial": "L",
+      "kind": "lead",
+      "role": "lead"
+    },
+    {
+      "colour_index": 1,
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      "initial": "R",
+      "kind": "member",
+      "role": "researcher"
+    },
+    {
+      "colour_index": 2,
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      "initial": "T",
+      "kind": "member",
+      "role": "tester"
+    }
+  ],
+  "groups": [
+    {
+      "anchor_message_id": null,
+      "ended_at": "2026-11-19T14:12:18.000Z",
+      "group_id": "group-1",
+      "members": [
+        {
+          "agent": {
+            "colour_index": 1,
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "initial": "R",
+            "kind": "member",
+            "role": "researcher"
+          },
+          "current_step": {
+            "args": {
+              "path": "refresh.rs"
+            },
+            "key": "step.read"
+          },
+          "delegation_id": "D001",
+          "elapsed_ms": 0,
+          "reach_summary": {
+            "credentials": [],
+            "folders": [
+              {
+                "mode": "ro",
+                "path": "/work"
+              }
+            ],
+            "network": "none",
+            "tools_ask": []
+          },
+          "reduced_count": 1,
+          "started_at": "2026-11-19T14:12:15.000Z",
+          "state": "working",
+          "step_count": 2,
+          "task": "Inspect the authentication refresh path",
+          "task_truncated": false
+        },
+        {
+          "agent": {
+            "colour_index": 2,
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+            "initial": "T",
+            "kind": "member",
+            "role": "tester"
+          },
+          "delegation_id": "D002",
+          "elapsed_ms": 0,
+          "pending_approval": {
+            "code": "K7QF",
+            "id": null,
+            "summary": {
+              "args": {},
+              "key": "step.shell.ask"
+            }
+          },
+          "reach_summary": {
+            "credentials": [],
+            "folders": [
+              {
+                "mode": "ro",
+                "path": "/work"
+              }
+            ],
+            "network": "none",
+            "tools_ask": []
+          },
+          "reduced_count": 1,
+          "started_at": "2026-11-19T14:12:16.000Z",
+          "state": "waiting_you",
+          "step_count": 3,
+          "task": "Run the auth tests and report failures",
+          "task_truncated": false
+        }
+      ],
+      "more": 0,
+      "started_at": "2026-11-19T14:12:13.000Z"
+    }
+  ]
+}

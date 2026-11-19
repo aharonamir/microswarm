@@ -1,0 +1,211 @@
+{
+  "can_reach": [
+    {
+      "icon": "folder",
+      "tag": "read only",
+      "text": {
+        "args": {
+          "path": "/work"
+        },
+        "key": "reach.folder"
+      }
+    }
+  ],
+  "container": {
+    "args": {
+      "mounts": 1,
+      "network": "none",
+      "no_new_privileges": true,
+      "root_read_only": true
+    },
+    "files_key": "reach.container.files",
+    "network_key": "reach.container.network",
+    "process_key": "reach.container.process"
+  },
+  "derivation": {
+    "ceiling": [],
+    "granted": [
+      {
+        "lowered": false,
+        "struck": false,
+        "text": "/work"
+      }
+    ],
+    "lead": [
+      {
+        "lowered": false,
+        "struck": false,
+        "text": "/work"
+      }
+    ],
+    "requested": [
+      {
+        "lowered": true,
+        "struck": false,
+        "text": "/work"
+      }
+    ]
+  },
+  "raw": {
+    "ceiling": [],
+    "granted": {
+      "credentials": [],
+      "delegation": null,
+      "derived_from": "delegation",
+      "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "limits": {
+        "max_tokens": 4000,
+        "max_turns": 20,
+        "memory_mb": 128,
+        "pids": 32,
+        "tmp_mb": 32
+      },
+      "mounts": [
+        {
+          "container_path": "/work",
+          "host_path": "/tmp",
+          "mode": "ro"
+        }
+      ],
+      "narrowed": [
+        {
+          "dimension": "mount",
+          "item": "/work",
+          "reason": "mode_downgraded"
+        }
+      ],
+      "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      "source_ref": "code-review-team@1.2.0",
+      "tools": [],
+      "version": 1
+    },
+    "lead": {
+      "credentials": [],
+      "delegation": null,
+      "derived_from": "delegation",
+      "hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "limits": {
+        "max_tokens": 4000,
+        "max_turns": 20,
+        "memory_mb": 128,
+        "pids": 32,
+        "tmp_mb": 32
+      },
+      "mounts": [
+        {
+          "container_path": "/work",
+          "host_path": "/tmp",
+          "mode": "rw"
+        }
+      ],
+      "narrowed": [],
+      "session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "source_ref": "code-review-team@1.2.0",
+      "tools": [],
+      "version": 1
+    },
+    "requested": [
+      {
+        "ceiling": [],
+        "dimension": "mounts",
+        "granted": [
+          {
+            "container_path": "/work",
+            "host_path": "/tmp",
+            "mode": "ro"
+          }
+        ],
+        "lead": [
+          {
+            "container_path": "/work",
+            "host_path": "/tmp",
+            "mode": "rw"
+          }
+        ],
+        "narrowed": [
+          {
+            "dimension": "mount",
+            "item": "/work",
+            "reason": "mode_downgraded"
+          }
+        ],
+        "requested": [
+          {
+            "container_path": "/work",
+            "host_path": "/tmp",
+            "mode": "rw"
+          }
+        ]
+      },
+      {
+        "ceiling": [],
+        "dimension": "credentials",
+        "granted": [],
+        "lead": [],
+        "narrowed": [],
+        "requested": []
+      },
+      {
+        "ceiling": [],
+        "dimension": "tools",
+        "granted": [],
+        "lead": [],
+        "narrowed": [],
+        "requested": []
+      },
+      {
+        "ceiling": [],
+        "dimension": "limits",
+        "granted": {
+          "max_tokens": 4000,
+          "max_turns": 20,
+          "memory_mb": 128,
+          "pids": 32,
+          "tmp_mb": 32
+        },
+        "lead": {
+          "max_tokens": 4000,
+          "max_turns": 20,
+          "memory_mb": 128,
+          "pids": 32,
+          "tmp_mb": 32
+        },
+        "narrowed": [],
+        "requested": {
+          "max_tokens": 4000,
+          "max_turns": 20,
+          "memory_mb": 128,
+          "pids": 32,
+          "tmp_mb": 32
+        }
+      },
+      {
+        "ceiling": [],
+        "dimension": "delegation",
+        "granted": null,
+        "lead": null,
+        "narrowed": [],
+        "requested": null
+      }
+    ]
+  },
+  "reduced": [
+    {
+      "dimension": "mount",
+      "item": "/work",
+      "reason": "mode_downgraded",
+      "text": {
+        "args": {},
+        "key": "reach.reason.mode_downgraded"
+      }
+    }
+  ],
+  "summary": {
+    "args": {
+      "credentials": 0,
+      "folders": 1,
+      "network": "none"
+    },
+    "key": "reach.summary"
+  }
+}
