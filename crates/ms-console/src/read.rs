@@ -271,6 +271,42 @@ pub fn trace(home: &Path, id: &str) -> Result<Value, String> {
     Ok(json!({"sessions":sessions,"events":result.events}))
 }
 
+pub fn member_report(home: &Path, id: &str) -> Result<Value, String> {
+    if !valid_session_id(id) {
+        return Err("invalid session id".into());
+    }
+    let db = supervisor(home)?;
+    let exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1 AND parent_id IS NOT NULL)",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if !exists {
+        return Err("session not found".into());
+    }
+    let trace = ms_runtime::trace::build(home, id, None)?;
+    let event = trace
+        .events
+        .iter()
+        .rev()
+        .find(|event| event["session_id"] == id && event["type"] == "delegation.reply");
+    let text = event
+        .and_then(|event| event["data"]["text"].as_str())
+        .map(|text| text.chars().take(20 * 1024).collect::<String>());
+    let status = text
+        .as_deref()
+        .and_then(|text| text.lines().next())
+        .and_then(|line| line.strip_prefix("Status:"))
+        .map(str::trim)
+        .map(str::to_lowercase)
+        .filter(|value| matches!(value.as_str(), "done" | "partial" | "blocked"));
+    Ok(
+        json!({"text":text,"at":event.map(|event|event["ts"].clone()).unwrap_or(Value::Null),"status":status}),
+    )
+}
+
 pub fn messages(
     home: &Path,
     id: &str,
@@ -771,7 +807,42 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
     let policy = json!({"rule":format!("{tool_name} = ask"),"source":"policy","source_ref":null});
     let facts = command.map(|command| vec![json!({"key":"parse.simple"}),json!({"key":"parse.program","args":{"program":command.split_whitespace().next().unwrap_or("")}}),json!({"key":"parse.no_pipes"})]).unwrap_or_default();
     let runs_summary = json!({"folders":runs_in["mounts"].as_array().into_iter().flatten().map(|m|json!({"path":m["container_path"],"mode":m["mode"]})).collect::<Vec<_>>(),"network":"none","credentials":runs_in["credentials"],"tools_ask":[]});
+    let spawn_preview = if kind == "spawn" {
+        spawn_preview(home, &root, &payload)
+    } else {
+        None
+    };
     Ok(
-        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_summary,"raw":{"runs_in":runs_in},"agent":agent,"sentence":sentence,"brief":brief.map(|text|json!({"text":text,"from":"lead","at":created})),"policy":policy,"facts":facts,"spawn_preview":if kind=="spawn" {Some(Value::Null)} else {None}}),
+        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_summary,"raw":{"runs_in":runs_in},"agent":agent,"sentence":sentence,"brief":brief.map(|text|json!({"text":text,"from":"lead","at":created})),"policy":policy,"facts":facts,"spawn_preview":spawn_preview}),
     )
+}
+
+fn spawn_preview(home: &Path, root: &str, payload: &Value) -> Option<Value> {
+    let db = supervisor(home).ok()?;
+    let raw: Option<String> = db
+        .query_row(
+            "SELECT scope_json FROM sessions WHERE id=?1",
+            [root],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten()?;
+    let lead: ms_proto::Scope = serde_json::from_str(&raw?).ok()?;
+    let request: ms_proto::Scope = serde_json::from_value(payload["scope"].clone()).ok()?;
+    let path = if home.join("config/ceiling.toml").exists() {
+        home.join("config/ceiling.toml")
+    } else {
+        home.join("ceiling.toml")
+    };
+    let config = read_config_value(&path);
+    let ceiling: ms_proto::ScopeCeiling = config
+        .get("ceiling")
+        .cloned()
+        .and_then(|value| serde_json::to_value(value).ok())
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    ms_proto::intersect_scope(&request, &lead, &ceiling)
+        .ok()
+        .and_then(|scope| serde_json::to_value(scope).ok())
 }

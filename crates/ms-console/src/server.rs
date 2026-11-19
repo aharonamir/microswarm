@@ -268,11 +268,129 @@ struct RequestContext {
     chats: Arc<Mutex<ChatManager>>,
 }
 
+fn session_view_data(
+    home: &Path,
+    id: &str,
+) -> Result<(ms_runtime::trace::TraceData, Vec<serde_json::Value>), (StatusCode, &'static str)> {
+    if !crate::read::valid_session_id(id) {
+        return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+    }
+    let trace = ms_runtime::trace::build(home, id, None).map_err(|e| read_error(&e))?;
+    let agents = crate::views::agents(&trace);
+    Ok((trace, agents))
+}
+
+fn parse_query_i64(query: &str, key: &str) -> Result<Option<i64>, (StatusCode, &'static str)> {
+    query_value(query, key)
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid_query"))
+        })
+        .transpose()
+}
+fn parse_query_usize(query: &str, key: &str) -> Result<Option<usize>, (StatusCode, &'static str)> {
+    query_value(query, key)
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid_query"))
+        })
+        .transpose()
+}
+
+type ViewCache = std::collections::VecDeque<(String, String, i64, String, serde_json::Value)>;
+static VIEW_CACHE: std::sync::OnceLock<std::sync::Mutex<ViewCache>> = std::sync::OnceLock::new();
+fn memo_view(
+    home: &Path,
+    trace: &ms_runtime::trace::TraceData,
+    name: String,
+    build: impl FnOnce() -> serde_json::Value,
+) -> serde_json::Value {
+    let root = trace
+        .sessions
+        .first()
+        .map(|session| session.root.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    let newest = trace.events.len() as i64;
+    let home = home.to_string_lossy().into_owned();
+    let cache = VIEW_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::VecDeque::new()));
+    if let Ok(mut entries) = cache.lock()
+        && let Some(index) = entries.iter().position(|entry| {
+            entry.0 == home && entry.1 == root && entry.2 == newest && entry.3 == name
+        })
+    {
+        let entry = entries.remove(index).unwrap();
+        let value = entry.4.clone();
+        entries.push_front(entry);
+        return value;
+    }
+    let value = build();
+    if let Ok(mut entries) = cache.lock() {
+        entries.push_front((home, root, newest, name, value.clone()));
+        let mut sessions = Vec::<(String, String)>::new();
+        for entry in entries.iter() {
+            let session = (entry.0.clone(), entry.1.clone());
+            if !sessions.contains(&session) {
+                sessions.push(session);
+            }
+        }
+        while sessions.len() > 32 {
+            if let Some(evicted) = sessions.pop() {
+                entries.retain(|entry| {
+                    (entry.0.as_str(), entry.1.as_str()) != (evicted.0.as_str(), evicted.1.as_str())
+                });
+            }
+        }
+    }
+    value
+}
+
 fn api_get(
     home: &Path,
     path: &str,
     query: &str,
 ) -> Result<serde_json::Value, (StatusCode, &'static str)> {
+    if path == "/api/v1/home" {
+        let mut sessions =
+            crate::read::sessions(home, "active").map_err(|e| read_error(&e))?["sessions"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+        sessions.extend(
+            crate::read::sessions(home, "ended").map_err(|e| read_error(&e))?["sessions"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default(),
+        );
+        for session in &mut sessions {
+            if let Some(id) = session["id"].as_str()
+                && let Ok((trace, agents)) = session_view_data(home, id)
+            {
+                session["agents"] = serde_json::json!(agents);
+                let steps = crate::views::steps::derive(
+                    &trace.events,
+                    &agents,
+                    None,
+                    None,
+                    200,
+                    "everything",
+                )["steps"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                session["latest"]=steps.last().map(|step|serde_json::json!({"who":step["agent"]["role"],"text_or_sentence":step["sentence"]})).unwrap_or_else(||serde_json::json!({"who":"lead","text_or_sentence":null}));
+                session["last_line"] = session["latest"]["text_or_sentence"].clone();
+            }
+        }
+        let approvals =
+            crate::read::approvals(home, "pending").map_err(|e| read_error(&e))?["approvals"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+        return Ok(crate::views::home::derive(&sessions, &approvals, None));
+    }
     if path == "/api/v1/overview" {
         let pending = crate::read::pending_approvals(home).unwrap_or(0);
         return Ok(
@@ -295,6 +413,150 @@ fn api_get(
         .split('/')
         .collect::<Vec<_>>();
     match parts.as_slice() {
+        ["sessions", id, "team"] => {
+            let (trace, agents) = session_view_data(home, id)?;
+            Ok(memo_view(home, &trace, "team".into(), || {
+                let steps = crate::views::steps::derive(
+                    &trace.events,
+                    &agents,
+                    None,
+                    None,
+                    200,
+                    "everything",
+                )["steps"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let mut team = crate::views::team::derive(&trace.events, &agents, &steps);
+                if let Some(groups) = team["groups"].as_array_mut() {
+                    for member in groups
+                        .iter_mut()
+                        .flat_map(|group| group["members"].as_array_mut().into_iter().flatten())
+                    {
+                        if let Some(member_id) = member["agent"]["id"].as_str()
+                            && let Ok(scope) = crate::read::scope(home, member_id, true)
+                        {
+                            member["reach_summary"] =
+                                crate::views::reach::summary(&scope["granted"]);
+                        }
+                    }
+                }
+                team
+            }))
+        }
+        ["sessions", id, "steps"] => {
+            let (trace, agents) = session_view_data(home, id)?;
+            let before = parse_query_i64(query, "before_seq")?;
+            let after = parse_query_i64(query, "after_seq")?;
+            if before.is_some() && after.is_some() {
+                return Err((StatusCode::BAD_REQUEST, "invalid_query"));
+            }
+            let limit = parse_query_usize(query, "limit")?.unwrap_or(200);
+            if !(1..=200).contains(&limit) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_query"));
+            }
+            let filter = query_value(query, "filter").unwrap_or_else(|| "everything".into());
+            if !matches!(filter.as_str(), "everything" | "decisions" | "problems") {
+                return Err((StatusCode::BAD_REQUEST, "invalid_query"));
+            }
+            let cache_key = format!("steps:{query}");
+            let agent_id = query_value(query, "agent");
+            if let Some(agent) = agent_id.as_deref() {
+                if !crate::read::valid_session_id(agent) {
+                    return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+                }
+                if !agents.iter().any(|item| item["id"] == agent) {
+                    return Err((StatusCode::NOT_FOUND, "not_found"));
+                }
+            }
+            Ok(memo_view(home, &trace, cache_key, || {
+                let mut result = crate::views::steps::derive_for_agent(
+                    &trace.events,
+                    &agents,
+                    before,
+                    after,
+                    limit,
+                    &filter,
+                    agent_id.as_deref(),
+                );
+                let mut phases = crate::views::phases::derive(&trace.events, &agents);
+                for phase in &mut phases {
+                    phase["step_ids"] = serde_json::json!(
+                        result["steps"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|step| step["phase_id"] == phase["phase_id"])
+                            .map(|step| step["step_id"].clone())
+                            .collect::<Vec<_>>()
+                    );
+                }
+                result["phases"] = serde_json::json!(phases);
+                result
+            }))
+        }
+        ["sessions", id, "timeline"] => {
+            let (trace, agents) = session_view_data(home, id)?;
+            let since = query_value(query, "since");
+            let cache_key = format!("timeline:{}", since.as_deref().unwrap_or(""));
+            Ok(memo_view(home, &trace, cache_key, || {
+                let steps = crate::views::steps::derive(
+                    &trace.events,
+                    &agents,
+                    None,
+                    None,
+                    200,
+                    "everything",
+                )["steps"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                crate::views::timeline::derive(&trace.events, &agents, &steps, since.as_deref())
+            }))
+        }
+        ["sessions", id, "reach"] => {
+            if !crate::read::valid_session_id(id) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+            }
+            let view = crate::read::scope(home, id, false).map_err(|e| read_error(&e))?;
+            crate::views::reach::derive(&view, true)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "read_failed"))
+        }
+        ["members", id, "reach"] => {
+            if !crate::read::valid_session_id(id) {
+                return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
+            }
+            let view = crate::read::scope(home, id, true).map_err(|e| read_error(&e))?;
+            crate::views::reach::derive(&view, false)
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "read_failed"))
+        }
+        ["members", id, "report"] => {
+            crate::read::member_report(home, id).map_err(|e| read_error(&e))
+        }
+        ["sessions", id, "steps", step_id] => {
+            let (trace, agents) = session_view_data(home, id)?;
+            let steps =
+                crate::views::steps::derive(&trace.events, &agents, None, None, 200, "everything")
+                    ["steps"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+            let step = steps
+                .iter()
+                .find(|step| step["step_id"] == *step_id)
+                .cloned()
+                .ok_or((StatusCode::NOT_FOUND, "not_found"))?;
+            let seqs = step["event_seqs"].as_array().cloned().unwrap_or_default();
+            let events = trace
+                .events
+                .iter()
+                .filter(|event| seqs.iter().any(|seq| *seq == event["seq"]))
+                .cloned()
+                .collect::<Vec<_>>();
+            Ok(
+                serde_json::json!({"step":step,"explanation":{"decision":step["decision"],"facts":[]},"events":events}),
+            )
+        }
         ["sessions", id] => crate::read::session(home, id).map_err(|e| read_error(&e)),
         ["sessions", id, "scope"] => {
             crate::read::scope(home, id, false).map_err(|e| read_error(&e))
@@ -782,4 +1044,68 @@ pub fn encode_sse_event(event: &ConsoleEvent) -> String {
         "id: {}\nevent: {}\ndata: {}\n\n",
         event.id, event.name, data
     )
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+    #[test]
+    fn new_routes_reject_bad_ids_before_filesystem_reads() {
+        let home = std::path::Path::new("/no-such-ms-home");
+        for path in [
+            "/api/v1/sessions/../team",
+            "/api/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAVX/team",
+            "/api/v1/sessions/01arz3ndektsv4rrffq69g5fav/team",
+            "/api/v1/members/lowercase/reach",
+        ] {
+            assert_eq!(
+                api_get(home, path, "").unwrap_err(),
+                (StatusCode::BAD_REQUEST, "invalid_session_id")
+            );
+        }
+    }
+    #[test]
+    fn steps_query_validation_rejects_bad_limits_and_filters() {
+        assert_eq!(parse_query_usize("limit=0", "limit").unwrap(), Some(0));
+        assert_eq!(
+            parse_query_i64("after_seq=nope", "after_seq").unwrap_err(),
+            (StatusCode::BAD_REQUEST, "invalid_query")
+        );
+    }
+
+    #[test]
+    fn new_session_routes_return_contract_shapes_and_unknown_is_404() {
+        use rusqlite::Connection;
+        let home = std::env::temp_dir().join(format!("ms-view-routes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(&home).unwrap();
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let db = Connection::open(home.join("supervisor.db")).unwrap();
+        db.execute_batch("CREATE TABLE sessions(id TEXT PRIMARY KEY,root_id TEXT,parent_id TEXT,role TEXT,status TEXT,scope_json TEXT,created_at TEXT); CREATE TABLE supervisor_events(seq INTEGER,ts TEXT,ts_mono INTEGER,session_id TEXT,root_session_id TEXT,agent_role TEXT,type TEXT,data TEXT);").unwrap();
+        db.execute(
+            "INSERT INTO sessions VALUES(?1,?1,NULL,'lead','ready',NULL,'2026-11-19T00:00:00Z')",
+            [id],
+        )
+        .unwrap();
+        db.execute("INSERT INTO supervisor_events VALUES(1,'2026-11-19T00:00:00Z',1,?1,?1,'lead','session.created','{}')",[id]).unwrap();
+        drop(db);
+        let team = api_get(&home, &format!("/api/v1/sessions/{id}/team"), "").unwrap();
+        assert!(team["groups"].is_array() && team["agents"].is_array());
+        let steps = api_get(&home, &format!("/api/v1/sessions/{id}/steps"), "limit=20").unwrap();
+        assert!(
+            steps["steps"].is_array()
+                && steps["phases"].is_array()
+                && steps["last_seq"].is_number()
+        );
+        let timeline = api_get(&home, &format!("/api/v1/sessions/{id}/timeline"), "").unwrap();
+        assert!(timeline["lanes"].is_array() && timeline["stats"].is_object());
+        let missing = api_get(
+            &home,
+            "/api/v1/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAW/team",
+            "",
+        )
+        .unwrap_err();
+        assert_eq!(missing, (StatusCode::NOT_FOUND, "not_found"));
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }
