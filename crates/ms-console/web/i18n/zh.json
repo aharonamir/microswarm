@@ -247,5 +247,9 @@
   "dock.more": "另有 {count} 项",
   "dock.approve": "批准",
   "dock.deny": "拒绝",
-  "nav.menu": "菜单"
+  "nav.menu": "菜单",
+  "step.exit.ok": "已完成",
+  "step.exit.transient": "暂时停止",
+  "step.exit.safety": "因安全原因停止",
+  "step.exit.config": "因配置问题停止"
 }

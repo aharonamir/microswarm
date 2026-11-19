@@ -39,7 +39,7 @@
 ## Phase 2 — Derivation (server, test-first)
 
 - [x] T311 Add red JSONL event fixtures and unit tests for sentences (one per row in contracts/step-sentences.md, folding, truncation, hostile args) — `C/tests/fixtures/*.jsonl`, `C/src/views/sentences.rs` tests
-- [ ] T312 Implement `views/sentences.rs` and `views/mod.rs` (Agent colours/initials, helpers) — `C/src/views/`
+- [x] T312 Implement `views/sentences.rs` and `views/mod.rs` (Agent colours/initials, helpers) — `C/src/views/`
 - [ ] T313 Red tests for steps:
   - pairing call/decision/result;
   - approval attach (including two identical calls);

@@ -247,5 +247,9 @@
   "dock.more": "+{count} more",
   "dock.approve": "Approve",
   "dock.deny": "Deny",
-  "nav.menu": "Menu"
+  "nav.menu": "Menu",
+  "step.exit.ok": "Finished",
+  "step.exit.transient": "Stopped temporarily",
+  "step.exit.safety": "Stopped for safety",
+  "step.exit.config": "Stopped because of configuration"
 }
