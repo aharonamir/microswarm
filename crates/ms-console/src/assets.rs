@@ -22,9 +22,53 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/dom.js"),
         ),
+        "/js/format.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/format.js"),
+        ),
+        "/js/live.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/live.js"),
+        ),
         "/js/components/nav.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/components/nav.js"),
+        ),
+        "/js/components/avatar.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/avatar.js"),
+        ),
+        "/js/components/pill.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/pill.js"),
+        ),
+        "/js/components/step.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/step.js"),
+        ),
+        "/js/components/teamcard.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/teamcard.js"),
+        ),
+        "/js/components/dock.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/dock.js"),
+        ),
+        "/js/components/tabs.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/tabs.js"),
+        ),
+        "/js/components/drawer.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/drawer.js"),
+        ),
+        "/js/components/lanes.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/lanes.js"),
+        ),
+        "/js/components/teampanel.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/teampanel.js"),
         ),
         "/js/router.js" => (
             "text/javascript; charset=utf-8",
@@ -45,6 +89,10 @@ pub fn get(path: &str) -> Option<Asset> {
         "/js/pages/sessions.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/sessions.js"),
+        ),
+        "/js/pages/session.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/session.js"),
         ),
         "/js/pages/approvals.js" => (
             "text/javascript; charset=utf-8",

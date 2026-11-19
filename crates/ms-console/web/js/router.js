@@ -21,9 +21,7 @@ export function currentRoute() {
     redirect(`#/sessions/${id}/trajectory`);
     value = `sessions/${id}/trajectory`;
   } else if (value.startsWith("members/")) {
-    const id = value.split("/")[1] || "";
-    redirect(`#/sessions/${id}/members/${id}`);
-    value = `sessions/${id}/members/${id}`;
+    return { page: "member", parts: [value.split("/")[1] || ""], legacy: true };
   }
   const [name = "home", ...parts] = value.split("/");
   if (name === "sessions" && parts[1] === "trajectory") return { page: "trajectory", parts: [parts[0], parts[2]].filter(Boolean) };

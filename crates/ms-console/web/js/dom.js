@@ -26,3 +26,20 @@ export function svg(tag, attrs = {}, children = []) {
 }
 
 export function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+export function append(node, ...children) {
+  for (const child of children.flat(Infinity)) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  return node;
+}
+export function setText(node, value) { clear(node); node.append(document.createTextNode(String(value ?? ""))); }
+export function replace(node, children = []) { clear(node); for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child))); }
+export function style(node, properties) {
+  for (const [property, value] of Object.entries(properties)) node.style.setProperty(property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`), String(value));
+}
+export function setAttr(node, name, value) {
+  if (name === "style") throw new TypeError("Use CSSOM properties for dynamic styles.");
+  if (value === false || value == null) node.removeAttribute(name);
+  else if (value === true) node.setAttribute(name, "");
+  else node.setAttribute(name, String(value));
+}
+export function setProp(node, name, value) { node[name] = value; }
+export function toggleClass(node, name, force) { node.classList.toggle(name, Boolean(force)); }

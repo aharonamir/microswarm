@@ -67,19 +67,19 @@
 
 ## Phase 3 — US1 Session conversation (P1) 🎯
 
-- [ ] T324 [P] Red e2e for US1 scenarios 1–6, including the dock staying in view at the 4 widths (SC-U05) — `tests/e2e/console/session.spec.js`
-- [ ] T325 [P] Components: `avatar.js`, `pill.js` (status and decision pills, always with words), `step.js` (step row with icon, sentence with `<code>` args, duration and decision) — `C/web/js/components/`
-- [ ] T326 `session.js`: header (title, helper, status pill, avatar stack, Trajectory, End session); conversation with You bubbles and Lead blocks; sender lines with `based_on_role` — `C/web/js/pages/session.js`
-- [ ] T327 Team card at the `team_group_id` anchors: rows, expand with steps (first 20, "Show all N steps"), waiting-row styling, live tail with `after_seq` — `C/web/js/components/teamcard.js`
-- [ ] T328 Approval dock: pinned in the layout above the composer, oldest first with "+N more", Approve and Deny through the 002 decide call, "Already decided on another channel", and the "Why it asks" link — `C/web/js/components/dock.js`
-- [ ] T329 Composer moved into the dock area; keep 002's draft, caret, focus and scroll preservation and the in-flight lock; the ended-session state (FR edge case) — `C/web/js/pages/session.js`
-- [ ] T330 Live updates: SSE events for the open root trigger throttled (1/s per view) refetches of the team, steps tail, approvals and status — `C/web/js/live.js`
+- [x] T324 [P] Red e2e for US1 scenarios 1–6, including the dock staying in view at the 4 widths (SC-U05) — `tests/e2e/console/session.spec.js`
+- [x] T325 [P] Components: `avatar.js`, `pill.js` (status and decision pills, always with words), `step.js` (step row with icon, sentence with `<code>` args, duration and decision) — `C/web/js/components/`
+- [x] T326 `session.js`: header (title, helper, status pill, avatar stack, Trajectory, End session); conversation with You bubbles and Lead blocks; sender lines with `based_on_role` — `C/web/js/pages/session.js`
+- [x] T327 Team card at the `team_group_id` anchors: rows, expand with steps (first 20, "Show all N steps"), waiting-row styling, live tail with `after_seq` — `C/web/js/components/teamcard.js`
+- [x] T328 Approval dock: pinned in the layout above the composer, oldest first with "+N more", Approve and Deny through the 002 decide call, "Already decided on another channel", and the "Why it asks" link — `C/web/js/components/dock.js`
+- [x] T329 Composer moved into the dock area; keep 002's draft, caret, focus and scroll preservation and the in-flight lock; the ended-session state (FR edge case) — `C/web/js/pages/session.js`
+- [x] T330 Live updates: SSE events for the open root trigger throttled (1/s per view) refetches of the team, steps tail, approvals and status — `C/web/js/live.js`
 
 ## Phase 4 — US2 Team panel and member drawer (P1)
 
-- [ ] T331 [P] Red e2e for US2 scenarios 1–5 (reduction words, derivation, drawer focus return, dismiss prefill, redirect) — `tests/e2e/console/member.spec.js`
-- [ ] T332 `lanes.js` (shared with the trajectory): lanes, spans, ticks and marks positioned with CSSOM percentages. Team panel: lane strip (`since` = 15 min) and agent cards with reach lines and the reduced count; hidden below 1100 px, with the agent strip under the title in its place — `C/web/js/components/lanes.js`, `C/web/js/components/teampanel.js`
-- [ ] T333 Member drawer: header, task box, tabs (Steps / What it can reach / Report), reach tab per design/README, report as plain text, nav collapse, conversation dimming with row highlight; full screen below 1100 px; Esc and Close return focus — `C/web/js/pages/member.js`, `C/web/js/components/{drawer,tabs}.js`
+- [x] T331 [P] Red e2e for US2 scenarios 1–5 (reduction words, derivation, drawer focus return, dismiss prefill, redirect) — `tests/e2e/console/member.spec.js`
+- [x] T332 `lanes.js` (shared with the trajectory): lanes, spans, ticks and marks positioned with CSSOM percentages. Team panel: lane strip (`since` = 15 min) and agent cards with reach lines and the reduced count; hidden below 1100 px, with the agent strip under the title in its place — `C/web/js/components/lanes.js`, `C/web/js/components/teampanel.js`
+- [x] T333 Member drawer: header, task box, tabs (Steps / What it can reach / Report), reach tab per design/README, report as plain text, nav collapse, conversation dimming with row highlight; full screen below 1100 px; Esc and Close return focus — `C/web/js/pages/member.js`, `C/web/js/components/{drawer,tabs}.js`
 
 **Checkpoint B:** stop for owner review. Report:
 - screenshots of the session (no drawer), the session with the tester drawer, and the phone session, at 1440/768/390/320, beside the baseline from T302;

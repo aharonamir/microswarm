@@ -12,7 +12,7 @@ export async function renderNav(root, { page, parts, pending, t, focusHref }) {
   ];
   for (const [route, key, href, icon] of links) {
     const active = route === page || (route === "trajectories" && page === "trajectory");
-    root.append(el("a", { href, "data-route": route, "aria-label": t(key), "aria-current": active ? "page" : false, class: route === "sessions" ? "new-session-link" : "" }, [
+    root.append(el("a", { href, "data-route": route, "aria-current": active ? "page" : false, class: route === "sessions" ? "new-session-link" : "" }, [
       el("span", { class: "nav-icon", "aria-hidden": "true" }, [icon]),
       el("span", { class: "nav-label" }, [t(key)]),
       ...(route === "approvals" ? [el("span", { class: "badge", hidden: pending < 1 }, [String(pending)])] : []),
