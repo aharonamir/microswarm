@@ -49,7 +49,7 @@
   - paging with `before_seq` and `after_seq`.
 
   Files: `C/src/views/steps.rs` tests
-- [ ] T314 Implement `views/steps.rs` — `C/src/views/steps.rs`
+- [x] T314 Implement `views/steps.rs` — `C/src/views/steps.rs`
 - [ ] T315 Phases: red tests for the 4 rules and the degraded case, then implement — `C/src/views/phases.rs`
 - [ ] T316 Timeline: red tests for spans (gap merge, waiting supersedes working), marks, the tick cap, stats and `since`, then implement — `C/src/views/timeline.rs`
 - [ ] T317 Team: red tests for grouping by lead turn, anchors, the state mapping table and `more`, then implement — `C/src/views/team.rs`
