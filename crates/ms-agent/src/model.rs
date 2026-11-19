@@ -181,11 +181,7 @@ impl ModelClient {
             ));
         }
         let mut client = Self::new(proxy_url, provider, model, credential_name)?;
-        client.system_instruction = std::env::var("MS_ROLE_INSTRUCTIONS")
-            .ok()
-            .map(std::fs::read_to_string)
-            .transpose()
-            .map_err(|error| ModelError::new(format!("cannot read role instructions: {error}")))?;
+        client.system_instruction = Some(context.system_instruction.clone());
         client.mcp =
             Some(McpClient::from_env(&context.scope).map_err(|error| {
                 ModelError::new(format!("cannot configure MCP clients: {error}"))
@@ -281,13 +277,18 @@ impl ModelClient {
                     "parallel_tool_calls": false,
                 })
             }
-            ModelProvider::Anthropic => json!({
-                "model": self.model,
-                "max_tokens": 4096,
-                "system": self.system_instruction,
-                "messages": messages,
-                "tools": tools,
-            }),
+            ModelProvider::Anthropic => {
+                let mut body = json!({
+                    "model": self.model,
+                    "max_tokens": 4096,
+                    "messages": messages,
+                    "tools": tools,
+                });
+                if let Some(instruction) = &self.system_instruction {
+                    body["system"] = json!(instruction);
+                }
+                body
+            }
         }
     }
 
@@ -705,8 +706,18 @@ impl ModelClient {
                         if reason == PermitError::Denied.to_string()
                             || reason == PermitError::NotGranted.to_string() =>
                     {
-                        let reply = format!("Tool call denied: {server}/{tool}.");
-                        return Ok(reply_output(reply, in_reply_to, delta));
+                        let content = if reason == PermitError::Denied.to_string() {
+                            "denied by policy"
+                        } else {
+                            "outside session scope"
+                        };
+                        let result_entry = tool_result_history(
+                            self.provider,
+                            &call_id,
+                            json!({"isError":true,"content":content}),
+                        );
+                        conversation.push(result_entry.clone());
+                        delta.push(result_entry);
                     }
                     Err(reason) => {
                         let result_entry = tool_result_history(
@@ -906,11 +917,18 @@ impl ModelClient {
                         if reason == PermitError::Denied.to_string()
                             || reason == PermitError::NotGranted.to_string() =>
                     {
-                        return Ok(reply_output(
-                            format!("Tool call denied: {server}/{tool}."),
-                            in_reply_to,
-                            delta,
-                        ));
+                        let content = if reason == PermitError::Denied.to_string() {
+                            "denied by policy"
+                        } else {
+                            "outside session scope"
+                        };
+                        let entry = tool_result_history(
+                            self.provider,
+                            &call_id,
+                            json!({"isError":true,"content":content}),
+                        );
+                        conversation.push(entry.clone());
+                        delta.push(entry);
                     }
                     Err(reason) => {
                         let entry = tool_result_history(
@@ -1024,6 +1042,23 @@ while IFS= read -r line; do
 done
 "#;
 
+    #[test]
+    fn anthropic_request_never_serializes_a_null_system_prompt() {
+        let client = ModelClient::new(
+            "http://127.0.0.1/v1",
+            ModelProvider::Anthropic,
+            "model",
+            "key",
+        )
+        .unwrap();
+        let body = client.request_body(&[], "hello", &[]);
+        assert!(!body.as_object().unwrap().contains_key("system"));
+        let mut configured = client;
+        configured.system_instruction = Some("assembled system prompt".into());
+        let body = configured.request_body(&[], "hello", &[]);
+        assert_eq!(body["system"], "assembled system prompt");
+    }
+
     fn test_scope() -> Scope {
         let mut scope = Scope {
             version: 1,
@@ -1063,6 +1098,104 @@ done
             assistant_tool_call_message(ModelProvider::OpenAiCompatible, &response, "call-1");
         assert_eq!(message["tool_calls"].as_array().unwrap().len(), 1);
         assert_eq!(message["tool_calls"][0]["id"], "call-1");
+    }
+
+    #[test]
+    fn policy_denial_is_returned_to_model_as_tool_error() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            for index in 0..2 {
+                let (stream, _) = listener.accept().unwrap();
+                let mut request = BufReader::new(stream);
+                let mut line = String::new();
+                request.read_line(&mut line).unwrap();
+                let mut content_length = 0;
+                loop {
+                    line.clear();
+                    request.read_line(&mut line).unwrap();
+                    if line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                    if let Some((name, value)) = line.split_once(':')
+                        && name.eq_ignore_ascii_case("content-length")
+                    {
+                        content_length = value.trim().parse::<usize>().unwrap();
+                    }
+                }
+                let mut body = vec![0; content_length];
+                request.read_exact(&mut body).unwrap();
+                let body: Value = serde_json::from_slice(&body).unwrap();
+                let response = if index == 0 {
+                    r#"{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-denied","type":"function","function":{"name":"ms_weather__read","arguments":"{}"}}]}}]}"#
+                } else {
+                    assert!(
+                        body["messages"].as_array().unwrap().iter().any(|message| {
+                            message["role"] == "tool"
+                                && message["content"].as_str().is_some_and(|content| {
+                                    let result: Value = serde_json::from_str(content).unwrap();
+                                    result["isError"] == true
+                                        && result["content"] == "denied by policy"
+                                })
+                        }),
+                        "the model must receive a policy denial as a tool error"
+                    );
+                    r#"{"choices":[{"message":{"content":"I will use another approach."}}]}"#
+                };
+                write!(request.get_mut(), "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).unwrap();
+                request.get_mut().flush().unwrap();
+            }
+        });
+
+        let dir = std::env::temp_dir().join(format!("ms-policy-deny-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let _supervisor = open_session_dir(&dir).unwrap();
+        let mut scope = test_scope();
+        scope.tools[0].policy = Permission::Deny;
+        scope.update_hash();
+        let store = SessionStore::open_dir(&dir).unwrap();
+        let mut context = AgentContext {
+            session_id: scope.session_id.clone(),
+            root_session_id: scope.session_id.clone(),
+            kind: "lead".into(),
+            role: "lead".into(),
+            proxy_url: Some(format!("http://{address}/v1")),
+            scope: scope.clone(),
+            system_instruction: String::new(),
+            store,
+        };
+        let mut client = ModelClient::new(
+            format!("http://{address}/v1"),
+            ModelProvider::OpenAiCompatible,
+            "fixture-model",
+            "fixture-key",
+        )
+        .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let output = runtime
+            .block_on(client.process(
+                &mut context,
+                InboundMessage {
+                    id: Some(1),
+                    kind: InboundKind::UserMessage,
+                    body: json!({"text":"read this"}),
+                    created_at: None,
+                },
+                Vec::new(),
+            ))
+            .unwrap();
+        assert_eq!(
+            output.outbound[0].body["text"],
+            "I will use another approach."
+        );
+        server.join().unwrap();
+        drop(context);
+        drop(_supervisor);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -1118,6 +1251,7 @@ done
             role: "lead".into(),
             proxy_url: Some(format!("http://{address}/v1")),
             scope: scope.clone(),
+            system_instruction: String::new(),
             store,
         };
         let mut client = ModelClient::new(
@@ -1237,6 +1371,7 @@ done
             role: "lead".into(),
             proxy_url: Some(format!("http://{address}/v1")),
             scope: scope.clone(),
+            system_instruction: String::new(),
             store,
         };
         let mut client = ModelClient::new(

@@ -143,6 +143,7 @@ fn each_turn_returns_only_the_two_new_history_entries() {
         role: "lead".into(),
         proxy_url: Some(format!("http://{address}/v1")),
         scope,
+        system_instruction: String::new(),
         store,
     };
     let mut client = ModelClient::new(
@@ -242,6 +243,7 @@ fn model_http_client_errors_are_configuration_failures() {
             role: "lead".into(),
             proxy_url: None,
             scope,
+            system_instruction: String::new(),
             store,
         };
         let mut client = ModelClient::new(
@@ -315,6 +317,7 @@ fn model_error_body_cannot_fake_auth_status() {
         role: "lead".into(),
         proxy_url: None,
         scope,
+        system_instruction: String::new(),
         store,
     };
     let mut client = ModelClient::new(

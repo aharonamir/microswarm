@@ -7,3 +7,4 @@ pub mod exit;
 pub mod mcp;
 pub mod model;
 pub mod permit;
+pub mod prompt;

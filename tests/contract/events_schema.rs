@@ -28,7 +28,13 @@ fn every_agent_event_round_trips_and_validates_only_as_an_agent_event() {
     let schema: Value = serde_json::from_str(SCHEMA).unwrap();
     let validator = validator_for(&schema).unwrap();
     let cases = [
-        ("agent.ready", json!({})),
+        (
+            "agent.ready",
+            json!({
+                "scope_hash":"sha256:fixture", "prompt_version":"v2",
+                "prompt_sha256":format!("sha256:{}", "0".repeat(64)), "prompt_truncated":false
+            }),
+        ),
         ("agent.exit", json!({"reason":"ok","code":0})),
         ("turn.start", json!({})),
         ("turn.end", json!({})),

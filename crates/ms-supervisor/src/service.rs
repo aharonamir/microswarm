@@ -355,6 +355,14 @@ async fn create_lead(
         last_active_at: utc_now(),
     };
     install_lead_scope(store, record, &session_dir, &scope)?;
+    let lead_instructions = home.join("config/lead.md");
+    ms_runtime::control::copy_session_instructions(
+        &session_dir,
+        lead_instructions
+            .is_file()
+            .then_some(lead_instructions.as_path()),
+    )?;
+    ms_runtime::control::write_team_roster(store, home, &session_dir, &scope)?;
     emit_supervisor_event(
         store,
         &id,
@@ -775,7 +783,6 @@ async fn handle_delegation_request(
                 .map_err(|store_error| store_error.to_string())?;
             store.connection().execute("UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2 WHERE id=?1 AND status IN ('pending','starting')", rusqlite::params![member_id,utc_now()]).map_err(|store_error|store_error.to_string())?;
             open_session_dir(lead_session_dir).map_err(|store_error| store_error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|store_error| store_error.to_string())?;
-            open_session_dir(lead_session_dir).map_err(|store_error|store_error.to_string())?.append_inbound(&InboundKind::MemberFailed,&json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"spawn_error"})).map_err(|store_error|store_error.to_string())?;
         }
     }
     Ok(startup.prompt)
@@ -852,6 +859,14 @@ struct MemberStartup {
     reply: Option<String>,
 }
 
+fn startup_member_error(status: &str) -> Option<&'static str> {
+    match status {
+        "failed" => Some("member failed before its initial reply"),
+        "closed" => Some("member session closed before its initial reply"),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn create_member(
     home: &Path,
@@ -885,6 +900,12 @@ async fn create_member(
         last_active_at: utc_now(),
     };
     crate::scope::install_member_scope(store, record, &session_dir, &scope)?;
+    store
+        .update_delegation_status(delegation_id, "spawning", Some(member_id), None, &utc_now())
+        .map_err(|error| error.to_string())?;
+    let instruction_source =
+        (skill.is_some() && !instructions.is_empty()).then(|| Path::new(instructions));
+    ms_runtime::control::copy_session_instructions(&session_dir, instruction_source)?;
     let task_id = session
         .append_inbound(
             &InboundKind::Task,
@@ -941,7 +962,7 @@ async fn create_member(
         "MS_MCP_SERVERS={}",
         serde_json::to_string(&mcp_descriptors(config)).map_err(|error| error.to_string())?
     ));
-    let mut profile = ms_runtime::profile::container_profile(
+    let profile = ms_runtime::profile::container_profile(
         &scope,
         &scope.limits,
         &config.microswarm.runtime.image,
@@ -950,19 +971,6 @@ async fn create_member(
         &host_gateway,
         &container_user,
     )?;
-    if let Some(skill) = skill {
-        let instruction_path = fs::canonicalize(instructions)
-            .map_err(|error| format!("cannot resolve role instructions: {error}"))?;
-        if !instruction_path.is_file() {
-            return Err("role instructions are not a file".into());
-        }
-        profile.mounts.push(crate::runtime::MountSpec {
-            source: instruction_path.display().to_string(),
-            target: format!("/skills/{skill}/role.md"),
-            read_only: true,
-        });
-        env.push(format!("MS_ROLE_INSTRUCTIONS=/skills/{skill}/role.md"));
-    }
     let container_id = runtime.create_container(&profile, &env).await?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {
@@ -1053,6 +1061,17 @@ async fn create_member(
                     reply: Some(response.to_owned()),
                 });
             }
+        }
+        let status: String = store
+            .connection()
+            .query_row(
+                "SELECT status FROM sessions WHERE id=?1",
+                [member_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if let Some(error) = startup_member_error(&status) {
+            return Err(error.into());
         }
         if Instant::now() >= deadline {
             return Err("member did not finish its initial task before timeout".into());
@@ -1798,7 +1817,7 @@ async fn route_waiting_member_replies(
 
 #[cfg(test)]
 mod tests {
-    use super::claim_session_busy;
+    use super::{claim_session_busy, startup_member_error};
     use ms_store::{SessionRecord, SupervisorStore};
     use serde_json::json;
     use std::{
@@ -1807,6 +1826,19 @@ mod tests {
     };
 
     static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn startup_failure_is_reported_before_the_task_timeout() {
+        assert_eq!(
+            startup_member_error("failed"),
+            Some("member failed before its initial reply")
+        );
+        assert_eq!(startup_member_error("starting"), None);
+        assert_eq!(
+            startup_member_error("closed"),
+            Some("member session closed before its initial reply")
+        );
+    }
 
     #[test]
     fn chat_claim_rejects_a_session_that_idle_shutdown_already_claimed() {

@@ -1,11 +1,11 @@
 //! Boot-time reconciliation of managed containers and persisted supervisor state.
 use crate::{
-    ContainerRuntime, ManagedContainer, MountSpec,
+    ContainerRuntime, ManagedContainer,
     lifecycle::{SessionEvent, SessionLifecycle, SessionStatus},
 };
 use ms_proto::{ExitReason, InboundKind, Scope, SupervisorEvent, SupervisorEventType};
 use ms_store::{ApprovalRecord, SessionLifecycleUpdate, SupervisorStore, open_session_dir};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -356,7 +356,7 @@ pub async fn recreate_missing(
         }
     };
     let user = runtime.container_user(&dir)?;
-    let mut profile = crate::profile::container_profile(
+    let profile = crate::profile::container_profile(
         &scope,
         &scope.limits,
         &config.image,
@@ -393,26 +393,6 @@ pub async fn recreate_missing(
         env.push(format!("MS_MODEL_CREDENTIAL={credential}"));
     }
     env.push(format!("MS_MCP_SERVERS={}", config.mcp_servers));
-    if session.kind == "member" {
-        let role: Option<(String, String)> = store
-            .connection()
-            .query_row(
-                "SELECT skill,instructions FROM team_roles WHERE role=?1 LIMIT 1",
-                [&session.role],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-        if let Some((skill, instructions)) = role {
-            let path = std::fs::canonicalize(instructions).map_err(|e| e.to_string())?;
-            profile.mounts.push(MountSpec {
-                source: path.display().to_string(),
-                target: format!("/skills/{skill}/role.md"),
-                read_only: true,
-            });
-            env.push(format!("MS_ROLE_INSTRUCTIONS=/skills/{skill}/role.md"));
-        }
-    }
     let container = runtime.create_container(&profile, &env).await?;
     store
         .update_session_lifecycle(&SessionLifecycleUpdate {

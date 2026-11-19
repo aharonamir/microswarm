@@ -3,7 +3,7 @@ use ms_proto::{
     AgentEventType, ExitReason, InboundKind, InboundMessage, OutboundMessage, exit_code,
 };
 use ms_store::HistoryEntry;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
@@ -96,35 +96,7 @@ pub async fn run<P: TurnProcessor>(
             let inbound_id = message
                 .id
                 .expect("stored inbound messages always have an id");
-            let invalid_reason = match &message.kind {
-                InboundKind::UserMessage
-                    if !message.body.get("text").is_some_and(|v| v.is_string()) =>
-                {
-                    Some("user_message requires a string text field".to_owned())
-                }
-                InboundKind::Task if !message.body.get("text").is_some_and(|v| v.is_string()) => {
-                    Some("task requires a string text field".to_owned())
-                }
-                InboundKind::UserMessage | InboundKind::Task | InboundKind::Control => None,
-                InboundKind::ApprovalResult
-                    if message
-                        .body
-                        .get("approval_id")
-                        .is_some_and(|v| v.is_string())
-                        && matches!(
-                            message.body.get("decision").and_then(|v| v.as_str()),
-                            Some("approved" | "denied" | "timed_out" | "expired")
-                        )
-                        && message.body.get("binding").is_some_and(|v| v.is_object()) =>
-                {
-                    None
-                }
-                InboundKind::ApprovalResult => Some("approval_result is malformed".to_owned()),
-                InboundKind::Unknown(kind) => Some(format!("unknown inbound kind: {kind}")),
-                kind => Some(format!(
-                    "inbound kind is not handled by this agent: {kind:?}"
-                )),
-            };
+            let invalid_reason = inbound_invalid_reason(&message.kind, &message.body);
             if let Some(reason) = invalid_reason {
                 crate::emit::emit(
                     &mut context.store,
@@ -159,6 +131,13 @@ pub async fn run<P: TurnProcessor>(
                     AgentEventType::InboundError,
                     json!({ "inbound_id": inbound_id, "kind": "control", "error": "unsupported or malformed control message" }),
                 ).map_err(LoopError::Store)?;
+                context
+                    .store
+                    .commit_turn(inbound_id, &[], &[])
+                    .map_err(LoopError::Store)?;
+                continue;
+            }
+            if message.kind == InboundKind::MemberFailed {
                 context
                     .store
                     .commit_turn(inbound_id, &[], &[])
@@ -201,5 +180,56 @@ pub async fn run<P: TurnProcessor>(
             _ = terminate.recv() => return Err(LoopError::Terminated),
             _ = tokio::time::sleep(Duration::from_millis(500)) => {},
         }
+    }
+}
+
+fn inbound_invalid_reason(kind: &InboundKind, body: &Value) -> Option<String> {
+    match kind {
+        InboundKind::UserMessage if !body.get("text").is_some_and(Value::is_string) => {
+            Some("user_message requires a string text field".to_owned())
+        }
+        InboundKind::Task if !body.get("text").is_some_and(Value::is_string) => {
+            Some("task requires a string text field".to_owned())
+        }
+        InboundKind::UserMessage | InboundKind::Task | InboundKind::Control => None,
+        InboundKind::ApprovalResult
+            if body.get("approval_id").is_some_and(Value::is_string)
+                && matches!(
+                    body.get("decision").and_then(Value::as_str),
+                    Some("approved" | "denied" | "timed_out" | "expired")
+                )
+                && body.get("binding").is_some_and(Value::is_object) =>
+        {
+            None
+        }
+        InboundKind::ApprovalResult => Some("approval_result is malformed".to_owned()),
+        InboundKind::MemberFailed
+            if body.get("member_id").is_some_and(Value::is_string)
+                && body.get("reason").is_some_and(Value::is_string) =>
+        {
+            None
+        }
+        InboundKind::Unknown(kind) => Some(format!("unknown inbound kind: {kind}")),
+        kind => Some(format!(
+            "inbound kind is not handled by this agent: {kind:?}"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inbound_invalid_reason;
+    use ms_proto::InboundKind;
+    use serde_json::json;
+
+    #[test]
+    fn valid_member_failure_is_not_rejected_as_unhandled() {
+        assert_eq!(
+            inbound_invalid_reason(
+                &InboundKind::MemberFailed,
+                &json!({"member_id":"member-1","reason":"safety"}),
+            ),
+            None
+        );
     }
 }

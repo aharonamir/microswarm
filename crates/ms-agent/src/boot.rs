@@ -8,6 +8,7 @@ use std::sync::OnceLock;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 static PROCESS_START: OnceLock<Instant> = OnceLock::new();
+static PROCESS_STARTED_AT: OnceLock<String> = OnceLock::new();
 
 pub struct AgentContext {
     pub session_id: String,
@@ -16,6 +17,7 @@ pub struct AgentContext {
     pub role: String,
     pub proxy_url: Option<String>,
     pub scope: Scope,
+    pub system_instruction: String,
     pub store: SessionStore,
 }
 
@@ -89,6 +91,12 @@ pub fn boot() -> Result<AgentContext, BootError> {
         return Err(BootError::Config("scope.json hash mismatch".to_owned()));
     }
 
+    let started_at = PROCESS_STARTED_AT.get_or_init(utc_timestamp).clone();
+    let prompt =
+        crate::prompt::for_session(&session_dir, &session_id, &kind, &role, &started_at, &scope)
+            .map_err(BootError::Config)?;
+    let system_instruction = prompt.text.clone();
+
     let mut store = SessionStore::open_dir(&session_dir).map_err(BootError::Storage)?;
     crate::emit::emit(
         &mut store,
@@ -96,7 +104,13 @@ pub fn boot() -> Result<AgentContext, BootError> {
         &root_session_id,
         &role,
         AgentEventType::Ready,
-        json!({ "scope_hash": scope.hash }),
+        json!({
+            "scope_hash": scope.hash,
+            "prompt_version": prompt.version,
+            "prompt_sha256": prompt.sha256,
+            "prompt_truncated": prompt.truncated,
+            "prompt_sanitised": prompt.sanitised,
+        }),
     )
     .map_err(BootError::Storage)?;
 
@@ -107,8 +121,13 @@ pub fn boot() -> Result<AgentContext, BootError> {
         role,
         proxy_url,
         scope,
+        system_instruction,
         store,
     })
+}
+
+pub fn started_at() -> &'static str {
+    PROCESS_STARTED_AT.get_or_init(utc_timestamp)
 }
 
 fn required_env(name: &str) -> Result<String, BootError> {

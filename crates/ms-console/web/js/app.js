@@ -41,11 +41,19 @@ async function renderNow() {
   const composerRoute = location.hash;
   let pending = 0;
   try { pending = Number((await api("/overview")).pending_approvals || 0); } catch { /* The page view reports its own connection error. */ }
+  const focusedNavHref = nav.contains(document.activeElement)
+    ? document.activeElement.getAttribute("href")
+    : null;
   clear(nav);
   for (const route of ["overview", "sessions", "approvals", "trace", "host"]) nav.append(el("a", { href: `#/${route}`, "data-route": route, "aria-current": route === page ? "page" : false }, [
     t(`nav.${route}`),
     ...(route === "approvals" ? [el("span", { class: "badge", hidden: pending < 1 }, [String(pending)])] : []),
   ]));
+  if (focusedNavHref) {
+    [...nav.querySelectorAll("a")]
+      .find(link => link.getAttribute("href") === focusedNavHref)
+      ?.focus({ preventScroll: true });
+  }
   const supervisorChip = document.querySelector(".supervisor-chip");
   clear(supervisorChip);
   supervisorChip.append(el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));

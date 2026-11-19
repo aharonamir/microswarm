@@ -39,10 +39,25 @@ fn unavailable_runtime_records_spawn_error_for_the_lead() {
     let failure: Value = support::wait_for_inbound(
         &harness.home,
         &lead,
-        "member_failed",
+        "delegation_result",
         Duration::from_secs(3),
     );
     assert_eq!(failure["reason"], "spawn_error");
+    assert_eq!(failure["status"], "denied");
+    let lead_session =
+        ms_store::open_session_dir(harness.home.join("sessions").join(&lead)).unwrap();
+    let member_failed: i64 = lead_session
+        .inbound()
+        .query_row(
+            "SELECT COUNT(*) FROM inbound WHERE kind='member_failed'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        member_failed, 0,
+        "startup failures are reported by delegation_result only"
+    );
     let store =
         ms_store::SupervisorStore::open_readonly(harness.home.join("supervisor.db")).unwrap();
     let reason: Option<String> = store.connection().query_row(

@@ -9,6 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+pub mod control;
 pub mod credentials;
 pub mod doctor;
 pub mod events;

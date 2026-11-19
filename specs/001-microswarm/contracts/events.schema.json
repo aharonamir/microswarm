@@ -23,6 +23,14 @@
     { "if": { "properties": { "source": { "const": "supervisor" } } },
       "then": { "properties": { "type": { "$ref": "#/$defs/supervisor_type" } } } },
 
+    { "if": { "properties": { "type": { "const": "agent.ready" } } },
+      "then": { "properties": { "data": { "properties": {
+        "scope_hash": { "type": "string" },
+        "prompt_version": { "type": "string" },
+        "prompt_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "prompt_truncated": { "type": "boolean" },
+        "prompt_sanitised": { "type": "array", "items": { "type": "string" } }
+      } } } } },
     { "if": { "properties": { "type": { "const": "tool.call" } } },
       "then": { "properties": { "data": { "required": ["call_id", "server", "tool", "args"] } } } },
     { "if": { "properties": { "type": { "const": "tool.result" } } },
