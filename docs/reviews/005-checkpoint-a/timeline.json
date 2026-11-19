@@ -10,34 +10,34 @@
       },
       "marks": [
         {
-          "at": "2026-11-19T14:12:15.000Z",
+          "at": "2026-11-19T14:14:28.000Z",
           "kind": "spawn",
-          "seq": 1,
+          "seq": 100,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
         },
         {
-          "at": "2026-11-19T14:12:16.000Z",
+          "at": "2026-11-19T14:14:29.000Z",
           "kind": "spawn",
-          "seq": 2,
+          "seq": 101,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:3"
+        },
+        {
+          "at": "2026-11-19T14:14:30.000Z",
+          "kind": "reduced",
+          "seq": 102,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
         },
         {
-          "at": "2026-11-19T14:12:17.000Z",
+          "at": "2026-11-19T14:14:30.000Z",
           "kind": "reduced",
-          "seq": 3,
-          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
-        },
-        {
-          "at": "2026-11-19T14:12:17.000Z",
-          "kind": "reduced",
-          "seq": 4,
+          "seq": 103,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:3"
         }
       ],
       "spans": [
         {
-          "end": "2026-11-19T14:12:18.000Z",
-          "start": "2026-11-19T14:12:12.000Z",
+          "end": "2026-11-19T14:14:31.000Z",
+          "start": "2026-11-19T14:14:25.000Z",
           "state": "working"
         }
       ]
@@ -52,19 +52,19 @@
       },
       "marks": [
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 1,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:1"
         },
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 4,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:1"
         },
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 7,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:7"
@@ -82,34 +82,34 @@
       },
       "marks": [
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 10,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:10"
         },
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 13,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:13"
         },
         {
-          "at": "2026-11-19T14:12:19.000Z",
+          "at": "2026-11-19T14:14:32.000Z",
           "kind": "tool",
           "seq": 14,
           "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:14"
         },
         {
-          "at": "2026-11-19T14:12:32.000Z",
+          "at": "2026-11-19T14:14:45.000Z",
           "kind": "approval",
-          "seq": 20,
+          "seq": 120,
           "step_id": null
         }
       ],
       "spans": [
         {
-          "end": "2026-11-19T14:12:32.000Z",
-          "start": "2026-11-19T14:12:32.000Z",
+          "end": "2026-11-19T14:14:45.000Z",
+          "start": "2026-11-19T14:14:45.000Z",
           "state": "waiting_you"
         }
       ]
@@ -126,8 +126,8 @@
     }
   ],
   "range": {
-    "end": "2026-11-19T14:12:32.000Z",
-    "start": "2026-11-19T14:12:12.000Z"
+    "end": "2026-11-19T14:14:45.000Z",
+    "start": "2026-11-19T14:14:25.000Z"
   },
   "stats": {
     "agents": 3,

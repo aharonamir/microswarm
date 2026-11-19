@@ -25,7 +25,7 @@
   "groups": [
     {
       "anchor_message_id": null,
-      "ended_at": "2026-11-19T14:12:18.000Z",
+      "ended_at": "2026-11-19T14:14:31.000Z",
       "group_id": "group-1",
       "members": [
         {
@@ -56,7 +56,7 @@
             "tools_ask": []
           },
           "reduced_count": 1,
-          "started_at": "2026-11-19T14:12:15.000Z",
+          "started_at": "2026-11-19T14:14:28.000Z",
           "state": "working",
           "step_count": 2,
           "task": "Inspect the authentication refresh path",
@@ -74,7 +74,7 @@
           "elapsed_ms": 0,
           "pending_approval": {
             "code": "K7QF",
-            "id": null,
+            "id": "01ARZ3NDEKTSV4RRFFQ69G5FB2",
             "summary": {
               "args": {},
               "key": "step.shell.ask"
@@ -92,7 +92,7 @@
             "tools_ask": []
           },
           "reduced_count": 1,
-          "started_at": "2026-11-19T14:12:16.000Z",
+          "started_at": "2026-11-19T14:14:29.000Z",
           "state": "waiting_you",
           "step_count": 3,
           "task": "Run the auth tests and report failures",
@@ -100,7 +100,7 @@
         }
       ],
       "more": 0,
-      "started_at": "2026-11-19T14:12:13.000Z"
+      "started_at": "2026-11-19T14:14:26.000Z"
     }
   ]
 }
