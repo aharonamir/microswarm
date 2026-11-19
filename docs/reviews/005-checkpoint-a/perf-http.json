@@ -1,0 +1,13 @@
+{
+  "fixture": "console_status_fixture --scenario load",
+  "warm_second_request_us": {
+    "team": 12949,
+    "steps": 13146,
+    "timeline": 14401
+  },
+  "limits_ms": {
+    "team": 150,
+    "steps": 300,
+    "timeline": 300
+  }
+}
