@@ -631,7 +631,7 @@ pub fn scope(home: &Path, id: &str, member: bool) -> Result<Value, String> {
         json!({"dimension":dimension,"requested":requested.get(*dimension).cloned().unwrap_or(Value::Null),"lead":lead.get(*dimension).cloned().unwrap_or(Value::Null),"ceiling":ceiling_values,"granted":granted.get(*dimension).cloned().unwrap_or(Value::Null),"narrowed":narrowed})
     }).collect::<Vec<_>>();
     Ok(
-        json!({"member_id":id,"lead_id":root,"role":role,"derived_from":granted["derived_from"],"source_ref":granted["source_ref"],"scope_hash":granted["hash"],"rows":rows,"profile":profile}),
+        json!({"member_id":id,"lead_id":root,"role":role,"derived_from":granted["derived_from"],"source_ref":granted["source_ref"],"scope_hash":granted["hash"],"granted":granted,"lead_scope":lead,"rows":rows,"profile":profile}),
     )
 }
 
