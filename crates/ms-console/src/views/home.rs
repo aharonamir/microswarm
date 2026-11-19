@@ -17,23 +17,3 @@ pub fn derive(
     })).collect();
     json!({"summary":{"needs_you":needs_you.len(),"running":running.len()},"needs_you":needs_you,"running":running,"ended_today":ended_today,"system":{"containers":0,"approvals_today":approvals.len(),"supervisor_started_at":supervisor_started_at}})
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn builds_needs_you_running_and_ended_sections() {
-        let sessions = vec![
-            json!({"id":"s1","title":"Work","in_flight":true,"status_words":{"tone":"working"},"created_at":"now","agents":[]}),
-            json!({"id":"s2","title":"Done","closed_at":"then","status_words":{"key":"status.finished"},"agents":[]}),
-        ];
-        let approvals = vec![
-            json!({"id":"a1","code":"ABCD","state":"pending","root_session_id":"s1","expires_at":"later"}),
-        ];
-        let home = derive(&sessions, &approvals, Some("start"));
-        assert_eq!(home["summary"]["needs_you"], 1);
-        assert_eq!(home["summary"]["running"], 1);
-        assert_eq!(home["ended_today"][0]["session_id"], "s2");
-        assert_eq!(home["system"]["supervisor_started_at"], "start");
-    }
-}

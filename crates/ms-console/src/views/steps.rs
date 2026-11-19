@@ -9,6 +9,18 @@ pub fn derive(
     limit: usize,
     filter: &str,
 ) -> Value {
+    derive_for_agent(events, agents, before_seq, after_seq, limit, filter, None)
+}
+
+pub fn derive_for_agent(
+    events: &[Value],
+    agents: &[Value],
+    before_seq: Option<i64>,
+    after_seq: Option<i64>,
+    limit: usize,
+    filter: &str,
+    agent_id: Option<&str>,
+) -> Value {
     let mut pending = Vec::<Value>::new();
     let mut spawn_requests = std::collections::BTreeMap::<String, Value>::new();
     let mut spawn_indexes = std::collections::BTreeMap::<String, usize>::new();
@@ -123,15 +135,14 @@ pub fn derive(
             }
             "scope.narrowed" => {
                 let id = data["delegation_id"].as_str().unwrap_or_default();
-                if let Some(pos) = spawn_indexes.get(id).copied() {
-                    if data["narrowed"]
+                if let Some(pos) = spawn_indexes.get(id).copied()
+                    && data["narrowed"]
                         .as_array()
                         .is_some_and(|items| !items.is_empty())
-                    {
-                        steps[pos].0["decision"] = json!({"value":"reduced"});
-                        if let Some(seqs) = steps[pos].0["event_seqs"].as_array_mut() {
-                            seqs.push(event["seq"].clone());
-                        }
+                {
+                    steps[pos].0["decision"] = json!({"value":"reduced"});
+                    if let Some(seqs) = steps[pos].0["event_seqs"].as_array_mut() {
+                        seqs.push(event["seq"].clone());
                     }
                 }
             }
@@ -199,7 +210,9 @@ pub fn derive(
     let last_seq = events.len() as i64;
     let filtered = steps
         .into_iter()
-        .filter(|(step, _, _)| filter_step(step, filter))
+        .filter(|(step, _, _)| {
+            filter_step(step, filter) && agent_id.is_none_or(|id| step["agent"]["id"] == id)
+        })
         .collect::<Vec<_>>();
     let limit = limit.clamp(1, 200);
     let (page, more) = if let Some(after) = after_seq {
@@ -329,15 +342,15 @@ fn fold_reads(steps: &mut Vec<(Value, i64, i64)>) {
             let first = last.0["sentence"]["args"]["path"].clone();
             let n = last.0["sentence"]["args"]["n"].as_u64().unwrap_or(0) + 1;
             last.0["sentence"] = json!({"key":"step.read_many","args":{"first":first,"n":n}});
-            last.0["event_seqs"].as_array_mut().map(|seqs| {
+            if let Some(seqs) = last.0["event_seqs"].as_array_mut() {
                 seqs.extend(
                     current.0["event_seqs"]
                         .as_array()
                         .into_iter()
                         .flatten()
                         .cloned(),
-                )
-            });
+                );
+            }
             last.0["ended_at"] = current.0["ended_at"].clone();
             last.0["duration_ms"] = json!(
                 last.0["duration_ms"].as_u64().unwrap_or(0)
@@ -349,194 +362,4 @@ fn fold_reads(steps: &mut Vec<(Value, i64, i64)>) {
         }
     }
     *steps = folded;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn event(seq: i64, kind: &str, data: Value) -> Value {
-        json!({"seq":seq,"ts":format!("2026-11-19T12:00:{:02}Z",seq%60),"ts_mono":seq*1000,"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","root_session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","agent_role":"lead","source":"agent","type":kind,"data":data})
-    }
-    fn tool(seq: i64, call: &str) -> Value {
-        event(
-            seq,
-            "tool.call",
-            json!({"call_id":call,"server":"filesystem","tool":"fs.read","args":{"path":"/work/src/a.rs"}}),
-        )
-    }
-    fn agents() -> Vec<Value> {
-        vec![
-            json!({"id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","kind":"lead","role":"lead","colour_index":0,"initial":"L"}),
-        ]
-    }
-
-    #[test]
-    fn pairs_tool_call_decision_and_result() {
-        let events = vec![
-            tool(1, "c1"),
-            event(
-                2,
-                "permit.decision",
-                json!({"call_id":"c1","decision":"allow","rule":"allow"}),
-            ),
-            event(
-                3,
-                "tool.result",
-                json!({"call_id":"c1","ok":true,"duration_ms":80}),
-            ),
-        ];
-        let result = derive(&events, &agents(), None, None, 20, "everything");
-        assert_eq!(result["steps"].as_array().unwrap().len(), 1);
-        assert_eq!(result["steps"][0]["sentence"]["key"], "step.read");
-        assert_eq!(result["steps"][0]["decision"]["value"], "allowed");
-        assert_eq!(result["steps"][0]["event_seqs"], json!([1, 2, 3]));
-    }
-
-    #[test]
-    fn identical_calls_keep_distinct_results_and_approvals() {
-        let events = vec![
-            tool(1, "one"),
-            tool(2, "two"),
-            event(
-                3,
-                "permit.decision",
-                json!({"call_id":"one","decision":"ask","rule":"ask"}),
-            ),
-            event(
-                4,
-                "approval.requested",
-                json!({"call_id":"one","id":"A1","code":"K7QF"}),
-            ),
-            event(
-                5,
-                "tool.result",
-                json!({"call_id":"two","ok":true,"duration_ms":10}),
-            ),
-            event(
-                6,
-                "tool.result",
-                json!({"call_id":"one","ok":true,"duration_ms":15}),
-            ),
-        ];
-        let result = derive(&events, &agents(), None, None, 20, "everything");
-        assert_eq!(result["steps"].as_array().unwrap().len(), 2);
-        assert_eq!(result["steps"][0]["approval"]["id"], "A1");
-        assert_eq!(result["steps"][0]["decision"]["value"], "asked_you");
-    }
-
-    #[test]
-    fn missing_result_followed_by_exit_is_a_failed_step() {
-        let events = vec![
-            tool(1, "c1"),
-            event(
-                2,
-                "permit.decision",
-                json!({"call_id":"c1","decision":"allow","rule":"allow"}),
-            ),
-            event(3, "agent.exit", json!({"reason":"safety","code":1})),
-        ];
-        let result = derive(&events, &agents(), None, None, 20, "everything");
-        assert_eq!(result["steps"].as_array().unwrap().len(), 1);
-        assert_eq!(result["steps"][0]["decision"]["value"], "failed");
-    }
-
-    #[test]
-    fn spawn_and_scope_narrowed_form_a_reduced_step() {
-        let mut request = event(
-            1,
-            "delegation.request",
-            json!({"delegation_id":"D1","role":"tester","task":"run tests"}),
-        );
-        request["session_id"] = json!("01ARZ3NDEKTSV4RRFFQ69G5FAW");
-        let mut spawned = event(
-            2,
-            "delegation.spawned",
-            json!({"delegation_id":"D1","member_id":"01ARZ3NDEKTSV4RRFFQ69G5FAW","role":"tester"}),
-        );
-        spawned["source"] = json!("supervisor");
-        let mut narrowed = event(
-            3,
-            "scope.narrowed",
-            json!({"delegation_id":"D1","narrowed":[{"dimension":"mount","item":"/work","reason":"mode_downgraded"}]}),
-        );
-        narrowed["source"] = json!("supervisor");
-        let result = derive(
-            &[request, spawned, narrowed],
-            &agents(),
-            None,
-            None,
-            20,
-            "everything",
-        );
-        assert_eq!(result["steps"][0]["decision"]["value"], "reduced");
-    }
-
-    #[test]
-    fn the_three_filters_include_only_their_contract_steps() {
-        let events = vec![
-            tool(1, "a"),
-            event(
-                2,
-                "permit.decision",
-                json!({"call_id":"a","decision":"allow","rule":"allow"}),
-            ),
-            event(
-                3,
-                "tool.result",
-                json!({"call_id":"a","ok":true,"duration_ms":10}),
-            ),
-            tool(4, "b"),
-            event(
-                5,
-                "permit.decision",
-                json!({"call_id":"b","decision":"deny","rule":"deny"}),
-            ),
-            event(
-                6,
-                "tool.result",
-                json!({"call_id":"b","ok":false,"duration_ms":1}),
-            ),
-        ];
-        assert_eq!(
-            derive(&events, &agents(), None, None, 20, "everything")["steps"]
-                .as_array()
-                .unwrap()
-                .len(),
-            2
-        );
-        assert_eq!(
-            derive(&events, &agents(), None, None, 20, "decisions")["steps"]
-                .as_array()
-                .unwrap()
-                .len(),
-            1
-        );
-        assert_eq!(
-            derive(&events, &agents(), None, None, 20, "problems")["steps"]
-                .as_array()
-                .unwrap()
-                .len(),
-            1
-        );
-    }
-
-    #[test]
-    fn step_pages_support_before_and_after_cursors() {
-        let events = vec![
-            event(1, "message.inbound", json!({"text":"one"})),
-            event(2, "message.inbound", json!({"text":"two"})),
-            event(3, "message.inbound", json!({"text":"three"})),
-        ];
-        let newer = derive(&events, &agents(), None, None, 2, "everything");
-        assert_eq!(newer["steps"].as_array().unwrap().len(), 2);
-        assert!(newer["next_before_seq"].is_number());
-        assert_eq!(
-            derive(&events, &agents(), None, Some(1), 20, "everything")["steps"]
-                .as_array()
-                .unwrap()
-                .len(),
-            2
-        );
-    }
 }

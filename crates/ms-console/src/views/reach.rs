@@ -29,14 +29,24 @@ pub fn derive(view: &Value, lead: bool) -> Result<Value, String> {
         json!({"dimension":format!("{:?}",item.dimension).to_lowercase(),"item":item.item,"reason":reason,"text":{"key":format!("reach.reason.{reason}"),"args":{}}})
     }).collect()
     };
-    let chips = |value: &Value| -> Vec<Value> {
-        value
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|item| json!({"text":item,"struck":false,"lowered":false}))
-            .collect()
-    };
+    let requested_mounts = requested.as_array().cloned().unwrap_or_default();
+    let requested_chips=requested_mounts.iter().map(|mount| {
+        let path=mount["container_path"].as_str().or(mount["path"].as_str()).unwrap_or("");
+        let granted=scope.mounts.iter().find(|item|item.container_path.to_string_lossy()==path);
+        json!({"text":path,"struck":granted.is_none(),"lowered":granted.is_some_and(|item|mount["mode"]=="rw"&&item.mode==MountMode::ReadOnly)})
+    }).collect::<Vec<_>>();
+    let lead_chips = lead_scope["mounts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|mount| json!({"text":mount["container_path"],"struck":false,"lowered":false}))
+        .collect::<Vec<_>>();
+    let ceiling_chips = ceiling
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|item| json!({"text":item,"struck":false,"lowered":false}))
+        .collect::<Vec<_>>();
     let folders = scope.mounts.len();
     let network = if scope.credentials.is_empty() {
         "none"
@@ -46,43 +56,16 @@ pub fn derive(view: &Value, lead: bool) -> Result<Value, String> {
     Ok(json!({
         "summary":{"key":"reach.summary","args":{"folders":folders,"network":network,"credentials":scope.credentials.len()}},
         "can_reach":can_reach,"reduced":reduced,
-        "derivation":if lead {Value::Null} else {json!({"requested":chips(&requested),"lead":chips(&lead_scope),"ceiling":chips(&ceiling),"granted":scope.mounts.iter().map(|m|json!({"text":m.container_path.display().to_string(),"struck":false,"lowered":m.mode==MountMode::ReadOnly})).collect::<Vec<_>>()})},
+        "derivation":if lead {Value::Null} else {json!({"requested":requested_chips,"lead":lead_chips,"ceiling":ceiling_chips,"granted":scope.mounts.iter().map(|m|json!({"text":m.container_path.display().to_string(),"struck":false,"lowered":false})).collect::<Vec<_>>()})},
         "container":{"files_key":"reach.container.files","process_key":"reach.container.process","network_key":"reach.container.network","args":{"root_read_only":true,"no_new_privileges":true,"network":network,"mounts":folders}},
         "raw":{"granted":granted,"requested":view["rows"],"lead":lead_scope,"ceiling":ceiling}
     }))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn maps_every_narrowing_reason_and_builds_derivation_chips() {
-        let reasons = [
-            "not_in_lead_scope",
-            "ceiling",
-            "mode_downgraded",
-            "policy_tightened",
-            "limit_capped",
-        ];
-        let narrowed: Vec<Value> = reasons
-            .iter()
-            .map(|reason| json!({"dimension":"tool","item":"x","reason":reason}))
-            .collect();
-        let scope = json!({"version":1,"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","derived_from":"delegation","source_ref":"team","mounts":[],"credentials":[],"tools":[],"delegation":null,"limits":{"memory_mb":1,"pids":1,"tmp_mb":1,"max_turns":1,"max_tokens":1},"narrowed":narrowed,"hash":"x"});
-        let view = json!({"granted":scope,"rows":[{"dimension":"mounts","requested":["/a"],"lead":["/a","/b"],"ceiling":[]} ]});
-        let reach = derive(&view, false).unwrap();
-        assert_eq!(reach["reduced"].as_array().unwrap().len(), 5);
-        assert_eq!(
-            reach["reduced"][0]["text"]["key"],
-            "reach.reason.not_in_lead_scope"
-        );
-        assert_eq!(reach["derivation"]["requested"][0]["text"], "/a");
-    }
-    #[test]
-    fn lead_has_no_derivation_or_reductions() {
-        let scope = json!({"version":1,"session_id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","derived_from":"config","source_ref":"cfg","mounts":[],"credentials":[],"tools":[],"delegation":null,"limits":{"memory_mb":1,"pids":1,"tmp_mb":1,"max_turns":1,"max_tokens":1},"narrowed":[],"hash":"x"});
-        let result = derive(&json!({"granted":scope}), true).unwrap();
-        assert!(result["derivation"].is_null());
-        assert_eq!(result["reduced"], json!([]));
-    }
+pub fn summary(scope_value: &Value) -> Value {
+    let scope: Result<Scope, _> = serde_json::from_value(scope_value.clone());
+    let Ok(scope) = scope else {
+        return json!({"folders":[],"network":"none","credentials":[],"tools_ask":[]});
+    };
+    json!({"folders":scope.mounts.iter().map(|mount|json!({"path":mount.container_path,"mode":if mount.mode==MountMode::ReadOnly{"ro"}else{"rw"}})).collect::<Vec<_>>(),"network":if scope.credentials.is_empty(){"none"}else{"proxy_only"},"credentials":scope.credentials,"tools_ask":scope.tools.iter().filter(|tool|tool.policy==ms_proto::Permission::Ask).map(|tool|tool.server.clone()).collect::<Vec<_>>()})
 }

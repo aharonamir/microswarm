@@ -190,10 +190,9 @@ fn approval_what(data: &Value) -> String {
 
 fn clean_args(mut args: Value) -> Value {
     if let Some(values) = args.as_object_mut() {
-        for (key, value) in values.iter_mut() {
+        for value in values.values_mut() {
             if let Some(text) = value.as_str() {
-                let limit = if key == "text" { 120 } else { 120 };
-                *value = Value::String(bounded(text.to_owned(), limit));
+                *value = Value::String(bounded(text.to_owned(), 120));
             }
         }
     }
