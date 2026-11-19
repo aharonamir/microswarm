@@ -246,5 +246,6 @@
   "dock.review": "Review",
   "dock.more": "+{count} more",
   "dock.approve": "Approve",
-  "dock.deny": "Deny"
+  "dock.deny": "Deny",
+  "nav.menu": "Menu"
 }

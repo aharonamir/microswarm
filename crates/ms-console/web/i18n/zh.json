@@ -246,5 +246,6 @@
   "dock.review": "查看请求",
   "dock.more": "另有 {count} 项",
   "dock.approve": "批准",
-  "dock.deny": "拒绝"
+  "dock.deny": "拒绝",
+  "nav.menu": "菜单"
 }

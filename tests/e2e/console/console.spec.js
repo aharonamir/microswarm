@@ -43,8 +43,8 @@ test.beforeAll(async ({ browser }) => {
   login.on("requestfailed", request => console.error(`browser request failed: ${request.url()} ${request.failure()?.errorText}`));
   await login.route("**/api/v1/**", route => mockApi(route));
   await login.goto(`/login?token=${encodeURIComponent(token)}`);
-  await expect(login).toHaveURL("http://127.0.0.1:8792/");
-  await expect(login.locator("#app")).toContainText("Start a conversation");
+  await expect(login).toHaveURL("http://127.0.0.1:8792/#/home");
+  await expect(login.locator("#app")).toContainText("Needs your attention");
   startupMs = Date.now() - startedAt;
   await login.close();
 });
@@ -369,3 +369,26 @@ async function expectFixtureLine(expected) {
 async function mockApiValue(path) {
   return { approvals: [{ id: "approval-1", code: "A1B2", state: "pending", kind: "tool_call", root_session_id: ROOT, requesting_role: "reviewer", tool_call: { server: "microswarm-tools", tool: "shell.run", arguments: { command: "cargo test" }, argument_hash: "sha256:abc", parsed: { kind: "simple", commands: ["cargo test"] } }, runs_in: {} }] };
 }
+
+test("redesigned routes redirect legacy hashes and preserve navigation focus", async () => {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { this.listeners = {}; window.__consoleEvents = this; setTimeout(() => this.onopen?.(), 0); }
+      addEventListener(type, callback) { this.listeners[type] = callback; }
+      close() {}
+      emit(type, data) { this.listeners[type]?.({ data: JSON.stringify(data), lastEventId: "1" }); }
+    };
+  });
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.goto("/#/sessions");
+  const home = page.getByRole("link", { name: "Home" });
+  await home.focus();
+  await page.evaluate(rootId => window.__consoleEvents.emit("status.changed", { type: "status.changed", session_id: rootId }), ROOT);
+  await expect(home).toBeFocused();
+  await page.goto(`/#/trace/${ROOT}`);
+  await expect(page).toHaveURL(new RegExp(`#\\/sessions\\/${ROOT}\\/trajectory`));
+  await page.goto(`/#/members/${MEMBER}`);
+  await expect(page).toHaveURL(new RegExp(`#\\/sessions\\/${MEMBER}\\/members\\/${MEMBER}`));
+  await page.close();
+});

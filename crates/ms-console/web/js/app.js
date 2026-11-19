@@ -1,4 +1,5 @@
 import { el, clear } from "./dom.js";
+import { renderNav } from "./components/nav.js";
 import { currentRoute, onRoute } from "./router.js";
 import { loadLocale, t } from "./i18n.js";
 import { connectEvents } from "./sse.js";
@@ -35,7 +36,12 @@ function render() {
 
 async function renderNow() {
   await loadLocale(localStorage.getItem("ms-lang") || "en");
-  const { page } = currentRoute();
+  const menuButton = document.getElementById("mobile-menu-toggle");
+  clear(menuButton);
+  menuButton.append(t("nav.menu"));
+  menuButton.setAttribute("aria-label", t("nav.menu"));
+  const route = currentRoute();
+  const { page } = route;
   const composer = page === "sessions" ? document.getElementById("message-input") : null;
   const composerDraft = composer?.value;
   const composerRoute = location.hash;
@@ -44,22 +50,13 @@ async function renderNow() {
   const focusedNavHref = nav.contains(document.activeElement)
     ? document.activeElement.getAttribute("href")
     : null;
-  clear(nav);
-  for (const route of ["overview", "sessions", "approvals", "trace", "host"]) nav.append(el("a", { href: `#/${route}`, "data-route": route, "aria-current": route === page ? "page" : false }, [
-    t(`nav.${route}`),
-    ...(route === "approvals" ? [el("span", { class: "badge", hidden: pending < 1 }, [String(pending)])] : []),
-  ]));
-  if (focusedNavHref) {
-    [...nav.querySelectorAll("a")]
-      .find(link => link.getAttribute("href") === focusedNavHref)
-      ?.focus({ preventScroll: true });
-  }
+  await renderNav(nav, { ...route, pending, t, focusHref: focusedNavHref });
   const supervisorChip = document.querySelector(".supervisor-chip");
   clear(supervisorChip);
   supervisorChip.append(el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));
   clear(app);
   if (reconnecting) app.append(el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
-  if (page === "overview") { await renderOverview(app, t); return; }
+  if (page === "home") { await renderOverview(app, t); return; }
   if (page === "sessions") {
     await renderSessions(app, currentRoute().parts[0] || null, t);
     if (composerDraft !== undefined && composerRoute === location.hash) {
@@ -75,16 +72,16 @@ async function renderNow() {
     await renderApprovals(app, currentRoute().parts[0] || null, t);
     return;
   }
-  if (page === "trace") {
-    await renderTrace(app, currentRoute().parts[0] || null, t);
+  if (page === "trajectory" || page === "trajectories") {
+    await renderTrace(app, route.parts[0] || null, t);
     return;
   }
   if (page === "host") {
     await renderHost(app, t);
     return;
   }
-  if (page === "members" && currentRoute().parts[0]) {
-    await renderMember(app, currentRoute().parts[0], t);
+  if (page === "member" && route.parts[1]) {
+    await renderMember(app, route.parts[1], t);
     return;
   }
   app.append(el("section", { class: "page-main panel" }, [
@@ -93,6 +90,21 @@ async function renderNow() {
     el("p", { class: "muted" }, [t("console.loading")]),
   ]));
 }
+
+const mobileMenu = document.getElementById("mobile-menu-toggle");
+function syncMobileMenu() {
+  const mobile = matchMedia("(max-width: 699px)").matches;
+  nav.hidden = mobile;
+  mobileMenu.setAttribute("aria-expanded", String(!mobile));
+}
+const mobileQuery = matchMedia("(max-width: 699px)");
+mobileQuery.addEventListener("change", syncMobileMenu);
+syncMobileMenu();
+mobileMenu.addEventListener("click", event => {
+  const expanded = event.currentTarget.getAttribute("aria-expanded") === "true";
+  event.currentTarget.setAttribute("aria-expanded", String(!expanded));
+  nav.hidden = expanded;
+});
 
 document.getElementById("language-toggle").addEventListener("click", async event => {
   const next = localStorage.getItem("ms-lang") === "zh" ? "en" : "zh";

@@ -22,6 +22,10 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/dom.js"),
         ),
+        "/js/components/nav.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/nav.js"),
+        ),
         "/js/router.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/router.js"),

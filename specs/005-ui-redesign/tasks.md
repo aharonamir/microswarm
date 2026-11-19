@@ -33,7 +33,7 @@
   - A stdin line `emit <session_role>` appends one live step and streams it, as the fixture's stdin loop does now.
 
   Files: `crates/ms-bench/src/bin/console_status_fixture.rs`, `tests/e2e/console/`
-- [ ] T309 App shell: 240 px nav / 64 px rail / phone top bar (FR-U01); router with the FR-U02 routes and redirects (`#/overview`→`#/home`, `#/trace/<id>`→trajectory, `#/members/<id>`→session drawer); keep the navigation-focus behaviour from `4f789f0` and port its test — `C/web/js/app.js`, `C/web/js/router.js`, `C/web/js/components/nav.js`
+- [x] T309 App shell: 240 px nav / 64 px rail / phone top bar (FR-U01); router with the FR-U02 routes and redirects (`#/overview`→`#/home`, `#/trace/<id>`→trajectory, `#/members/<id>`→session drawer); keep the navigation-focus behaviour from `4f789f0` and port its test — `C/web/js/app.js`, `C/web/js/router.js`, `C/web/js/components/nav.js`
 - [x] T310 Red e2e text scanner for FR-U16: on every page, outside `details` and `[data-raw]`, fail on event-type identifiers (`/\b[a-z]+\.[a-z_]+\b/` matched against the event type list), ISO timestamps, ULIDs over 8 characters, or JSON brackets — `tests/e2e/console/text-scan.spec.js`
 
 ## Phase 2 — Derivation (server, test-first)
