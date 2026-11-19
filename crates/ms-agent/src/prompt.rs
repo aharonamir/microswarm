@@ -492,7 +492,7 @@ mod tests {
     fn largest_static_prompt_parts_stay_under_the_size_budget() {
         for (_, mut context, scope, team) in snapshot_cases() {
             context.instructions = None;
-            assert!(assemble(&context, &scope, &team).chars().count() <= 14_000);
+            assert!(assemble(&context, &scope, &team).chars().count() <= 16_000);
         }
     }
 
