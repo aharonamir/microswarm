@@ -5,21 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>MicroSwarm</title>
+  <link rel="icon" type="image/svg+xml" href="/img/mark.svg">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
-  <header class="global-header">
-    <a class="brand" href="#/overview"><span class="brand-mark" aria-hidden="true">微</span><span>MicroSwarm</span></a>
-    <nav class="primary-nav" aria-label="Main navigation">
+  <div class="console-shell">
+    <aside class="global-header" aria-label="Console navigation">
+      <a class="brand" href="#/home"><img class="brand-mark" src="/img/mark.svg" alt=""><span>MicroSwarm</span></a>
+      <nav class="primary-nav" aria-label="Main navigation">
       <a href="#/overview" data-route="overview">Overview</a>
       <a href="#/sessions" data-route="sessions">Sessions</a>
       <a href="#/approvals" data-route="approvals">Approvals <span class="badge" id="approval-count" hidden>0</span></a>
       <a href="#/trace" data-route="trace">Trace</a>
       <a href="#/host" data-route="host">Host</a>
-    </nav>
-    <div class="header-tools"><span class="supervisor-chip"><span class="status-dot"></span> Supervisor running</span><button class="language-toggle" id="language-toggle" aria-pressed="false">EN <span aria-hidden="true">|</span> 中文</button></div>
-  </header>
-  <main id="app" class="page-frame" tabindex="-1"></main>
+      </nav>
+      <div class="header-tools"><span class="supervisor-chip"><span class="status-dot"></span> Supervisor running</span><button class="language-toggle" id="language-toggle" aria-pressed="false">EN <span aria-hidden="true">|</span> 中文</button></div>
+    </aside>
+    <main id="app" class="page-frame" tabindex="-1"></main>
+  </div>
+  <div id="live-region" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
