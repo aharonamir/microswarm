@@ -13,10 +13,7 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/css; charset=utf-8",
             include_bytes!("../web/styles.css"),
         ),
-        "/img/mark.svg" => (
-            "image/svg+xml",
-            include_bytes!("../web/img/mark.svg"),
-        ),
+        "/img/mark.svg" => ("image/svg+xml", include_bytes!("../web/img/mark.svg")),
         "/js/app.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/app.js"),
