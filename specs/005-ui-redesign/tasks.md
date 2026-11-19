@@ -12,17 +12,17 @@
 
 ## Phase 0 — Setup
 
-- [ ] T301 Create branch `005-ui-redesign` from `main`; add this spec folder; add `specs/005-ui-redesign/` to AGENTS.md "Source of truth" — `AGENTS.md`
-- [ ] T302 Capture baseline screenshots of the current console at 1440/390 using the demo fixture (after T308), for before/after comparison — `docs/reviews/005-baseline/`
+- [x] T301 Create branch `005-ui-redesign` from `main`; add this spec folder; add `specs/005-ui-redesign/` to AGENTS.md "Source of truth" — `AGENTS.md`
+- [x] T302 Capture baseline screenshots of the current console at 1440/390 using the demo fixture (after T308), for before/after comparison — `docs/reviews/005-baseline/`
 
 ## Phase 1 — Foundation
 
-- [ ] T303 [P] Rewrite `styles.css` with the design tokens, agent colours and base components (buttons, pills, cards, labels). Add a contrast test that checks every text/background pair in design/README and every agent avatar pair at ≥ 4.5:1 — `C/web/styles.css`, `tests/e2e/console/contrast.spec.js`
-- [ ] T304 [P] Add the swarm mark (`img/mark.svg`) and favicon; replace 微 in `index.html` with the new shell markup (nav landmark, main, live region); serve `img/*` as `image/svg+xml` — `C/web/index.html`, `C/web/img/mark.svg`, `C/src/assets.rs`
-- [ ] T305 [P] `dom.js`: add `style` (CSSOM property assignment only) and `svg()` (createElementNS) helpers; a unit test asserts no `setAttribute('style')`, no `innerHTML`, no `insertAdjacentHTML` anywhere in `web/js` — `C/web/js/dom.js`, `tests/e2e/console/dom.spec.js`
-- [ ] T306 [P] `format.js`: local `HH:MM`, durations (`0.4 s`, `3 min 40 s`, `2 h 5 min`), relative "11 min left", short id `01ARZ3…FAW`; unit tests — `C/web/js/format.js`, `tests/e2e/console/format.spec.js`
-- [ ] T307 [P] Add all new i18n keys (step.*, decision.*, why.*, reach.*, phase.*, home.*, nav.*, dock.*) in en and zh, plus a key-parity test (same keys, same `{placeholders}`) — `C/web/i18n/`, `tests/e2e/console/i18n.spec.js`
-- [ ] T308 Extend `console_status_fixture` with these scenarios:
+- [x] T303 [P] Rewrite `styles.css` with the design tokens, agent colours and base components (buttons, pills, cards, labels). Add a contrast test that checks every text/background pair in design/README and every agent avatar pair at ≥ 4.5:1 — `C/web/styles.css`, `tests/e2e/console/contrast.spec.js`
+- [x] T304 [P] Add the swarm mark (`img/mark.svg`) and favicon; replace 微 in `index.html` with the new shell markup (nav landmark, main, live region); serve `img/*` as `image/svg+xml` — `C/web/index.html`, `C/web/img/mark.svg`, `C/src/assets.rs`
+- [x] T305 [P] `dom.js`: add `style` (CSSOM property assignment only) and `svg()` (createElementNS) helpers; a unit test asserts no `setAttribute('style')`, no `innerHTML`, no `insertAdjacentHTML` anywhere in `web/js` — `C/web/js/dom.js`, `tests/e2e/console/dom.spec.js`
+- [x] T306 [P] `format.js`: local `HH:MM`, durations (`0.4 s`, `3 min 40 s`, `2 h 5 min`), relative "11 min left", short id `01ARZ3…FAW`; unit tests — `C/web/js/format.js`, `tests/e2e/console/format.spec.js`
+- [x] T307 [P] Add all new i18n keys (step.*, decision.*, why.*, reach.*, phase.*, home.*, nav.*, dock.*) in en and zh, plus a key-parity test (same keys, same `{placeholders}`) — `C/web/i18n/`, `tests/e2e/console/i18n.spec.js`
+- [x] T308 Extend `console_status_fixture` with these scenarios:
   - `demo`: lead + researcher + tester; folded reads; a reduced spawn; a pending `shell.run` approval; a denied `web.fetch`; one ended session; one telegram session;
   - `hostile`: every string field is hostile;
   - `load`: 2,000 events, 6 members.
@@ -34,7 +34,7 @@
 
   Files: `crates/ms-bench/src/bin/console_status_fixture.rs`, `tests/e2e/console/`
 - [ ] T309 App shell: 240 px nav / 64 px rail / phone top bar (FR-U01); router with the FR-U02 routes and redirects (`#/overview`→`#/home`, `#/trace/<id>`→trajectory, `#/members/<id>`→session drawer); keep the navigation-focus behaviour from `4f789f0` and port its test — `C/web/js/app.js`, `C/web/js/router.js`, `C/web/js/components/nav.js`
-- [ ] T310 Red e2e text scanner for FR-U16: on every page, outside `details` and `[data-raw]`, fail on event-type identifiers (`/\b[a-z]+\.[a-z_]+\b/` matched against the event type list), ISO timestamps, ULIDs over 8 characters, or JSON brackets — `tests/e2e/console/text-scan.spec.js`
+- [x] T310 Red e2e text scanner for FR-U16: on every page, outside `details` and `[data-raw]`, fail on event-type identifiers (`/\b[a-z]+\.[a-z_]+\b/` matched against the event type list), ISO timestamps, ULIDs over 8 characters, or JSON brackets — `tests/e2e/console/text-scan.spec.js`
 
 ## Phase 2 — Derivation (server, test-first)
 
