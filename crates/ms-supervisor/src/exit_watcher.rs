@@ -237,14 +237,53 @@ fn notify_member_failure(
     } else {
         "crashed"
     };
-    session
-        .append_inbound(
-            &InboundKind::MemberFailed,
-            &json!({"member_id":id,"reason":kind}),
+    let delegation: Option<(String, String)> = store
+        .connection()
+        .query_row(
+            "SELECT id,status FROM delegations WHERE member_id=?1 AND status NOT IN ('failed','completed','dismissed') ORDER BY created_at DESC LIMIT 1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let member_session =
+        open_session_dir(home.join("sessions").join(id)).map_err(|e| e.to_string())?;
+    let task_count: i64 = member_session
+        .inbound()
+        .query_row(
+            "SELECT COUNT(*) FROM inbound WHERE kind='task'",
+            [],
+            |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
-    let delegation:Option<String>=store.connection().query_row("SELECT id FROM delegations WHERE member_id=?1 AND status NOT IN ('failed','completed','dismissed') ORDER BY created_at DESC LIMIT 1",[id],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
-    if let Some(d) = delegation {
+    match member_failure_delivery(
+        delegation
+            .as_ref()
+            .map(|(_, status)| (status.as_str(), usize::try_from(task_count).unwrap_or(0))),
+    ) {
+        MemberFailureDelivery::Suppress => {}
+        MemberFailureDelivery::DelegationResult => {
+            let delegation_id = delegation
+                .as_ref()
+                .map(|(id, _)| id)
+                .ok_or("initial member failure has no delegation")?;
+            session
+                .append_inbound(
+                    &InboundKind::DelegationResult,
+                    &json!({"delegation_id":delegation_id,"member_id":id,"status":"failed","reason":kind}),
+                )
+                .map_err(|e| e.to_string())?;
+        }
+        MemberFailureDelivery::MemberFailed => {
+            session
+                .append_inbound(
+                    &InboundKind::MemberFailed,
+                    &json!({"member_id":id,"reason":kind}),
+                )
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    if let Some((d, _)) = delegation {
         let failure_reason = match reason {
             ExitReason::Safety => "safety",
             ExitReason::Config => "config",
@@ -265,6 +304,24 @@ fn notify_member_failure(
     }
     Ok(())
 }
+
+#[derive(Debug, PartialEq, Eq)]
+enum MemberFailureDelivery {
+    Suppress,
+    DelegationResult,
+    MemberFailed,
+}
+
+fn member_failure_delivery(delegation: Option<(&str, usize)>) -> MemberFailureDelivery {
+    match delegation {
+        Some(("spawning", _)) => MemberFailureDelivery::Suppress,
+        Some(("waiting_reply", 1)) => MemberFailureDelivery::DelegationResult,
+        Some(("waiting_reply", _)) => MemberFailureDelivery::MemberFailed,
+        Some(("active", _)) => MemberFailureDelivery::MemberFailed,
+        _ => MemberFailureDelivery::Suppress,
+    }
+}
+
 async fn wait_ready(dir: &Path, after: i64, timeout: Duration) -> Result<bool, String> {
     let until = tokio::time::Instant::now() + timeout;
     loop {
@@ -277,5 +334,38 @@ async fn wait_ready(dir: &Path, after: i64, timeout: Duration) -> Result<bool, S
             return Ok(false);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MemberFailureDelivery, member_failure_delivery};
+
+    #[test]
+    fn startup_failure_does_not_emit_unexpected_member_reply() {
+        assert_eq!(
+            member_failure_delivery(Some(("spawning", 1))),
+            MemberFailureDelivery::Suppress
+        );
+        assert_eq!(
+            member_failure_delivery(Some(("waiting_reply", 1))),
+            MemberFailureDelivery::DelegationResult
+        );
+        assert_eq!(
+            member_failure_delivery(Some(("waiting_reply", 2))),
+            MemberFailureDelivery::MemberFailed
+        );
+    }
+
+    #[test]
+    fn idle_member_failure_is_not_sent_to_the_lead() {
+        assert_eq!(
+            member_failure_delivery(Some(("active", 1))),
+            MemberFailureDelivery::MemberFailed
+        );
+        assert_eq!(
+            member_failure_delivery(None),
+            MemberFailureDelivery::Suppress
+        );
     }
 }

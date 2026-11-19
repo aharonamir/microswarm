@@ -783,7 +783,6 @@ async fn handle_delegation_request(
                 .map_err(|store_error| store_error.to_string())?;
             store.connection().execute("UPDATE sessions SET status='failed',close_reason='failed',closed_at=?2 WHERE id=?1 AND status IN ('pending','starting')", rusqlite::params![member_id,utc_now()]).map_err(|store_error|store_error.to_string())?;
             open_session_dir(lead_session_dir).map_err(|store_error| store_error.to_string())?.append_inbound(&InboundKind::DelegationResult, &json!({"delegation_id":delegation_id,"status":"denied","reason":"spawn_error","detail":error})).map_err(|store_error| store_error.to_string())?;
-            open_session_dir(lead_session_dir).map_err(|store_error|store_error.to_string())?.append_inbound(&InboundKind::MemberFailed,&json!({"member_id":member_id,"delegation_id":delegation_id,"reason":"spawn_error"})).map_err(|store_error|store_error.to_string())?;
         }
     }
     Ok(startup.prompt)
@@ -860,6 +859,14 @@ struct MemberStartup {
     reply: Option<String>,
 }
 
+fn startup_member_error(status: &str) -> Option<&'static str> {
+    match status {
+        "failed" => Some("member failed before its initial reply"),
+        "closed" => Some("member session closed before its initial reply"),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn create_member(
     home: &Path,
@@ -893,6 +900,9 @@ async fn create_member(
         last_active_at: utc_now(),
     };
     crate::scope::install_member_scope(store, record, &session_dir, &scope)?;
+    store
+        .update_delegation_status(delegation_id, "spawning", Some(member_id), None, &utc_now())
+        .map_err(|error| error.to_string())?;
     let instruction_source =
         (skill.is_some() && !instructions.is_empty()).then(|| Path::new(instructions));
     ms_runtime::control::copy_session_instructions(&session_dir, instruction_source)?;
@@ -1051,6 +1061,17 @@ async fn create_member(
                     reply: Some(response.to_owned()),
                 });
             }
+        }
+        let status: String = store
+            .connection()
+            .query_row(
+                "SELECT status FROM sessions WHERE id=?1",
+                [member_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if let Some(error) = startup_member_error(&status) {
+            return Err(error.into());
         }
         if Instant::now() >= deadline {
             return Err("member did not finish its initial task before timeout".into());
@@ -1796,7 +1817,7 @@ async fn route_waiting_member_replies(
 
 #[cfg(test)]
 mod tests {
-    use super::claim_session_busy;
+    use super::{claim_session_busy, startup_member_error};
     use ms_store::{SessionRecord, SupervisorStore};
     use serde_json::json;
     use std::{
@@ -1805,6 +1826,19 @@ mod tests {
     };
 
     static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn startup_failure_is_reported_before_the_task_timeout() {
+        assert_eq!(
+            startup_member_error("failed"),
+            Some("member failed before its initial reply")
+        );
+        assert_eq!(startup_member_error("starting"), None);
+        assert_eq!(
+            startup_member_error("closed"),
+            Some("member session closed before its initial reply")
+        );
+    }
 
     #[test]
     fn chat_claim_rejects_a_session_that_idle_shutdown_already_claimed() {

@@ -179,3 +179,28 @@ fn utc_timestamp_at(time: SystemTime) -> String {
         elapsed.subsec_millis()
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::render_prompt;
+    use crate::config::Language;
+    use serde_json::json;
+
+    #[test]
+    fn pending_approval_prompt_names_action_and_offers_neutral_choices() {
+        let rendered = render_prompt(
+            Language::En,
+            "ABCD",
+            "microswarm-tools",
+            "fs.write",
+            &json!({"path": "/work/pending.txt"}),
+        );
+
+        assert_eq!(
+            rendered,
+            "Approve microswarm-tools/fs.write with arguments {\"path\":\"/work/pending.txt\"}? Reply: /approve ABCD or /deny ABCD."
+        );
+        assert!(!rendered.to_ascii_lowercase().contains("please"));
+        assert!(!rendered.to_ascii_lowercase().contains("recommend"));
+    }
+}

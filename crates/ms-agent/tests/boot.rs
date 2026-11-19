@@ -102,7 +102,7 @@ fn role_kind_is_separate_from_event_role_name() {
         )
         .unwrap();
     let ready_data: serde_json::Value = serde_json::from_str(&ready_data).unwrap();
-    assert_eq!(ready_data["prompt_version"], "v3/v2");
+    assert_eq!(ready_data["prompt_version"], "v3");
     assert!(
         ready_data["prompt_sha256"]
             .as_str()
