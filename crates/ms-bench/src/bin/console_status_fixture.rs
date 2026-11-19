@@ -39,6 +39,11 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
     db.execute_batch(SUPERVISOR_SCHEMA)?;
     db.execute_batch("PRAGMA user_version=3;")?;
     let now = ms_runtime::utc_now();
+    let lead_scope = if scenario == "default" {
+        "{}".to_owned()
+    } else {
+        fixture_scope(SESSION_ID, "rw", false)
+    };
     insert_session(
         &db,
         SESSION_ID,
@@ -49,7 +54,7 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
         Some("web"),
         "ready",
         &now,
-        "{}",
+        &lead_scope,
     )?;
     init_session_events(home, SESSION_ID, SESSION_ID, "lead")?;
     if scenario != "default" {
@@ -89,6 +94,16 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
                     "Review security tests",
                 ][index]
             };
+            let granted_scope = if scenario == "default" {
+                "{}".to_owned()
+            } else {
+                fixture_scope(id, "ro", index <= 1)
+            };
+            let requested_scope = if scenario == "default" {
+                "{\"mounts\":[{\"path\":\"/work\",\"mode\":\"rw\"}]}".to_owned()
+            } else {
+                fixture_scope(id, "rw", false)
+            };
             insert_session(
                 &db,
                 id,
@@ -99,22 +114,22 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
                 None,
                 "busy",
                 &now,
-                "{\"mounts\":[{\"path\":\"/work\",\"mode\":\"ro\"}]}",
+                &granted_scope,
             )?;
-            db.execute("INSERT INTO delegations(id,lead_id,member_id,role,task,scope_request,policy,timeout_s,status,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,'allow',600,'active',?7,?7)", params![format!("D{:03}", index+1), SESSION_ID, id, role, task, "{\"mounts\":[{\"path\":\"/work\",\"mode\":\"rw\"}]}", now])?;
+            db.execute("INSERT INTO delegations(id,lead_id,member_id,role,task,scope_request,policy,timeout_s,status,created_at,updated_at) VALUES(?1,?2,?3,?4,?5,?6,'allow',600,'active',?7,?7)", params![format!("D{:03}", index+1), SESSION_ID, id, role, task, requested_scope, now])?;
             init_session_events(home, id, SESSION_ID, role)?;
         }
-        seed_lead_events(&db, &now)?;
+        seed_lead_events(home, &db, &now)?;
         let mut seq = 1i64;
         for index in 0..count {
             let id = MEMBER_IDS[index];
             let role = db.query_row("SELECT role FROM sessions WHERE id=?1", [id], |row| {
                 row.get::<_, String>(0)
             })?;
-            seed_member_events(home, id, SESSION_ID, &role, &mut seq, scenario)?;
+            seed_member_events(home, id, SESSION_ID, &role, &mut seq, scenario, &now)?;
         }
         if scenario == "demo" {
-            seed_approval(&db, &now)?;
+            seed_approval(&db, &offset_timestamp(&now, 20)?)?;
             seed_ended_and_telegram(&db, home, &now)?;
         }
         if scenario == "load" {
@@ -135,7 +150,7 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
                     role,
                     seq,
                     "tool.call",
-                    json!({"call_id":format!("call-{index}"),"server":"filesystem","tool":"fs.read","arguments":{"path":format!("/work/src/file-{index}.rs")}}),
+                    json!({"call_id":format!("call-{index}"),"server":"filesystem","tool":"fs.read","args":{"path":format!("/work/src/file-{index}.rs")}}),
                     ms_runtime::utc_now(),
                 )?;
                 seq += 1;
@@ -159,6 +174,28 @@ fn insert_session(
 ) -> Result<(), rusqlite::Error> {
     db.execute("INSERT INTO sessions(id,root_id,parent_id,role,kind,channel,status,scope_json,created_at,last_active_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)", params![id,root,parent,role,kind,channel,status,scope,now])?;
     Ok(())
+}
+
+fn fixture_scope(id: &str, mode: &str, narrowed: bool) -> String {
+    let reductions = if narrowed {
+        json!([{"dimension":"mount","item":"/work","reason":"mode_downgraded"}])
+    } else {
+        json!([])
+    };
+    json!({
+        "version": 1,
+        "session_id": id,
+        "derived_from": "delegation",
+        "source_ref": "code-review-team@1.2.0",
+        "mounts": [{"host_path":"/tmp","container_path":"/work","mode":mode}],
+        "credentials": [],
+        "tools": [],
+        "delegation": null,
+        "limits": {"memory_mb":128,"pids":32,"tmp_mb":32,"max_turns":20,"max_tokens":4000},
+        "narrowed": reductions,
+        "hash": format!("sha256:{}", "0".repeat(64))
+    })
+    .to_string()
 }
 
 fn init_session_events(
@@ -195,6 +232,15 @@ fn init_session_events(
     Ok(db)
 }
 
+fn offset_timestamp(base: &str, seconds: i64) -> Result<String, rusqlite::Error> {
+    let db = Connection::open_in_memory()?;
+    db.query_row(
+        "SELECT strftime('%Y-%m-%dT%H:%M:%fZ',?1,?2)",
+        [base, &format!("+{seconds} seconds")],
+        |row| row.get(0),
+    )
+}
+
 fn append_agent_event(
     home: &Path,
     id: &str,
@@ -213,39 +259,66 @@ fn append_agent_event(
     )
 }
 
-fn seed_lead_events(db: &Connection, now: &str) -> Result<(), rusqlite::Error> {
-    let mut seq = 1i64;
-    for (kind, role, data) in [
-        ("turn.start", "lead", json!({})),
+fn seed_lead_events(
+    home: &Path,
+    db: &Connection,
+    now: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (seq, offset, kind, data) in [
+        (1, 0, "turn.start", json!({})),
         (
+            2,
+            1,
             "delegation.request",
-            "lead",
             json!({"delegation_id":"D001","role":"researcher","task":"Inspect the authentication refresh path","scope_request":{"mounts":[{"path":"/work","mode":"rw"}]}}),
         ),
         (
-            "delegation.spawned",
-            "lead",
-            json!({"delegation_id":"D001","member_id":RESEARCHER_ID,"role":"researcher"}),
-        ),
-        (
+            3,
+            2,
             "delegation.request",
-            "lead",
             json!({"delegation_id":"D002","role":"tester","task":"Run the auth tests and report failures","scope_request":{"mounts":[{"path":"/work","mode":"rw"}]}}),
         ),
-        (
-            "delegation.spawned",
-            "lead",
-            json!({"delegation_id":"D002","member_id":TESTER_ID,"role":"tester"}),
-        ),
-        (
-            "scope.narrowed",
-            "lead",
-            json!({"delegation_id":"D001","reason":"mode_downgraded","dimension":"mounts","requested":"rw","granted":"ro"}),
-        ),
-        ("turn.end", "lead", json!({})),
+        (4, 6, "turn.end", json!({})),
     ] {
-        db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(?1,?2,?3,?4,?4,?5,?6,?7)", params![seq,now,seq*1000,SESSION_ID,role,kind,data.to_string()])?;
-        seq += 1;
+        append_agent_event(
+            home,
+            SESSION_ID,
+            SESSION_ID,
+            "lead",
+            seq,
+            kind,
+            data,
+            offset_timestamp(now, offset)?,
+        )?;
+    }
+    for (seq, offset, kind, data) in [
+        (
+            100,
+            3,
+            "delegation.spawned",
+            json!({"delegation_id":"D001","member_id":RESEARCHER_ID,"role":"researcher","task":"Inspect the authentication refresh path"}),
+        ),
+        (
+            101,
+            4,
+            "delegation.spawned",
+            json!({"delegation_id":"D002","member_id":TESTER_ID,"role":"tester","task":"Run the auth tests and report failures"}),
+        ),
+        (
+            102,
+            5,
+            "scope.narrowed",
+            json!({"delegation_id":"D001","reason":"mode_downgraded","dimension":"mounts","requested":"rw","granted":"ro","narrowed":[{"dimension":"mount","item":"/work","reason":"mode_downgraded"}]}),
+        ),
+        (
+            103,
+            5,
+            "scope.narrowed",
+            json!({"delegation_id":"D002","reason":"mode_downgraded","dimension":"mounts","requested":"rw","granted":"ro","narrowed":[{"dimension":"mount","item":"/work","reason":"mode_downgraded"}]}),
+        ),
+    ] {
+        let ts = offset_timestamp(now, offset)?;
+        db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(?1,?2,?3,?4,?4,'lead',?5,?6)", params![seq,ts,offset*1000,SESSION_ID,kind,data.to_string()])?;
     }
     Ok(())
 }
@@ -257,8 +330,9 @@ fn seed_member_events(
     role: &str,
     seq: &mut i64,
     scenario: &str,
+    base: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let now = ms_runtime::utc_now();
+    let now = offset_timestamp(base, 7)?;
     let path = if scenario == "hostile" {
         "<img src=x>"
     } else {
@@ -276,7 +350,7 @@ fn seed_member_events(
             role,
             *seq,
             "tool.call",
-            json!({"call_id":format!("c{seq}"),"server":"filesystem","tool":"fs.read","arguments":{"path":path}}),
+            json!({"call_id":format!("c{seq}"),"server":"filesystem","tool":"fs.read","args":{"path":path}}),
             now.clone(),
         )?;
         *seq += 1;
@@ -287,7 +361,7 @@ fn seed_member_events(
             role,
             *seq,
             "permit.decision",
-            json!({"call_id":format!("c{}",*seq-1),"decision":"allow"}),
+            json!({"call_id":format!("c{}",*seq-1),"decision":"allow","rule":"tool policy"}),
             now.clone(),
         )?;
         *seq += 1;
@@ -298,7 +372,7 @@ fn seed_member_events(
             role,
             *seq,
             "tool.result",
-            json!({"call_id":format!("c{}",*seq-2),"duration_ms":80,"result":{"text":"ok"}}),
+            json!({"call_id":format!("c{}",*seq-2),"ok":true,"duration_ms":80,"result":{"text":"ok"}}),
             now.clone(),
         )?;
         *seq += 1;
@@ -311,7 +385,7 @@ fn seed_member_events(
             role,
             *seq,
             "tool.call",
-            json!({"call_id":"pending-shell","server":"shell","tool":"shell.run","arguments":{"command":"cargo test -p auth"}}),
+            json!({"call_id":"pending-shell","server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}),
             now.clone(),
         )?;
         *seq += 1;
@@ -322,7 +396,7 @@ fn seed_member_events(
             role,
             *seq,
             "tool.call",
-            json!({"call_id":"denied-fetch","server":"web","tool":"web.fetch","arguments":{"url":"https://example.com"}}),
+            json!({"call_id":"denied-fetch","server":"web","tool":"web.fetch","args":{"url":"https://example.com"}}),
             now.clone(),
         )?;
         *seq += 1;
@@ -333,7 +407,7 @@ fn seed_member_events(
             role,
             *seq,
             "permit.decision",
-            json!({"call_id":"denied-fetch","decision":"deny","reason":"policy"}),
+            json!({"call_id":"denied-fetch","decision":"deny","rule":"tool policy"}),
             now.clone(),
         )?;
         *seq += 1;
@@ -343,8 +417,8 @@ fn seed_member_events(
 
 fn seed_approval(db: &Connection, now: &str) -> Result<(), rusqlite::Error> {
     let expires = "2026-12-31T23:59:59Z";
-    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"server":"shell","tool":"shell.run","arguments":{"command":"cargo test -p auth"}}).to_string(),expires,now])?;
-    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(20,?1,20000,?2,?2,'tester','approval.requested',?3)", params![now,SESSION_ID,json!({"approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","arguments":{"command":"cargo test -p auth"}}).to_string()])?;
+    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string(),expires,now])?;
+    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(120,?1,20000,?2,?2,'tester','approval.requested',?3)", params![now,SESSION_ID,json!({"approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string()])?;
     Ok(())
 }
 
@@ -442,7 +516,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 role,
                 next_seq,
                 "tool.result",
-                json!({"call_id":format!("live-{next_seq}"),"duration_ms":20,"result":{"text":"fixture live step"}}),
+                json!({"call_id":format!("live-{next_seq}"),"ok":true,"duration_ms":20,"result":{"text":"fixture live step"}}),
                 ms_runtime::utc_now(),
             )?;
             next_seq += 1;
@@ -548,6 +622,9 @@ mod tests {
             1
         );
         drop(db);
+        let reach = ms_console::read::scope(&home, TESTER_ID, true).unwrap();
+        assert_eq!(reach["role"], "tester");
+        assert_eq!(reach["rows"][0]["granted"][0]["mode"], "ro");
         let events = Connection::open(
             home.join("sessions")
                 .join(RESEARCHER_ID)
