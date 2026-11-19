@@ -38,6 +38,9 @@ test.beforeAll(async ({ browser }) => {
   await expectFixtureLine("CONNECTED");
   context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const login = await context.newPage();
+  login.on("pageerror", error => console.error(`browser pageerror: ${error.message}`));
+  login.on("console", message => { if (message.type() === "error") console.error(`browser console: ${message.text()}`); });
+  login.on("requestfailed", request => console.error(`browser request failed: ${request.url()} ${request.failure()?.errorText}`));
   await login.route("**/api/v1/**", route => mockApi(route));
   await login.goto(`/login?token=${encodeURIComponent(token)}`);
   await expect(login).toHaveURL("http://127.0.0.1:8792/");
@@ -53,8 +56,9 @@ test.afterAll(async () => {
   if (home) await rm(home, { recursive: true, force: true });
 });
 
-for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
   for (const pageCase of [
+    { name: "overview", hash: "#/overview", heading: "Needs your attention" },
     { name: "new session", hash: "#/sessions", heading: "Start a conversation" },
     { name: "sessions", hash: `#/sessions/${ROOT}`, heading: hostile },
     { name: "approvals", hash: "#/approvals", heading: "microswarm-tools / shell.run" },
@@ -68,12 +72,34 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       await page.route("**/api/v1/**", route => mockApi(route));
       await page.goto(`/#${pageCase.hash.slice(1)}`);
       await expect(page.locator("#app")).toContainText(pageCase.heading);
+      const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth, overflowing: [...document.querySelectorAll("body *")].filter(node => node.getBoundingClientRect().right > document.documentElement.clientWidth + 1).map(node => { const rect = node.getBoundingClientRect(); const parent = node.parentElement.getBoundingClientRect(); const style = getComputedStyle(node); return `${node.tagName}.${node.className} rect=${rect.left}..${rect.right} parent=${parent.left}..${parent.right} width=${style.width} min=${style.minWidth} margin=${style.marginInline} pos=${style.position} flex=${style.flex}`; }) }));
+      expect(dimensions.scrollWidth, `page overflow at ${viewport.width}px: ${JSON.stringify(dimensions.overflowing)}`).toBeLessThanOrEqual(dimensions.width);
       const axe = await new AxeBuilder({ page }).analyze();
       expect(axe.violations, JSON.stringify(axe.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target) })))).toEqual([]);
       await page.close();
     });
   }
 }
+
+test("primary navigation and chat controls are keyboard reachable with reduced motion", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/#/sessions");
+  const overviewLink = page.locator('.primary-nav a[href="#/overview"]');
+  await overviewLink.focus();
+  await expect(overviewLink).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/overview$/);
+  await page.goto(`/#/sessions/${ROOT}`);
+  const composer = page.getByLabel("Message the lead");
+  await expect(composer).toBeVisible();
+  await composer.focus();
+  await expect(composer).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Send" })).toBeFocused();
+  await page.close();
+});
 
 test("console reaches the Sessions page within two seconds", () => {
   console.log(`console startup-to-render: ${startupMs} ms`);

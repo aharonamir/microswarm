@@ -44,16 +44,16 @@ export async function renderApprovals(root, selectedId, t) {
     el("p", { class: "binding-notice" }, [t("approvals.binding_notice")]),
     el("p", { class: "mono" }, [`binding ${call.argument_hash || ""}`]),
     el("h3", {}, [t("approvals.args")]),
-    el("pre", { class: "command-block mono" }, [JSON.stringify(call.arguments || {}, null, 2)]),
+    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.args")]), el("pre", { class: "command-block mono" }, [JSON.stringify(call.arguments || {}, null, 2)])]),
     call.parsed ? el("section", { class: "parsed-command" }, [el("h3", {}, [t("approvals.parsed")]), el("p", {}, [`${t(`approvals.parsed_kind.${call.parsed.kind}`)} · ${t("approvals.program")}: ${call.parsed.commands[0]?.split(/\s+/)[0] || ""}`]), ...call.parsed.commands.map(command => el("code", { class: "parsed-part" }, [command]))]) : el("p", {}, [t("approvals.parse_unavailable")]),
     el("h3", {}, [t("approvals.runs_in")]),
-    el("pre", { class: "command-block mono" }, [JSON.stringify(detail.runs_in || {}, null, 2)]),
+    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.runs_in")]), el("pre", { class: "command-block mono" }, [JSON.stringify(detail.runs_in || {}, null, 2)])]),
   ] : [
     el("p", { class: "label" }, [t("approvals.spawn")]),
     el("h2", { class: "page-title" }, [detail.spawn?.role || t("approvals.member")]),
     el("p", {}, [detail.spawn?.task || ""]),
     el("h3", {}, [t("approvals.requested_scope")]),
-    el("pre", { class: "command-block mono" }, [JSON.stringify(detail.spawn?.requested || {}, null, 2)]),
+    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.requested_scope")]), el("pre", { class: "command-block mono" }, [JSON.stringify(detail.spawn?.requested || {}, null, 2)])]),
   ];
   const pending = detail.state === "pending";
   root.append(rail, el("section", { class: "page-main panel approval-detail" }, [

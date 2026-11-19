@@ -16,6 +16,8 @@ const statusText = (view, t) => t(view?.status_words?.key || "", view?.status_wo
 const timeText = value => { const date = new Date(value); return Number.isNaN(date.valueOf()) ? "" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
 
 export async function renderSessions(root, selectedId, t) {
+  const priorConversation = root.querySelector(".conversation");
+  const priorScrollTop = priorConversation?.scrollTop;
   const version = ++renderVersion;
   const current = () => version === renderVersion && (!location.hash || location.hash.startsWith("#/sessions"));
   clear(root);
@@ -113,6 +115,8 @@ export async function renderSessions(root, selectedId, t) {
       el("a", { href: `#/trace/${view.root_id}` }, [t("sessions.all_events")]),
     ]);
     root.append(sidebar, main, team);
+    const conversation = main.querySelector(".conversation");
+    if (conversation && priorScrollTop != null) conversation.scrollTop = priorScrollTop;
   } else {
     main.append(
       el("header", { class: "session-heading" }, [el("div", {}, [el("h1", { class: "page-title" }, [t("sessions.new_title")]), el("p", { class: "muted" }, [t("sessions.chat_helper")])])]),

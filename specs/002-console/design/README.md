@@ -32,10 +32,17 @@ The principle behind every screen: **the walls are the interface.** Every agent 
 - **Minimum targets:** 44 px, or 52 px on the phone layout.
 - **Meaning:** red is reserved for "needs you". Status always pairs a word with a dot, never colour alone.
 
-## Global frame
+## Global frame (redesigned 2026-11-18)
 
-- **Header (all pages):** the 微群 mark (32 px seal square), "MicroSwarm", then the nav: Sessions · Approvals (with a red count badge) · Trace · Host. On the right: the "supervisor running" chip and the EN | 中文 toggle (`aria-pressed`).
+- **Header (all pages):** the 微群 mark (32 px seal square), "MicroSwarm", then the nav: Overview · Sessions · Approvals (with a red count badge) · Trace · Host. On the right: the "supervisor running" chip and the EN | 中文 toggle (`aria-pressed`). The root route remains Sessions so a new operator can start a web session immediately.
 - **Layout:** a flex row that wraps. The left rail is `flex: 1 1 230px`, main is `flex: 999 1 560px; min-width: 0`, and the right panel is `flex: 1 1 340px`. Under 900 px the panels stack: rail, main, right panel.
+
+## Overview page
+
+- **Needs your attention:** pending approval cards with requester, action/tool and approval code; each opens its approval detail. Empty state states that nothing needs attention.
+- **Active sessions:** responsive cards with title, status words, member count and channel; each opens the lead conversation.
+- **Recent activity:** latest events across up to eight active sessions with observation labels and links to the owning session. This is an operator summary; the Trace page remains the full event record.
+- Overview uses existing read-only sessions, approvals and activity endpoints. No additional supervisor operation or authority is introduced.
 
 ## Sessions page (revised 2026-10-30, the primary screen)
 
@@ -105,6 +112,14 @@ Cards in an auto-fit grid (min 380 px):
 - **Team skills:** roles with spawn-policy chips.
 - **Credentials:** names, "used by", and a **Set a value** dialog with a password-type input. The field is cleared after submit, and the note says "Values can be set here but never shown."
 - **Limits and ceiling:** read-only, with "edit on the host".
+
+## Responsive implementation notes
+
+- Sessions keeps its message list in a bounded, independently scrolling region; the composer remains visible at the bottom of the conversation panel. Live rerenders restore the conversation scroll offset and preserve the unsent draft.
+- At 700 px and below, page rails and details become a single column. Scope comparisons and trace details fit the available width; long values wrap or scroll inside their own detail blocks.
+- Raw JSON remains available inside native expandable `details` disclosures on approvals, member scope and trace. Summaries identify the content before it is opened.
+- At 360 px and below, header tools wrap below the brand and navigation remains horizontally scrollable. The page itself should not require horizontal scrolling.
+- Interactive elements retain visible keyboard focus. Reduced-motion preference disables smooth scrolling.
 
 ## Phone layout (390 px)
 

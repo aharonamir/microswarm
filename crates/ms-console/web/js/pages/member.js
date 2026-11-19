@@ -16,7 +16,7 @@ export async function renderMember(root, id, t) {
         ]), ...(row.narrowed || []).map(item => el("p", { class: "narrowed-reason" }, [`${item.item}: ${item.reason}`])),
       ])),
     ]),
-    el("section", { class: "panel scope-panel" }, [el("h2", { class: "section-title" }, [t("scope.profile")]), el("pre", { class: "command-block mono" }, [JSON.stringify(data.profile || {}, null, 2)])]),
+    el("section", { class: "panel scope-panel" }, [el("h2", { class: "section-title" }, [t("scope.profile")]), el("details", { class: "raw-detail" }, [el("summary", {}, [t("scope.profile")]), el("pre", { class: "command-block mono" }, [JSON.stringify(data.profile || {}, null, 2)])])]),
     el("button", { class: "primary-button", onclick: () => { prefillComposer(t("scope.dismiss_prefill", { role: data.role || "member" })); location.hash = `#/sessions/${data.lead_id}`; } }, [t("scope.ask_dismiss")]),
   );
 }
