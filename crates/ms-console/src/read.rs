@@ -303,7 +303,7 @@ pub fn messages(
         for row in rows {
             let (row_id, kind, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-            let item = match kind.as_str() {
+            let mut item = match kind.as_str() {
                 "user_message" => {
                     json!({"kind":"user","at":at,"text":body["text"],"via":body["from"]})
                 }
@@ -326,6 +326,9 @@ pub fn messages(
                     json!({"kind":"team","at":at,"team":{"event":"approval_result","detail":body["decision"]}})
                 }
             };
+            if item["kind"] == "team" {
+                item["team_group_id"] = json!(format!("team-{row_id}"));
+            }
             items.push((at, 0, row_id, item));
         }
     }
@@ -350,11 +353,12 @@ pub fn messages(
         for row in rows {
             let (row_id, _, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+            let based_on_role = based_on_role(home, &root_db, id, &at);
             items.push((
                 at.clone(),
                 1,
                 row_id,
-                json!({"kind":"lead","at":at,"text":body["text"]}),
+                json!({"kind":"lead","at":at,"text":body["text"],"based_on_role":based_on_role}),
             ));
         }
     }
@@ -380,6 +384,22 @@ pub fn messages(
     Ok(
         json!({"items":items.into_iter().skip(start).map(|(_,_,_,item)|item).collect::<Vec<_>>(),"next_before":next_before}),
     )
+}
+
+fn based_on_role(home: &Path, supervisor_db: &Connection, id: &str, at: &str) -> Option<String> {
+    let path = home.join("sessions").join(id).join("control/inbound.db");
+    let db = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let member: String = db.query_row("SELECT json_extract(body,'$.member_id') FROM inbound WHERE kind='member_reply' AND created_at<=?1 ORDER BY created_at DESC,id DESC LIMIT 1", [at], |row| row.get(0)).optional().ok()??;
+    supervisor_db
+        .query_row("SELECT role FROM sessions WHERE id=?1", [member], |row| {
+            row.get(0)
+        })
+        .optional()
+        .ok()?
 }
 
 fn parse_message_cursor(cursor: &str) -> Option<(String, u8, i64)> {
@@ -735,7 +755,23 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
     let spawn = (kind == "spawn").then(
         || json!({"role":payload["role"],"task":payload["task"],"requested":payload["scope"]}),
     );
+    let agent = json!({"id":requester,"kind":"member","role":role,"colour_index":1,"initial":role.chars().next().unwrap_or('M').to_uppercase().to_string()});
+    let tool_name = payload["binding"]["tool"].as_str().unwrap_or("tool");
+    let command = payload["arguments"]["command"].as_str();
+    let sentence = if tool_name == "shell.run" {
+        json!({"key":"step.shell.ask","args":{"command":command.unwrap_or("")}})
+    } else {
+        json!({"key":"step.approval.asked","args":{"role":role,"what":tool_name}})
+    };
+    let brief = if kind == "spawn" {
+        payload["task"].as_str()
+    } else {
+        None
+    };
+    let policy = json!({"rule":format!("{tool_name} = ask"),"source":"policy","source_ref":null});
+    let facts = command.map(|command| vec![json!({"key":"parse.simple"}),json!({"key":"parse.program","args":{"program":command.split_whitespace().next().unwrap_or("")}}),json!({"key":"parse.no_pipes"})]).unwrap_or_default();
+    let runs_summary = json!({"folders":runs_in["mounts"].as_array().into_iter().flatten().map(|m|json!({"path":m["container_path"],"mode":m["mode"]})).collect::<Vec<_>>(),"network":"none","credentials":runs_in["credentials"],"tools_ask":[]});
     Ok(
-        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_in}),
+        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_summary,"raw":{"runs_in":runs_in},"agent":agent,"sentence":sentence,"brief":brief.map(|text|json!({"text":text,"from":"lead","at":created})),"policy":policy,"facts":facts,"spawn_preview":if kind=="spawn" {Some(Value::Null)} else {None}}),
     )
 }
