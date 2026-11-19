@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Approvals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.av{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+.av-lead{background:#1C1917;color:#fff}.av-res{background:#E6E8FB;color:#3440A8}.av-tst{background:#F1E6F7;color:#6B3787}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}
+.btn-deny{color:#8E241E;border-color:#E2B7B1}
+.tab{height:32px;padding:0 10px;border:0;border-radius:8px;background:none;font:500 13px/1 'IBM Plex Sans',sans-serif;color:#57534E;cursor:pointer}
+.tab-on{background:#fff;color:#1C1917;box-shadow:0 1px 2px rgba(28,25,23,.1)}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;justify-content:center;width:44px;height:40px;border-radius:9px;color:#57534E;text-decoration:none}
+.ico{width:16px;height:16px;flex:none}
+.q{display:flex;gap:10px;padding:12px;border-radius:12px;text-decoration:none;color:#1C1917}
+.q:hover{background:#EFEBE5;color:#1C1917}
+.tile{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:12px;background:#fff;border:1px solid #E7E2DA;min-width:0}
+.li{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <nav aria-label="Main" style="flex: 0 0 64px; box-sizing: border-box; padding: 18px 10px; display: flex; flex-direction: column; align-items: center; gap: 14px; border-right: 1px solid #E7E2DA;">
+    <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+    <a class="btn btn-primary" href="#" aria-label="New session" style="width: 44px; height: 44px; padding: 0; justify-content: center;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></a>
+    <a class="nav" href="Home.dc.html" aria-label="Home"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg></a>
+    <a class="nav" href="#" aria-label="Approvals" aria-current="page" style="background: #fff; border: 1px solid #E7E2DA; color: #1C1917;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg></a>
+    <a class="nav" href="Trajectory.dc.html" aria-label="Trajectories"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg></a>
+    <a class="nav" href="Host.dc.html" aria-label="Host"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg></a>
+  </nav>
+
+  <!-- Queue -->
+  <aside aria-label="Approval queue" style="flex: 1 1 300px; max-width: 100%; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #E7E2DA; display: flex; flex-direction: column; gap: 14px;">
+    <h1 style="margin: 0 6px; font-size: 20px; line-height: 26px; font-weight: 600;">Approvals</h1>
+    <div role="tablist" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: #EDE8E1; align-self: flex-start;">
+      <button class="tab tab-on" role="tab" aria-selected="true">Waiting · 1</button>
+      <button class="tab" role="tab" aria-selected="false">Decided</button>
+      <button class="tab" role="tab" aria-selected="false">Expired · 1</button>
+    </div>
+    <a class="q" href="#" aria-current="true" style="background: #fff; border: 1.5px solid #B3312A;">
+      <span class="av av-tst">T</span>
+      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <strong style="font-weight: 600;">tester · run a command</strong>
+        <span class="mono" style="font-size: 12px; color: #57534E;">cargo test -p auth</span>
+        <span class="muted" style="font-size: 12px;">Audit the auth module · 11 min left</span>
+      </span>
+    </a>
+    <span class="label" style="padding: 8px 6px 0;">Earlier today</span>
+    <a class="q" href="#">
+      <span class="av av-lead">L</span>
+      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <span style="font-weight: 500;">lead · add a tester</span>
+        <span class="muted" style="font-size: 12px;">You approved at 14:03</span>
+      </span>
+    </a>
+    <a class="q" href="#">
+      <span class="av av-res">R</span>
+      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <span style="font-weight: 500;">reader · open a web page</span>
+        <span class="muted" style="font-size: 12px;">You denied at 09:40</span>
+      </span>
+    </a>
+    <a class="q" href="#" style="border: 1px dashed #D9D2C7;">
+      <span class="av av-lead" style="opacity: .5;">L</span>
+      <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+        <span style="font-weight: 500; color: #57534E;">lead · write a file</span>
+        <span class="muted" style="font-size: 12px;">Expired when the supervisor restarted. Asked again as <span class="mono">P3VN</span>, approved.</span>
+      </span>
+    </a>
+  </aside>
+
+  <!-- Decision -->
+  <main style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; background: #FCFBF9;">
+    <div style="padding: 28px 36px; display: flex; flex-direction: column; gap: 22px; max-width: 900px; width: 100%; box-sizing: border-box;">
+      <header style="display: flex; gap: 14px; align-items: flex-start;">
+        <span class="av av-tst" style="width: 40px; height: 40px; font-size: 15px; border-radius: 11px;">T</span>
+        <div style="flex-grow: 1; min-width: 0;">
+          <h2 style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 600;">The tester wants to run a command</h2>
+          <p class="muted" style="margin: 4px 0 0;">In <a href="Main.dc.html">Audit the auth module</a> · asked 14:06 · if you don't answer by 14:17 it counts as denied</p>
+        </div>
+        <span class="mono" style="padding: 6px 10px; border-radius: 8px; background: #FBEAE7; color: #8E241E; font-weight: 500;">K7QF</span>
+      </header>
+
+      <pre class="mono" style="margin: 0; background: #1C1917; color: #F5F1EA; border-radius: 12px; padding: 16px 18px; font-size: 15px; line-height: 22px; white-space: pre-wrap;">$ cargo test -p auth</pre>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+        <div class="tile">
+          <span class="label">What runs</span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#1D6A66" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>One simple command</span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#1D6A66" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>Program <span class="mono">cargo</span></span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#1D6A66" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>No pipes, redirects or substitutions</span>
+        </div>
+        <div class="tile">
+          <span class="label">Where it runs</span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#57534E" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="10" rx="2"/></svg>The tester's own container</span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#57534E" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Reads <span class="mono">/work</span>, can't write</span>
+          <span class="li"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#57534E" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M4 12 12 4"/></svg>No network, no credentials</span>
+        </div>
+        <div class="tile">
+          <span class="label">Why it asks</span>
+          <span style="font-size: 13px;">Members of <span class="mono">code-review-team</span> must ask before any <span class="mono">shell.run</span>. Set in the team skill.</span>
+          <a href="Host.dc.html" style="font-size: 12.5px;">See the policy</a>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: #E3F0EE;">
+        <svg class="ico" style="margin-top: 2px;" viewBox="0 0 16 16" fill="none" stroke="#134A47" stroke-width="1.5" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>
+        <p style="margin: 0; color: #134A47; font-size: 13.5px;">This approval covers exactly this command, once. If the tester changes anything, it has to ask again.</p>
+      </div>
+
+      <section style="display: flex; flex-direction: column; gap: 8px;">
+        <h3 class="label" style="margin: 0;">What the tester was asked to do</h3>
+        <blockquote style="margin: 0; padding: 10px 14px; border-radius: 12px; background: #fff; border: 1px solid #E7E2DA; color: #57534E;">“Run the auth test suite and report failures. No file changes.” <span class="muted" style="font-size: 12px;">· from the lead, 14:03</span></blockquote>
+      </section>
+
+      <details>
+        <summary style="cursor: pointer; font-size: 13px; font-weight: 500;">Exact call</summary>
+        <pre class="mono" style="margin: 10px 0 0; background: #F1EEE9; border-radius: 10px; padding: 12px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;">server  microswarm-tools
+tool    shell.run
+args    {"command":"cargo test -p auth"}
+binding sha256:9f2c1a7e…</pre>
+      </details>
+    </div>
+
+    <div style="position: sticky; bottom: 0; margin-top: auto; padding: 14px 36px; border-top: 1px solid #E7E2DA; background: #fff; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+      <span class="muted" style="font-size: 12.5px; flex: 1 1 240px;">Your answer goes to the supervisor, not to the agent.</span>
+      <button class="btn btn-deny" style="height: 48px; padding: 0 22px;">Deny</button>
+      <button class="btn btn-primary" style="height: 48px; padding: 0 22px;">Approve this command</button>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

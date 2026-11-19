@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Host</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:36px;padding:0 12px;border-radius:9px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;justify-content:center;width:44px;height:40px;border-radius:9px;color:#57534E;text-decoration:none}
+.snav{display:flex;align-items:center;height:36px;padding:0 10px;border-radius:8px;color:#57534E;text-decoration:none;font-weight:500}
+.snav:hover{background:#EFEBE5;color:#1C1917}
+.ico{width:16px;height:16px;flex:none}
+.r{display:grid;grid-template-columns:minmax(140px,1fr) minmax(160px,1.4fr) auto;gap:14px;align-items:center;padding:12px 18px;border-top:1px solid #F1EEE9}
+.chk{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid #E7E2DA;min-width:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <nav aria-label="Main" style="flex: 0 0 64px; box-sizing: border-box; padding: 18px 10px; display: flex; flex-direction: column; align-items: center; gap: 14px; border-right: 1px solid #E7E2DA;">
+    <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+    <a class="btn btn-primary" href="#" aria-label="New session" style="width: 44px; height: 44px; padding: 0; justify-content: center;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></a>
+    <a class="nav" href="Home.dc.html" aria-label="Home"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg></a>
+    <a class="nav" href="Approvals.dc.html" aria-label="Approvals"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg></a>
+    <a class="nav" href="Trajectory.dc.html" aria-label="Trajectories"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg></a>
+    <a class="nav" href="#" aria-label="Host" aria-current="page" style="background: #fff; border: 1px solid #E7E2DA; color: #1C1917;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg></a>
+  </nav>
+
+  <aside aria-label="Host sections" style="flex: 1 1 200px; max-width: 100%; box-sizing: border-box; padding: 24px 14px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #E7E2DA;">
+    <h1 style="margin: 0 10px 12px; font-size: 20px; line-height: 26px; font-weight: 600;">Host</h1>
+    <a class="snav" href="#health" style="background: #fff; color: #1C1917; border: 1px solid #E7E2DA;">Health</a>
+    <a class="snav" href="#channels">Channels</a>
+    <a class="snav" href="#skills">Team skills</a>
+    <a class="snav" href="#tools">Tools</a>
+    <a class="snav" href="#creds">Credentials</a>
+    <a class="snav" href="#limits">Limits</a>
+  </aside>
+
+  <main style="flex: 999 1 640px; min-width: 0; box-sizing: border-box; padding: 24px 36px 40px;">
+    <div style="max-width: 920px; display: flex; flex-direction: column; gap: 28px;">
+
+      <section id="health" style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 12px;"><h2 style="margin: 0; font-size: 16px; font-weight: 600; flex-grow: 1;">Health</h2><span class="muted" style="font-size: 12.5px;">checked 14:10</span><button class="btn">Run checks</button></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+          <div class="chk"><span class="pill p-work"><span class="dot"></span>OK</span><span style="min-width: 0;">Container runtime<br><span class="muted mono" style="font-size: 12px;">podman 5.2</span></span></div>
+          <div class="chk"><span class="pill p-work"><span class="dot"></span>OK</span><span style="min-width: 0;">Supervisor<br><span class="muted" style="font-size: 12px;">up 2 days · 5 containers</span></span></div>
+          <div class="chk"><span class="pill p-work"><span class="dot"></span>OK</span><span style="min-width: 0;">Model provider<br><span class="muted" style="font-size: 12px;">reachable via proxy</span></span></div>
+          <div class="chk"><span class="pill p-warn"><span class="dot"></span>Check</span><span style="min-width: 0;">Disk for sessions<br><span class="muted" style="font-size: 12px;">82% used</span></span></div>
+        </div>
+      </section>
+
+      <section id="channels" style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 600;">Channels</h2>
+        <div class="card">
+          <div class="r" style="border-top: 0;"><strong style="font-weight: 500;">Web console</strong><span class="muted">This page · loopback only</span><span class="pill p-work">On</span></div>
+          <div class="r"><strong style="font-weight: 500;">Telegram</strong><span class="muted">@microswarm_bot · 1 allowed chat</span><span class="pill p-work">On</span></div>
+          <div class="r"><strong style="font-weight: 500;">CLI</strong><span class="muted">microswarm chat</span><span class="pill p-work">On</span></div>
+          <div class="r"><strong style="font-weight: 500;">Webhook</strong><span class="muted">Not configured</span><span class="pill p-done">Off</span></div>
+        </div>
+      </section>
+
+      <section id="skills" style="display: flex; flex-direction: column; gap: 12px;">
+        <h2 style="margin: 0; font-size: 16px; font-weight: 600;">Team skills</h2>
+        <div class="card" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: baseline; gap: 10px;"><strong class="mono" style="font-size: 13.5px;">code-review-team</strong><span class="muted mono" style="font-size: 12px;">1.2.0</span><span class="muted" style="font-size: 12.5px;">Reviews code with a reader and a test runner.</span></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="pill p-done" style="height: 28px;">researcher · starts without asking</span>
+            <span class="pill p-warn" style="height: 28px;">tester · asks you before starting</span>
+            <span class="pill p-warn" style="height: 28px;">shell.run · asks you</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="creds" style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 12px;"><h2 style="margin: 0; font-size: 16px; font-weight: 600; flex-grow: 1;">Credentials</h2><span class="muted" style="font-size: 12.5px;">Values can be set here, never shown. Agents see names only.</span></div>
+        <div class="card">
+          <div class="r" style="border-top: 0;"><span class="mono">model-key</span><span class="muted">Used by every agent, through the proxy</span><button class="btn">Set value</button></div>
+          <div class="r"><span class="mono">github</span><span class="muted">Used by the lead · last used 14:02</span><button class="btn">Set value</button></div>
+        </div>
+      </section>
+
+      <section id="limits" style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 12px;"><h2 style="margin: 0; font-size: 16px; font-weight: 600; flex-grow: 1;">Limits</h2><span class="muted" style="font-size: 12.5px;">Edit on the host: <span class="mono">~/.microswarm/config.toml</span></span></div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px;">
+          <div class="card" style="padding: 14px 16px;"><span class="label">Per session</span><p style="margin: 6px 0 0;">Up to 4 members · 30 min per member · 1 CPU and 512 MB each</p></div>
+          <div class="card" style="padding: 14px 16px;"><span class="label">Never grantable</span><p style="margin: 6px 0 0;">Network beyond the proxy · paths outside <span class="mono">~/code</span> · writes to <span class="mono">.git</span></p></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
