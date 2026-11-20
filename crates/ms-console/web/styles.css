@@ -438,10 +438,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 @media (max-width: 699px) {
   .member-drawer-panel { inline-size: 100%; box-sizing: border-box; }
-  .member-drawer-header { display: grid; grid-template-columns: 36px minmax(0, 1fr) 44px; align-items: center; }
+  .member-drawer-header { display: grid; grid-template-columns: 36px minmax(0, 1fr) 48px; align-items: center; }
   .member-drawer-header > div { min-inline-size: 0; }
   .member-drawer-header .pill { grid-column: 2; grid-row: 2; justify-self: start; margin: 0; }
-  .member-drawer-close { grid-column: 3; grid-row: 1 / span 2; }
+  .member-drawer-close { grid-column: 3; grid-row: 1 / span 2; inline-size: 100%; }
   .member-drawer-open .global-header { position: sticky; inline-size: 100%; min-block-size: 56px; flex-direction: row; align-items: center; padding: 8px 12px; }
   .member-drawer-open .page-frame { margin-inline: 0; }
 }
@@ -451,6 +451,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .dock-actions .dock-why { grid-column: 1 / -1; grid-row: 1; margin: 0; }
   .dock-actions .dock-deny { grid-column: 1; }
   .dock-actions .primary-button { grid-column: 2; }
+  .member-drawer-footer .mono { flex-basis: 100%; margin-inline-start: 0; text-align: end; }
   .container-profile { grid-template-columns: 1fr; }
 }
 @media (min-width: 900px) { .host-section:not(:first-of-type) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; } }
@@ -458,6 +459,36 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 @media (max-width: 520px) { .session-main .composer { margin-inline: 0; } }
 @media (max-width: 900px) { .primary-nav { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; } }
 @media (max-width: 900px) { .session-main .composer { width: auto; max-width: 100%; margin: 12px 0 0; } }
+
+/* Keep session actions compact while preserving full touch targets. */
+.session-header-actions .secondary-button,
+.dock-actions .primary-button,
+.dock-actions .dock-deny,
+.session-composer .primary-button,
+.member-drawer-footer button,
+.member-drawer-footer a {
+  min-block-size: 40px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+.page-rail .new-session { min-block-size: 40px; padding-inline: 12px; }
+.member-drawer-close { min-inline-size: 0; padding-inline: 8px; }
+@media (pointer: coarse) {
+  .session-header-actions .secondary-button,
+  .dock-actions .primary-button,
+  .dock-actions .dock-deny,
+  .session-composer .primary-button,
+  .member-drawer-footer button,
+  .member-drawer-footer a,
+  .member-drawer-close { min-block-size: 44px; }
+}
+@media (min-width: 700px) and (max-width: 1099px) {
+  .primary-nav { position: absolute; inset: 72px 8px 16px; inline-size: 48px; min-inline-size: 0; overflow-y: auto; overflow-x: hidden; }
+  .primary-nav a { justify-self: center; }
+  .primary-nav .nav-section-title,
+  .primary-nav .session-list { display: none; }
+  .primary-nav a.new-session-link { inline-size: 44px; min-inline-size: 44px; justify-self: center; padding-inline: 0; }
+}
 
 /* Responsive shell and reusable components for the redesign. */
 .console-shell { min-block-size: 100dvh; }
