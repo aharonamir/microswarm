@@ -39,8 +39,9 @@ function render() {
 async function renderNow() {
   await loadLocale(localStorage.getItem("ms-lang") || "en");
   const menuButton = document.getElementById("mobile-menu-toggle");
-  clear(menuButton);
-  append(menuButton, t("nav.menu"));
+  const menuButtonLabel = document.getElementById("mobile-menu-toggle-label");
+  clear(menuButtonLabel);
+  append(menuButtonLabel, t("nav.menu"));
   setAttr(menuButton, "aria-label", t("nav.menu"));
   const route = currentRoute();
   const { page, parts = [] } = route;

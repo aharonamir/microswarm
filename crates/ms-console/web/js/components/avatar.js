@@ -11,6 +11,6 @@ export function avatar(agent, { className = "", label = false } = {}) {
 }
 
 export function avatarStack(agents, t) {
-  return el("span", { class: "avatar-stack", "aria-label": t("session.agent_count", { count: agents.length }) },
+  return el("span", { class: "avatar-stack", role: "group", "aria-label": t("session.agent_count", { count: agents.length }) },
     agents.map(agent => avatar(agent, { className: "avatar-stack-item" })));
 }

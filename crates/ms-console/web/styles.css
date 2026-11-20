@@ -27,6 +27,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
 .global-header { min-height: 64px; display: flex; align-items: center; gap: 28px; padding: 10px 24px; background: var(--panel); border-bottom: 1px solid var(--rule); }
 .brand { display: flex; align-items: center; gap: 9px; text-decoration: none; font-weight: 600; white-space: nowrap; }
+.brand-mark-home { display: flex; flex: none; }
+.brand-name { color: inherit; text-decoration: none; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; color: white; background: var(--seal); border-radius: 6px; font-weight: 600; }
 .primary-nav { display: flex; gap: 8px; align-items: center; flex: 1; }
 .primary-nav a { min-height: 44px; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
@@ -242,7 +244,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .conversation-feed { display: flex; flex-direction: column; gap: 20px; inline-size: min(100%, 820px); margin-inline: auto; }
 .conversation-message { min-inline-size: 0; }
 .message-you { align-self: flex-end; max-inline-size: 78%; padding: 10px 14px; border-radius: 16px 16px 4px 16px; background: var(--you); }
-.message-you .message-meta { margin: 0 0 4px; text-align: end; }
+.message-you .message-meta { margin: 0 0 4px; color: var(--ink-2); text-align: end; }
 .message-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-lead { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 10px; max-inline-size: 100%; }
 .lead-message-body { min-inline-size: 0; }
@@ -346,7 +348,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .member-drawer-panel { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; block-size: 100%; min-inline-size: 0; }
 .member-drawer-header { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-block-end: 1px solid var(--line); }
 .member-drawer-header .avatar { inline-size: 36px; }
-.member-drawer-header h2 { margin: 0; font-size: 18px; }
+.member-drawer-header :is(h1, h2) { margin: 0; font-size: 18px; }
 .member-drawer-header p { margin: 2px 0 0; color: var(--ink-2); font-size: 12px; }
 .member-drawer-header .pill { margin-inline-start: auto; }
 .member-drawer-close { min-inline-size: 44px; min-block-size: 44px; }
@@ -386,7 +388,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .member-drawer-open .page-frame { margin-inline-start: 64px; }
 .member-drawer-open .session-page { grid-template-columns: minmax(0, 1fr); }
 .member-drawer-open .session-team-sidebar { display: none; }
-.member-drawer-open .brand > span:last-child, .member-drawer-open .primary-nav .nav-label, .member-drawer-open .header-tools .supervisor-chip, .member-drawer-open .language-toggle, .member-drawer-open .nav-section-title, .member-drawer-open .global-header .session-link-title, .member-drawer-open .global-header .status-line { display: none; }
+.member-drawer-open .brand-name, .member-drawer-open .header-tools .supervisor-chip, .member-drawer-open .language-toggle, .member-drawer-open .nav-section-title, .member-drawer-open .global-header .session-link-title, .member-drawer-open .global-header .status-line, .member-drawer-open .global-header .session-list { display: none; }
 .member-drawer-open .primary-nav a { justify-content: center; inline-size: 44px; padding: 0; font-size: 0; }
 .member-drawer-open .primary-nav .nav-icon { font-size: 20px; }
 .member-drawer-open .global-header .session-link { justify-content: center; min-inline-size: 44px; padding-inline: 0; }
@@ -483,7 +485,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .member-drawer-close { min-block-size: 44px; }
 }
 @media (min-width: 700px) and (max-width: 1099px) {
-  .primary-nav { position: absolute; inset: 72px 8px 16px; inline-size: 48px; min-inline-size: 0; overflow-y: auto; overflow-x: hidden; }
+  .brand { inline-size: 48px; justify-content: center; }
+  .brand-name { display: none; }
+  .primary-nav { position: absolute; inset-block: 72px 16px; inset-inline-start: 0; inset-inline-end: auto; inline-size: 48px; min-inline-size: 0; overflow-y: auto; overflow-x: hidden; }
   .primary-nav a { justify-self: center; }
   .primary-nav .nav-section-title,
   .primary-nav .session-list { display: none; }
@@ -518,17 +522,19 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .primary-nav[hidden] { display: none; }
 @media (min-width: 700px) and (max-width: 1099px) {
   .global-header { inline-size: 64px; align-items: center; padding-inline: 8px; }
-  .brand > span:last-child, .primary-nav .nav-label, .header-tools .supervisor-chip, .language-toggle { display: none; }
+  .brand > span:last-child, .header-tools .supervisor-chip, .language-toggle { display: none; }
   .primary-nav a { justify-content: center; inline-size: 44px; padding: 0; font-size: 0; }
-  .primary-nav .nav-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; }
+  .primary-nav .nav-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; font-size: 1px; }
   .primary-nav .nav-icon { font-size: 20px; }
   .primary-nav a .badge { font-size: 11px; }
   .page-frame { margin-inline-start: 64px; }
 }
 @media (max-width: 699px) {
-  .global-header { position: sticky; inset: 0 0 auto; inline-size: 100%; min-block-size: 56px; flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px; border-block-end: 1px solid var(--line); }
+  .global-header { position: sticky; inset: 0 0 auto; inline-size: 100%; min-block-size: 56px; flex-direction: row; align-items: center; gap: 0; padding: 8px 12px; border-block-end: 1px solid var(--line); }
+  .mobile-menu-toggle { display: inline-flex; flex: none; align-items: center; justify-content: center; inline-size: 44px; min-inline-size: 44px; min-block-size: 44px; margin-inline-end: 0; padding: 0; border: 0; background: transparent; cursor: pointer; }
+  .brand-mark-home { display: none; }
+  .brand { gap: 0; }
   .primary-nav { display: flex; overflow-x: auto; }
-  .mobile-menu-toggle { display: inline-flex; align-items: center; justify-content: center; min-block-size: 44px; }
   .primary-nav:not([hidden]) { position: absolute; inset: 56px 0 auto; z-index: 4; display: grid; max-block-size: calc(100dvh - 56px); overflow: auto; padding: 10px 12px; border-block-end: 1px solid var(--line); background: var(--surface); box-shadow: 0 8px 20px rgb(28 25 23 / .08); }
   .primary-nav:not([hidden]) > a { inline-size: 100%; }
   .primary-nav a { flex: 0 0 auto; }

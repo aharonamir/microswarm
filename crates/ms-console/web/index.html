@@ -12,8 +12,8 @@
 <body>
   <div class="console-shell">
     <aside class="global-header" aria-label="Console navigation">
-      <a class="brand" href="#/home"><img class="brand-mark" src="/img/mark.svg" alt=""><span>MicroSwarm</span></a>
-      <button id="mobile-menu-toggle" class="mobile-menu-toggle secondary-button" type="button" aria-label="Menu" aria-expanded="false" aria-controls="main-nav">Menu</button>
+      <button id="mobile-menu-toggle" class="mobile-menu-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="main-nav"><img class="brand-mark" src="/img/mark.svg" alt=""><span id="mobile-menu-toggle-label" class="visually-hidden"></span></button>
+      <div class="brand"><a class="brand-mark-home" href="#/home" aria-labelledby="brand-home-title"><img class="brand-mark" src="/img/mark.svg" alt=""></a><a class="brand-name" id="brand-home-title" href="#/home">MicroSwarm</a></div>
       <nav id="main-nav" class="primary-nav" aria-label="Main navigation">
       <a href="#/overview" data-route="overview">Overview</a>
       <a href="#/sessions" data-route="sessions">Sessions</a>

@@ -22,7 +22,7 @@ export function teamPanel(agents, groups, timeline, sessionId, t) {
 }
 
 export function agentStrip(agents, groups, t) {
-  return el("div", { class: "session-agent-strip", "aria-label": t("session.agents") }, agents.map(agent => {
+  return el("div", { class: "session-agent-strip", role: "group", "aria-label": t("session.agents") }, agents.map(agent => {
     const member = findMember(groups, agent.id);
     return el("span", { class: "agent-strip-item" }, [avatar(agent), el("span", {}, [agent.role]), statusPill(member?.status || { key: statusKey(member?.state || (agent.kind === "lead" ? "working" : "unknown")) }, t)]);
   }));
