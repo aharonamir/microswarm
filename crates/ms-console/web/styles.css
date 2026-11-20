@@ -498,11 +498,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .console-shell { min-block-size: 100dvh; }
 .global-header { position: fixed; inset: 0 auto 0 0; z-index: 3; display: flex; flex-direction: column; align-items: stretch; gap: 22px; inline-size: 240px; min-block-size: 100dvh; padding: 20px 14px; border: 0; border-inline-end: 1px solid var(--line); }
 .global-header { background: var(--bg); }
+.global-header > .primary-nav { min-inline-size: 0; grid-template-columns: minmax(0, 1fr); }
+.global-header > .primary-nav > a, .global-header > .primary-nav > .session-list { min-inline-size: 0; }
+.global-header .session-link { min-inline-size: 0; }
+.global-header .session-link .status-line { min-inline-size: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
 .brand-mark { display: block; inline-size: 30px; block-size: 30px; border-radius: 8px; background: var(--ink); }
 .primary-nav { display: grid; align-content: start; gap: 4px; inline-size: 100%; }
 .primary-nav a { min-block-size: 44px; }
 .header-tools { display: grid; gap: 8px; margin-block-start: auto; white-space: normal; }
 .page-frame { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; margin-inline-start: 240px; padding: 24px; }
+.page-frame.session-index { grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); align-items: start; }
+.page-frame.session-index > .page-rail { width: auto; max-width: none; }
 .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .avatar { display: inline-grid; place-items: center; flex: none; inline-size: 32px; aspect-ratio: 1; border-radius: 8px; font-weight: 600; }
 .avatar[data-colour="0"] { background: var(--agent-0-bg); color: var(--agent-0-text); }
@@ -542,4 +548,5 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .primary-nav .nav-icon { display: none; }
   .header-tools { display: flex; margin-inline-start: auto; }
   .page-frame { margin-inline: 0; padding: 14px; }
+  .page-frame.session-index { grid-template-columns: minmax(0, 1fr); }
 }

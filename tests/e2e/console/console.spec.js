@@ -131,6 +131,36 @@ test("mobile mark toggles navigation and tablet nav icons align with the mark", 
   await page.close();
 });
 
+test("outside clicks dismiss mobile navigation and desktop session controls stay within their pane", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/sessions");
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.locator(".session-main").click({ position: { x: 20, y: 350 } });
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeHidden();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/sessions");
+  const sizing = await page.evaluate(() => {
+    const header = document.querySelector(".global-header").getBoundingClientRect();
+    const rail = document.querySelector(".page-rail").getBoundingClientRect();
+    const main = document.querySelector(".session-main").getBoundingClientRect();
+    const button = document.querySelector(".page-rail .new-session").getBoundingClientRect();
+    const navLinks = [...document.querySelectorAll(".primary-nav > a")];
+    const navigationFitsParent = navLinks.every(link => {
+      const rect = link.getBoundingClientRect();
+      return rect.left >= header.left && rect.right <= header.right;
+    });
+    return { rail: rail.width, main: main.width, buttonWithinRail: button.left >= rail.left && button.right <= rail.right, navigationFitsParent };
+  });
+  expect(sizing.rail).toBeLessThan(320);
+  expect(sizing.main).toBeGreaterThan(sizing.rail);
+  expect(sizing.buttonWithinRail).toBe(true);
+  expect(sizing.navigationFitsParent).toBe(true);
+  await page.close();
+});
+
 test("console reaches the Sessions page within two seconds", () => {
   console.log(`console startup-to-render: ${startupMs} ms`);
   expect(startupMs).toBeLessThan(2000);

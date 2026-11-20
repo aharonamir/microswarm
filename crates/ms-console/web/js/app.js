@@ -1,4 +1,4 @@
-import { append, el, clear, setAttr, toggleClass } from "./dom.js";
+import { append, el, clear, setAttr, setProp, toggleClass } from "./dom.js";
 import { renderNav } from "./components/nav.js";
 import { currentRoute, onRoute } from "./router.js";
 import { loadLocale, t } from "./i18n.js";
@@ -47,6 +47,7 @@ async function renderNow() {
   const { page, parts = [] } = route;
   const isSessionDetail = (page === "sessions" && parts.length > 0) || page === "member";
   const sessionSnapshot = isSessionDetail ? captureSessionUi(app) : null;
+  toggleClass(app, "session-index", page === "sessions" && parts.length === 0);
   toggleClass(document.querySelector(".console-shell"), "member-drawer-open", page === "member" && parts.length > 1);
   toggleClass(app, "session-workspace", isSessionDetail);
   const composer = page === "sessions" ? document.getElementById("message-input") : null;
@@ -116,7 +117,7 @@ async function renderNow() {
 const mobileMenu = document.getElementById("mobile-menu-toggle");
 function syncMobileMenu() {
   const mobile = matchMedia("(max-width: 699px)").matches;
-  nav.hidden = mobile;
+  setProp(nav, "hidden", mobile);
   setAttr(mobileMenu, "aria-expanded", String(!mobile));
 }
 const mobileQuery = matchMedia("(max-width: 699px)");
@@ -125,7 +126,22 @@ syncMobileMenu();
 mobileMenu.addEventListener("click", event => {
   const expanded = event.currentTarget.getAttribute("aria-expanded") === "true";
   setAttr(event.currentTarget, "aria-expanded", String(!expanded));
-  nav.hidden = expanded;
+  setProp(nav, "hidden", expanded);
+});
+document.addEventListener("click", event => {
+  if (!matchMedia("(max-width: 699px)").matches || nav.hidden) return;
+  const target = event.target;
+  if (nav.contains(target)) {
+    if (target.closest("a")) {
+      setProp(nav, "hidden", true);
+      setAttr(mobileMenu, "aria-expanded", "false");
+    }
+    return;
+  }
+  if (!mobileMenu.contains(target)) {
+    setProp(nav, "hidden", true);
+    setAttr(mobileMenu, "aria-expanded", "false");
+  }
 });
 
 document.getElementById("language-toggle").addEventListener("click", async event => {
