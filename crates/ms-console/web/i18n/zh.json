@@ -438,5 +438,9 @@
   "host.limit.turns": "轮次",
   "host.limit.tokens": "词元数",
   "host.limit.members": "成员数",
-  "common.cancel": "取消"
+  "common.cancel": "取消",
+  "sheet.request": "{role} 想运行命令",
+  "sheet.review": "查看审批",
+  "sheet.binding": "仅涵盖此命令的一次执行。",
+  "common.back": "返回"
 }

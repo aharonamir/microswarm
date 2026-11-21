@@ -1,3 +1,4 @@
+import { openApprovalSheet } from "./sheet.js";
 import { api } from "../api.js";
 import { el, setProp, setText } from "../dom.js";
 import { relativeTime } from "../format.js";
@@ -14,6 +15,7 @@ export function approvalDock(items, sessionId, t, onChange = () => {}) {
   const command = item.sentence?.args?.command || item.tool_call?.arguments?.command || "";
   const code = item.code || "";
   return el("section", { class: "approval-dock", "data-approval-dock": "", "aria-label": t("dock.approval_heading") }, [
+    el("div", { class: "phone-review-bar" }, [el("strong", {}, item.sentence ? sentenceNodes(item.sentence, t) : [t("dock.request", { role: agent.role })]), el("button", { class: "primary-button", type: "button", onclick: () => openApprovalSheet(item, t, onChange) }, [t("sheet.review")])]),
     el("article", { class: "dock-card" }, [
       el("header", { class: "dock-header" }, [
         avatar(agent),

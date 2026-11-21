@@ -438,5 +438,9 @@
   "host.limit.turns": "Turns",
   "host.limit.tokens": "Tokens",
   "host.limit.members": "Members",
-  "common.cancel": "Cancel"
+  "common.cancel": "Cancel",
+  "sheet.request": "{role} wants to run a command",
+  "sheet.review": "Review",
+  "sheet.binding": "Covers exactly this command, once.",
+  "common.back": "Back"
 }

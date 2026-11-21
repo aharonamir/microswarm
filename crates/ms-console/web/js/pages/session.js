@@ -6,7 +6,9 @@ import { statusPill } from "../components/pill.js";
 import { sentenceNodes, stepRow } from "../components/step.js";
 import { teamCard } from "../components/teamcard.js";
 import { approvalDock } from "../components/dock.js";
-import { agentStrip, teamPanel } from "../components/teampanel.js";
+import { teamPanel } from "../components/teampanel.js";
+import { agentStrip } from "../components/agentstrip.js";
+import { navIcon } from "../components/nav.js";
 
 const states = new Map();
 let focusAfterRender = null;
@@ -73,6 +75,7 @@ export async function renderSession(root, sessionId, t, { snapshot = null, live 
   const page = el("section", { class: "session-page", "aria-label": session.title || t("sessions.messages") });
   const main = el("section", { class: "session-main-panel" });
   const heading = el("header", { class: "session-header" }, [
+    el("a", { class: "session-back secondary-button button-link", href: "#/home", "aria-label": t("common.back") }, [navIcon("back")]),
     el("div", { class: "session-heading-copy" }, [
       el("h1", { class: "session-title" }, [session.title || t("sessions.new")]),
       el("p", { class: "session-helper" }, [sessionHelper(session, t)]),

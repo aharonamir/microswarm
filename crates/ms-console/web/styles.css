@@ -736,3 +736,28 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 dialog:modal { overscroll-behavior: contain; }
 dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
 @media(max-width:699px) { .host-workspace { grid-template-columns: minmax(0,1fr); gap: 16px; } .host-section-nav { position: static; display: flex; overflow: auto; } .host-section-nav a { flex: none; } .host-limits-grid { grid-template-columns: minmax(0,1fr); } }
+.session-back, .phone-review-bar { display: none; }
+.approval-sheet { position: fixed; inset: auto 0 0; inline-size: min(520px, 100%); max-inline-size: 100%; max-block-size: 90dvh; margin: auto auto 0; padding: 0; border: 1px solid var(--line); border-radius: 18px 18px 0 0; background: var(--surface); color: var(--ink); }
+.approval-sheet[open] { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.approval-sheet::backdrop { background: rgb(28 25 23 / .4); }
+.sheet-handle { inline-size: 36px; block-size: 4px; border-radius: 999px; margin: 10px auto; background: var(--line-strong); }
+.sheet-header { display: flex; gap: 10px; align-items: start; padding: 8px 16px 16px; }
+.sheet-header h2 { flex: 1; margin: 0; font-size: 18px; line-height: 24px; }
+.sheet-header button { min-block-size: 44px; padding-inline: 10px; }
+.sheet-content { overflow: auto; padding: 0 16px 18px; min-block-size: 0; }
+.sheet-facts { padding-inline-start: 20px; line-height: 1.9; }
+.sheet-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding: 14px 16px; border-block-start: 1px solid var(--line); }
+.sheet-actions button { min-block-size: 52px; }
+@media(max-width:699px) {
+ .session-back { display: inline-flex; inline-size: 44px; block-size: 44px; padding: 0; justify-content: center; }
+ .session-back .nav-icon { inline-size: 20px; block-size: 20px; }
+ .session-header { grid-template-columns: 44px minmax(0,1fr); align-items: start; }
+ .session-header-actions { grid-column: 2; }
+ .session-header-actions > .pill, .session-header-actions > .avatar-stack, .session-helper { display: none; }
+ .session-agent-strip { flex-wrap: nowrap; overflow-x: auto; max-inline-size: 100%; }
+ .agent-strip-item { flex: none; white-space: nowrap; }
+ .approval-dock .dock-card { display: none; }
+ .phone-review-bar { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--seal); border-radius: 12px; background: var(--surface); }
+ .phone-review-bar strong { min-inline-size: 0; flex: 1; font-size: 13px; overflow-wrap: anywhere; }
+ .phone-review-bar button { min-block-size: 52px; flex: none; }
+}
