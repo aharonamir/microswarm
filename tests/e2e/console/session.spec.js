@@ -152,3 +152,18 @@ test("the session team panel shows CSSOM positioned lanes and collapses to the a
   await expect(page.locator(".session-agent-strip")).toBeVisible();
   await page.close();
 });
+
+test("lane role labels start after the agent avatars", async () => {
+  const page = await harness.context.newPage();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${harness.baseUrl}/#/sessions/${ROOT}`);
+  const panel = page.getByRole("complementary", { name: "Team" });
+  await expect(panel.locator(".lane-row")).toHaveCount(3);
+  const gaps = await panel.locator(".lane-row").evaluateAll(rows => rows.map(row => {
+    const avatar = row.querySelector(".lane-avatar").getBoundingClientRect();
+    const role = row.querySelector(".lane-role").getBoundingClientRect();
+    return { role: row.querySelector(".lane-role").textContent, gap: role.left - avatar.right };
+  }));
+  expect(gaps.every(item => item.gap >= 4), JSON.stringify(gaps)).toBe(true);
+  await page.close();
+});

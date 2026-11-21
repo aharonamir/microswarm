@@ -269,7 +269,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .lane-strip { display: grid; gap: 5px; margin-block: 10px 14px; padding: 10px 8px 7px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--bg-chat); }
 .lane-times { display: flex; justify-content: space-between; margin-inline-start: 72px; color: var(--ink-3); font: 10px/14px "IBM Plex Mono", ui-monospace, monospace; }
 .lane-row { display: grid; grid-template-columns: 22px 42px minmax(0, 1fr); align-items: center; gap: 5px; min-inline-size: 0; }
-.lane-avatar { inline-size: 22px; border-radius: 6px; font-size: 10px; }
 .lane-role { min-inline-size: 0; overflow: hidden; color: var(--ink-2); font-size: 10px; text-overflow: ellipsis; }
 .lane-track { position: relative; block-size: 10px; overflow: visible; border-radius: 4px; background: var(--sunken); }
 .lane-span { position: absolute; inset-block: 0; min-inline-size: 2px; border-radius: 4px; background: var(--agent-1-bar); }
@@ -513,6 +512,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .page-frame.session-index > .page-rail { width: auto; max-width: none; }
 .visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .avatar { display: inline-grid; place-items: center; flex: none; inline-size: 32px; aspect-ratio: 1; border-radius: 8px; font-weight: 600; }
+.avatar.lane-avatar { inline-size: 22px; border-radius: 6px; font-size: 10px; }
 .avatar[data-colour="0"] { background: var(--agent-0-bg); color: var(--agent-0-text); }
 .avatar[data-colour="1"] { background: var(--agent-1-bg); color: var(--agent-1-text); }
 .avatar[data-colour="2"] { background: var(--agent-2-bg); color: var(--agent-2-text); }
