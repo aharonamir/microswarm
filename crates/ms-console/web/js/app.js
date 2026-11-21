@@ -9,7 +9,8 @@ import { renderApprovals } from "./pages/approvals.js";
 import { renderTrajectory } from "./pages/trajectory.js";
 import { renderHost } from "./pages/host.js";
 import { captureMemberTab, renderMember } from "./pages/member.js";
-import { renderOverview } from "./pages/overview.js";
+import { renderHome } from "./pages/home.js";
+import { handleStartEvent } from "./components/start-session.js";
 import { captureSessionUi, handleSessionChatEvent, renderSession } from "./pages/session.js";
 import { handleSessionLiveEvent } from "./live.js";
 
@@ -65,7 +66,7 @@ async function renderNow() {
   append(supervisorChip, el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));
   clear(app);
   if (reconnecting) append(app, el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
-  if (page === "home") { await renderOverview(app, t); return; }
+  if (page === "home") { await renderHome(app, t, render); return; }
   if (page === "sessions") {
     const sessionId = parts[0] || null;
     if (sessionId) {
@@ -170,6 +171,7 @@ connectEvents((type, data) => {
     if (type === "supervisor") handleConsoleEvent(type, data, render, t);
   }
   else if (["chat.pending", "chat.reply", "chat.error"].includes(type)) {
+    handleStartEvent(type, data, t);
     const route = currentRoute();
     const sessionId = route.page === "sessions" ? route.parts[0] : null;
     if (sessionId) handleSessionChatEvent(type, data, render, sessionId);

@@ -260,6 +260,22 @@ mod home {
     mod tests {
         use super::*;
         #[test]
+        fn home_keeps_waiting_sessions_and_latest_sentences() {
+            let sessions = vec![
+                json!({"id":"s1","title":"Audit","status_words":{"tone":"attention"},"latest":{"who":"tester","text_or_sentence":{"key":"step.read","args":{"path":"auth.rs"}}}}),
+            ];
+            let approvals =
+                vec![json!({"id":"a1","code":"ABCD","state":"pending","root_session_id":"s1"})];
+            let result = derive(&sessions, &approvals, None);
+            assert_eq!(result["summary"]["running"], 1);
+            assert_eq!(
+                result["running"][0]["latest"]["text_or_sentence"]["key"],
+                "step.read"
+            );
+            assert_eq!(result["needs_you"][0]["session_title"], "Audit");
+        }
+
+        #[test]
         fn builds_needs_you_running_and_ended_sections() {
             let sessions = vec![
                 json!({"id":"s1","title":"Work","in_flight":true,"status_words":{"tone":"working"},"created_at":"now","agents":[]}),

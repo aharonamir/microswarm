@@ -686,3 +686,29 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .trajectory-span.lane-span-colour-6 { background: var(--agent-6-bar); }
 .trajectory-span.lane-span-waiting_you { background: repeating-linear-gradient(135deg, #F3C6BF 0 5px, var(--seal-soft) 5px 10px); color: var(--seal-ink); }
 .trajectory-span > span { background: var(--ink); color: white; padding-inline: 3px; border-radius: 3px; }
+.home-page { inline-size: 100%; max-inline-size: 1040px; margin-inline: auto; display: grid; gap: 26px; min-inline-size: 0; }
+.home-summary { font-size: 24px; line-height: 30px; margin: 0 0 8px; }
+.home-page h2 { margin: 0 0 14px; font-size: 17px; }
+.home-start { padding: 20px; }
+.start-session-form { display: grid; gap: 12px; }
+.start-session-form > label { font-weight: 500; }
+.start-session-form textarea { inline-size: 100%; min-inline-size: 0; min-block-size: 82px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); resize: vertical; }
+.start-session-form .composer-row { justify-content: space-between; }
+.home-approval { display: flex; gap: 12px; align-items: start; padding: 18px; border: 1.5px solid var(--seal); border-radius: 14px; margin-block: 10px; background: var(--surface); }
+.home-approval > div { min-inline-size: 0; }
+.home-approval > div:nth-child(2) { flex: 1; }
+.home-approval h3 { margin: 0; font-size: 15px; }
+.home-approval p { margin-block: 8px; font-size: 13px; }
+.home-approval-actions { display: flex; gap: 8px; flex: none; }
+.home-empty { margin: 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink-2); background: var(--surface); }
+.home-table-scroll { max-inline-size: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.home-session-table { inline-size: 100%; min-inline-size: 660px; border-collapse: collapse; }
+.home-session-table th { color: var(--ink-2); font-size: 12px; font-weight: 500; text-align: start; background: var(--bg); }
+.home-session-table :is(td,th) { padding: 13px 14px; border-block-end: 1px solid var(--line); }
+.home-session-table tr { position: relative; }
+.home-session-table a { font-weight: 500; text-decoration: none; }
+.home-session-table a::after { content: ''; position: absolute; inset: 0; }
+.home-session-table tr:hover { background: var(--hover); }
+.home-session-table .session-meta { display: block; margin-block-start: 4px; }
+.home-latest { max-inline-size: 280px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width:699px) { .home-approval { flex-wrap: wrap; } .home-approval-actions { inline-size: 100%; justify-content: end; } .home-approval-actions button { min-block-size: 52px; } }

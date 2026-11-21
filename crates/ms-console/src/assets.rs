@@ -118,6 +118,14 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/member.js"),
         ),
+        "/js/pages/home.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/home.js"),
+        ),
+        "/js/components/start-session.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/start-session.js"),
+        ),
         "/js/pages/overview.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/overview.js"),

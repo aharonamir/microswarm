@@ -392,5 +392,21 @@
   "approval.reissued": "已过期，重新请求代码为 {code}。",
   "approval.expired": "此请求已过期，无法批准。",
   "trajectory.ordinal": "第 {index} 步，共 {total} 步",
-  "approval.spawn_binding": "此答复仅适用于该成员请求及其提议的访问权限。"
+  "approval.spawn_binding": "此答复仅适用于该成员请求及其提议的访问权限。",
+  "home.prompt": "主代理应该处理什么？",
+  "home.start": "开始",
+  "home.needs_one": "有 1 件事需要您处理。",
+  "home.needs_many": "有 {count} 件事需要您处理。",
+  "home.running_one": "有 1 个会话正在运行。",
+  "home.running_many": "有 {count} 个会话正在运行。",
+  "home.system": "{containers} 个容器运行中 · 今天 {approvals} 次审批",
+  "home.system_unknown": "来自监督器的实时会话活动和请求。",
+  "home.needs_title": "需要您处理",
+  "home.no_latest": "还没有步骤",
+  "home.session": "会话",
+  "home.status": "状态",
+  "home.team": "团队",
+  "home.ended_at": "结束时间",
+  "home.no_ended": "今天没有结束的会话。",
+  "home.no_running": "没有正在运行的会话。"
 }

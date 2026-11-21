@@ -100,8 +100,8 @@ Wait for confirmation before Phase 5.
 
 ## Phase 6 — US5 Home, US6 Host, phone and cleanup
 
-- [ ] T340 [P] Red e2e for US5 (summary line, Needs-you inline decide, empty state, Running/Ended tables, start a session) — `tests/e2e/console/home.spec.js`
-- [ ] T341 `home.js` per design/README; make it the default route — `C/web/js/pages/home.js`
+- [x] T340 [P] Red e2e for US5 (summary line, Needs-you inline decide, empty state, Running/Ended tables, start a session) — `tests/e2e/console/home.spec.js`
+- [x] T341 `home.js` per design/README; make it the default route — `C/web/js/pages/home.js`
 - [ ] T342 `host.js`: settings layout with a section nav and policies in words; keep the 002 Set value dialog and its tests — `C/web/js/pages/host.js`
 - [ ] T343 Phone layouts: agent status strip, Review bar, approval bottom sheet (focus trap, Esc, 52 px buttons) — `C/web/js/components/{sheet,agentstrip}.js`, `C/web/styles.css`
 - [ ] T344 Remove `overview.js`, `sessions.js`, `trace.js` and their CSS once their e2e cases are ported; keep redirects; remove the double-border "wall" styles — `C/web/`

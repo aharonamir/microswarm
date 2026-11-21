@@ -392,5 +392,21 @@
   "approval.reissued": "Expired. Asked again as {code}.",
   "approval.expired": "This request expired and cannot be approved.",
   "trajectory.ordinal": "Step {index} of {total}",
-  "approval.spawn_binding": "This answer applies to this member request and its proposed access."
+  "approval.spawn_binding": "This answer applies to this member request and its proposed access.",
+  "home.prompt": "What should the lead work on?",
+  "home.start": "Start",
+  "home.needs_one": "1 thing needs you.",
+  "home.needs_many": "{count} things need you.",
+  "home.running_one": "1 session is running.",
+  "home.running_many": "{count} sessions are running.",
+  "home.system": "{containers} containers up · {approvals} approvals today",
+  "home.system_unknown": "Live session activity and requests from the supervisor.",
+  "home.needs_title": "Needs you",
+  "home.no_latest": "No steps yet",
+  "home.session": "Session",
+  "home.status": "Status",
+  "home.team": "Team",
+  "home.ended_at": "Ended at",
+  "home.no_ended": "No sessions ended today.",
+  "home.no_running": "No sessions are running."
 }

@@ -44,7 +44,7 @@ test.beforeAll(async ({ browser }) => {
   await login.route("**/api/v1/**", route => mockApi(route));
   await login.goto(`/login?token=${encodeURIComponent(token)}`);
   await expect(login).toHaveURL("http://127.0.0.1:8792/#/home");
-  await expect(login.locator("#app")).toContainText("Needs your attention");
+  await expect(login.locator("#app")).toContainText("1 thing needs you");
   startupMs = Date.now() - startedAt;
   await login.close();
 });
@@ -58,7 +58,7 @@ test.afterAll(async () => {
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
   for (const pageCase of [
-    { name: "overview", hash: "#/overview", heading: "Needs your attention" },
+    { name: "overview", hash: "#/overview", heading: "1 thing needs you" },
     { name: "new session", hash: "#/sessions", heading: "Start a conversation" },
     { name: "sessions", hash: `#/sessions/${ROOT}`, heading: hostile },
     { name: "approvals", hash: "#/approvals", heading: "The reviewer wants to run a command" },
@@ -426,6 +426,7 @@ async function mockApi(route, activeSession = session) {
   if (route.request().method() !== "GET") return route.fulfill({ status: 204, body: "" });
   let body = {};
   if (url.pathname === "/api/v1/overview") body = { pending_approvals: 1 };
+  else if (url.pathname === "/api/v1/home") body = { summary: { needs_you: 1, running: 1 }, needs_you: [], running: [], ended_today: [], system: {} };
   else if (url.pathname === "/api/v1/sessions") body = { sessions: url.searchParams.get("group") === "ended" ? [] : [activeSession] };
   else if (url.pathname === `/api/v1/sessions/${ROOT}`) body = { session: activeSession, team: [{ ...activeSession, id: MEMBER, role: "reviewer", scope: { mounts: [] } }], banner: { tone: activeSession.status_words.tone, detail: "Supervisor status" } };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/messages`) body = { items: [{ kind: "user", at: new Date().toISOString(), text: hostile }, { kind: "lead", at: new Date().toISOString(), text: "Lead reply" }], next_before: null };

@@ -114,6 +114,7 @@ async function mockApi(route, state) {
   }
   let body = {};
   if (url.pathname === "/api/v1/overview") body = { pending_approvals: state.approved ? 0 : 1 };
+  else if (url.pathname === "/api/v1/home") body = { summary: { needs_you: 1, running: 1 }, needs_you: [], running: [], ended_today: [], system: {} };
   else if (url.pathname === "/api/v1/sessions") body = { sessions: url.searchParams.get("group") === "ended" ? [] : [session] };
   else if (url.pathname === `/api/v1/sessions/${ROOT}`) body = { session: state.ended ? { ...session, ended_at: "2026-11-19T14:30:00Z", end_reason: "done", status_words: status("ended") } : session, team: [], banner: { tone: "attention", detail: "The tester needs your approval." } };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/messages`) body = { items: messages, next_before: null };
