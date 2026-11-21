@@ -123,7 +123,7 @@ function reachSummarySentence(summary, t) {
   return t(summary?.key || "reach.no_file_access", args);
 }
 
-function derivation(value = {}, t) {
+export function derivation(value = {}, t) {
   const keys = [["requested", "member.derivation_requested"], ["lead", "member.derivation_lead"], ["ceiling", "member.derivation_ceiling"], ["granted", "member.derivation_granted"]];
   return el("section", { class: "reach-section" }, [
     el("h3", {}, [t("reach.derivation")]),

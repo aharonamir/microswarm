@@ -11,7 +11,7 @@ async function open(detail, width = 1440) {
  await page.goto(`${harness.baseUrl}/#/approvals/${detail.code}`);
  return page;
 }
-test.fixme("red: T334 — tool decision explains permissions and discloses exact data", async () => {
+test("tool decision explains permissions and discloses exact data", async () => {
  const page = await open(tool);
  await expect(page.locator(".approval-command")).toHaveText("cargo test -p auth");
  await expect(page.locator(".decision-tiles article")).toHaveCount(3);
@@ -19,20 +19,20 @@ test.fixme("red: T334 — tool decision explains permissions and discloses exact
  await expect(page.locator("details[data-raw]")).not.toHaveAttribute("open");
  await page.close();
 });
-test.fixme("red: T334 — spawn decision previews access derivation", async () => {
+test("spawn decision previews access derivation", async () => {
  const page = await open({...tool,kind:"spawn",tool_call:null,spawn:{role:"reviewer",task:"Review auth"},spawn_preview:{derivation:{requested:[],lead:[],ceiling:[],granted:[]}}});
  await expect(page.locator(".approval-title")).toContainText("reviewer");
  await page.getByText("Preview its access",{exact:true}).click();
  await expect(page.locator(".reach-derivation-column")).toHaveCount(4);
  await page.close();
 });
-test.fixme("red: T334 — decided elsewhere removes actions", async () => {
+test("decided elsewhere removes actions", async () => {
  const page = await open({...tool,state:"approved"});
  await expect(page.getByText("Already decided on another channel",{exact:true})).toBeVisible();
  await expect(page.locator(".approval-footer button")).toHaveCount(0);
  await page.close();
 });
-test.fixme("red: T334 — phone footer stays visible with 52 pixel actions", async () => {
+test("phone footer stays visible with 52 pixel actions", async () => {
  const page = await open(tool,390);
  await expect(page.locator(".approval-command")).toBeVisible();
  await page.locator(".approval-detail-scroll").evaluate(n=>{n.scrollTop=n.scrollHeight;});

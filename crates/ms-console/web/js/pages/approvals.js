@@ -1,5 +1,9 @@
+import { avatar } from "../components/avatar.js";
+import { sentenceNodes } from "../components/step.js";
+import { derivation } from "./member.js";
+import { localTime } from "../format.js";
 import { api } from "../api.js";
-import { clear, el } from "../dom.js";
+import { append, clear, el, setProp } from "../dom.js";
 
 let state = "pending";
 const localDecisions = new Set();
@@ -19,58 +23,60 @@ export async function renderApprovals(root, selectedId, t) {
   clear(root);
   let result;
   try { result = await api(`/approvals?state=${state}`); }
-  catch (error) { root.append(el("section", { class: "panel page-main" }, [el("h1", { class: "page-title" }, [t("nav.approvals")]), el("p", { role: "alert" }, [error.message])])); return; }
-  const approvals = result.approvals || [];
-  const selected = selectedId ? approvals.find(item => item.code === selectedId || item.id === selectedId) : approvals[0];
-  const rail = el("aside", { class: "page-rail panel approval-rail", "aria-label": t("nav.approvals") }, [
-    el("h1", { class: "page-title" }, [t("nav.approvals")]),
-    el("div", { class: "approval-tabs", role: "tablist" }, ["pending", "decided", "expired"].map(value => el("button", { class: value === state ? "tab active" : "tab", role: "tab", "aria-selected": String(value === state), onclick: async () => { state = value; await renderApprovals(root, null, t); } }, [t(`approvals.${value}`)]))),
-    el("div", { class: "session-list" }, approvals.length ? approvals.map(item => el("a", { class: "session-link", href: `#/approvals/${item.code}`, "aria-current": item.code === selected?.code ? "page" : false }, [
-      el("strong", {}, [`${item.requesting_role || t("approvals.member")} · ${item.tool_call?.tool || item.kind}`]),
-      el("span", { class: "session-meta" }, [item.code]),
-      el("span", { class: `status-line tone-${item.state === "pending" ? "warning" : "neutral"}` }, [item.state]),
-    ])) : [el("p", { class: "muted empty-copy" }, [t(`approvals.empty.${state}`)])]),
-  ]);
-  if (!selected) {
-    root.append(rail, el("section", { class: "page-main panel approval-detail empty-state" }, [el("p", {}, [t("approvals.select")])]));
-    return;
+  catch (error) { append(root, el("section", { class: "panel", role: "alert" }, [error.message])); return; }
+  const items = result.approvals || [];
+  let selected = items.find(item => item.code === selectedId || item.id === selectedId) || (!selectedId ? items[0] : null);
+  if (selectedId || selected) {
+    try { selected = (await api(`/approvals/${selected?.code || selectedId}`)).approval || selected; }
+    catch (error) { if (!selected) append(root, el("p", { role: "alert" }, [error.message])); }
   }
-  let detail = selected;
-  try { detail = (await api(`/approvals/${selected.code}`)).approval; } catch { /* Keep the queue row visible. */ }
-  const call = detail.tool_call;
-  const detailBody = call ? [
-    el("p", { class: "label" }, [t("approvals.exact_call")]),
-    el("h2", { class: "page-title" }, [`${call.server} / ${call.tool}`]),
-    el("p", { class: "binding-notice" }, [t("approvals.binding_notice")]),
-    el("p", { class: "mono" }, [`binding ${call.argument_hash || ""}`]),
-    el("h3", {}, [t("approvals.args")]),
-    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.args")]), el("pre", { class: "command-block mono" }, [JSON.stringify(call.arguments || {}, null, 2)])]),
-    call.parsed ? el("section", { class: "parsed-command" }, [el("h3", {}, [t("approvals.parsed")]), el("p", {}, [`${t(`approvals.parsed_kind.${call.parsed.kind}`)} · ${t("approvals.program")}: ${call.parsed.commands[0]?.split(/\s+/)[0] || ""}`]), ...call.parsed.commands.map(command => el("code", { class: "parsed-part" }, [command]))]) : el("p", {}, [t("approvals.parse_unavailable")]),
-    el("h3", {}, [t("approvals.runs_in")]),
-    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.runs_in")]), el("pre", { class: "command-block mono" }, [JSON.stringify(detail.runs_in || {}, null, 2)])]),
-  ] : [
-    el("p", { class: "label" }, [t("approvals.spawn")]),
-    el("h2", { class: "page-title" }, [detail.spawn?.role || t("approvals.member")]),
-    el("p", {}, [detail.spawn?.task || ""]),
-    el("h3", {}, [t("approvals.requested_scope")]),
-    el("details", { class: "raw-detail" }, [el("summary", {}, [t("approvals.requested_scope")]), el("pre", { class: "command-block mono" }, [JSON.stringify(detail.spawn?.requested || {}, null, 2)])]),
+  const queue = el("aside", { class: "approval-queue", "aria-label": t("nav.approvals") }, [
+    el("h2", { class: "page-title" }, [t("nav.approvals")]),
+    el("div", { class: "approval-tabs", "aria-label": t("nav.approvals") }, ["pending", "decided", "expired"].map(value => el("button", {
+      class: "tab", "aria-pressed": String(value === state), onclick: () => { state = value; if (location.hash !== "#/approvals") location.hash = "#/approvals"; else renderApprovals(root, null, t); },
+    }, [t(`approvals.${value === "pending" ? "waiting" : value}`)]))),
+    el("div", { class: "approval-queue-items" }, items.length ? items.map(item => el("a", {
+      class: `approval-queue-item${item.state === "expired" ? " expired" : ""}`, href: `#/approvals/${item.code}`, "aria-current": item.code === selected?.code ? "page" : false,
+    }, [avatar(item.agent || { role: item.requesting_role }), el("div", {}, [
+      el("strong", {}, sentenceNodes(item.sentence || { key: "approval.run_title", args: { role: item.requesting_role || t("approvals.member") } }, t)),
+      el("p", { class: "mono" }, [item.tool_call?.arguments?.command || item.spawn?.task || ""]),
+      el("span", { class: "muted" }, [item.state === "pending" ? t("approval.expires", { time: localTime(item.expires_at) }) : t(`decision.${item.state === "approved" ? "allowed" : item.state === "expired" ? "expired" : "denied_by_you"}`)]),
+    ])])) : [el("p", { class: "muted" }, [t(`approvals.empty.${state}`)])]),
+  ]);
+  const workspace = el("section", { class: `approval-workspace${selected ? " has-selection" : ""}` }, [queue]);
+  append(root, workspace);
+  if (!selected) { append(workspace, el("section", { class: "approval-decision empty-state" }, [t("approvals.select")])); return; }
+  const detail = selected, call = detail.tool_call, spawn = detail.spawn;
+  const role = detail.agent?.role || detail.requesting_role || t("approvals.member");
+  const title = spawn ? t("approval.spawn_title", { role: spawn.role }) : t("approval.run_title", { role });
+  const scope = detail.runs_in || {};
+  const facts = detail.facts || [];
+  const whatRuns = spawn ? [el("p", {}, [spawn.task || ""])] : facts.length
+    ? [el("ul", {}, facts.map(fact => el("li", {}, [t(fact.key, fact.args || {})])))]
+    : [el("p", {}, [t("approvals.parse_unavailable")])];
+  const whereRuns = spawn
+    ? [el("p", {}, [t(detail.spawn_preview?.summary?.key || "reach.none", detail.spawn_preview?.summary?.args || {})])]
+    : [el("p", {}, [t("approval.container")]), ...(scope.folders || []).map(folder => el("p", {}, [el("code", {}, [folder.path]), " · ", t(folder.mode === "rw" ? "reach.read_write" : "reach.read_only")])), el("p", {}, [t(`reach.network.${scope.network || "none"}`)]), el("p", {}, [scope.credentials?.length ? t("approval.credentials", { count: scope.credentials.length }) : t("reach.no_credentials")])];
+  const tiles = [
+    [spawn ? "approval.task" : "approval.what_runs", whatRuns],
+    [spawn ? "approval.reach" : "approvals.runs_in", whereRuns],
+    ["approvals.why", [el("p", {}, [detail.policy?.rule || t("approval.requires_answer")]), el("details", {}, [el("summary", {}, [t("approval.policy")]), el("p", {}, [detail.policy?.source_ref || detail.policy?.source || t("approval.requires_answer")])])]],
   ];
-  const pending = detail.state === "pending";
-  root.append(rail, el("section", { class: "page-main panel approval-detail" }, [
-    el("div", { class: "approval-detail-scroll" }, [
-      el("div", { class: "approval-meta" }, [`${t("approvals.asked_by")} ${detail.requesting_role || t("approvals.member")} · ${detail.code}`]),
-      ...detailBody,
-      (detail.state === "approved" || detail.state === "denied") && !wasDecidedHere(detail.id) ? el("p", { class: "muted" }, [t("approvals.already_decided")]) : el("span", {}, []),
-    ]),
-    pending ? el("footer", { class: "approval-footer" }, [
-      el("button", { class: "secondary-button deny-button", onclick: () => decide(detail, "deny", root, selectedId, t) }, [t("approvals.deny")]),
-      el("button", { class: "primary-button", onclick: () => decide(detail, "approve", root, selectedId, t) }, [t("approvals.approve_call")]),
-    ]) : el("span", {}, []),
-  ]));
-}
-
-async function decide(approval, action, root, selectedId, t) {
-  try { await api(`/approvals/${approval.code}/${action}`, { method: "POST", body: "{}" }); markDecisionHere(approval.id); }
-  catch (error) { root.append(el("p", { class: "inline-error", role: "alert" }, [error.code === "already_resolved" ? t("approvals.already_decided") : error.message])); }
-  await renderApprovals(root, selectedId, t);
+  const body = el("div", { class: "approval-detail-scroll" }, [
+    el("header", { class: "approval-decision-header" }, [avatar(detail.agent || { role }), el("div", {}, [el("h1", { class: "approval-title" }, [title]), el("p", { class: "muted" }, [el("a", { href: `#/sessions/${detail.root_session_id}` }, [t("approval.open_session")]), " · ", t("approval.asked", { time: localTime(detail.created_at) }), " · ", t("approval.expires", { time: localTime(detail.expires_at) })])]), el("span", { class: "approval-code mono" }, [detail.code])]),
+    call ? el("pre", { class: "approval-command command-block mono" }, [call.arguments?.command || t("approval.tool_request")]) : el("p", {}, [spawn?.task || ""]),
+    el("div", { class: "decision-tiles" }, tiles.map(([key, content]) => el("article", {}, [el("h3", {}, [t(key)]), ...content]))),
+    el("p", { class: "binding-notice" }, [t("approvals.binding_notice")]),
+    detail.brief?.text ? el("section", { class: "approval-brief" }, [el("h3", {}, [t("approval.brief", { role })]), el("blockquote", {}, [detail.brief.text])]) : el("span"),
+    spawn ? el("details", { class: "approval-access-preview" }, [el("summary", {}, [t("approval.preview")]), derivation(detail.spawn_preview?.derivation, t)]) : el("span"),
+    el("details", { class: "raw-detail", "data-raw": "" }, [el("summary", {}, [t("approvals.exact_call")]), el("pre", { class: "command-block mono" }, [JSON.stringify(call || spawn || {}, null, 2)])]),
+    detail.state !== "pending" ? el("p", { role: "status" }, [!wasDecidedHere(detail.id) ? t("approvals.already_decided") : t("approval.saved")]) : el("span"),
+  ]);
+  const errorBox = el("p", { class: "inline-error", role: "alert", hidden: true });
+  const actions = ["deny", "approve"].map(action => el("button", { class: action === "approve" ? "primary-button" : "secondary-button deny-button", type: "button", onclick: async () => {
+    actions.forEach(button => setProp(button, "disabled", true));
+    try { await api(`/approvals/${detail.code}/${action}`, { method: "POST", body: "{}" }); markDecisionHere(detail.id); await renderApprovals(root, detail.code, t); }
+    catch (error) { setProp(errorBox, "hidden", false); clear(errorBox); append(errorBox, error.code === "already_resolved" ? t("approvals.already_decided") : error.message); actions.forEach(button => setProp(button, "disabled", false)); }
+  } }, [t(action === "deny" ? "approvals.deny" : spawn ? "approval.approve_spawn" : "approvals.approve_call")]));
+  append(workspace, el("section", { class: "approval-decision" }, [body, errorBox, el("footer", { class: "approval-footer" }, [el("p", {}, [t("approval.supervisor_note")]), ...(detail.state === "pending" ? actions : [])])]));
 }
