@@ -47,7 +47,7 @@ async function renderNow() {
   const route = currentRoute();
   const { page, parts = [] } = route;
   const isSessionDetail = (page === "sessions" && parts.length > 0) || page === "member";
-  toggleClass(document.querySelector(".console-shell"), "detail-view", ["approvals", "trajectory", "trajectories"].includes(page));
+  toggleClass(document.querySelector(".console-shell"), "detail-view", ["approvals", "trajectory", "trajectories", "host"].includes(page));
   const sessionSnapshot = isSessionDetail ? captureSessionUi(app) : null;
   toggleClass(app, "session-index", page === "sessions" && parts.length === 0);
   toggleClass(document.querySelector(".console-shell"), "member-drawer-open", page === "member" && parts.length > 1);
@@ -92,7 +92,7 @@ async function renderNow() {
     return;
   }
   if (page === "host") {
-    await renderHost(app, t);
+    await renderHost(app, t, route.parts[0]);
     return;
   }
   if (page === "member" && route.parts[1]) {

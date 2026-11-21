@@ -712,3 +712,27 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .home-session-table .session-meta { display: block; margin-block-start: 4px; }
 .home-latest { max-inline-size: 280px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 @media (max-width:699px) { .home-approval { flex-wrap: wrap; } .home-approval-actions { inline-size: 100%; justify-content: end; } .home-approval-actions button { min-block-size: 52px; } }
+.host-workspace { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 26px; min-inline-size: 0; }
+.host-section-nav { position: sticky; inset-block-start: 24px; align-self: start; display: grid; gap: 4px; }
+.host-section-nav a { display: block; padding: 10px; border-radius: 8px; text-decoration: none; color: var(--ink-2); }
+.host-section-nav a[aria-current] { background: var(--surface); color: var(--ink); font-weight: 500; }
+.host-content { max-inline-size: 920px; min-inline-size: 0; display: grid; gap: 20px; }
+.host-content .host-section { margin: 0; scroll-margin-block-start: 20px; }
+.host-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-block-end: 16px; }
+.host-check { padding: 12px; background: var(--bg); border-radius: 12px; }
+.host-check strong { display: block; margin-block-end: 8px; }
+.host-check p { margin-block: 8px 0; }
+.host-limits-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+.host-limits-grid article { padding: 14px; border-radius: 12px; background: var(--bg); min-inline-size: 0; }
+.host-limits-grid h3 { margin-block-start: 0; font-size: 14px; }
+.host-limit-list { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
+.host-limit-list dd { margin: 0; }
+.credential-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.credential-row code { margin-inline-end: auto; }
+.credential-dialog { inline-size: min(440px, calc(100% - 32px)); max-block-size: calc(100dvh - 40px); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); background: var(--surface); }
+.credential-dialog h2 { margin-block: 0 12px; font-size: 20px; }
+.credential-dialog::backdrop { background: rgb(28 25 23 / .4); }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 10px; }
+dialog:modal { overscroll-behavior: contain; }
+dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
+@media(max-width:699px) { .host-workspace { grid-template-columns: minmax(0,1fr); gap: 16px; } .host-section-nav { position: static; display: flex; overflow: auto; } .host-section-nav a { flex: none; } .host-limits-grid { grid-template-columns: minmax(0,1fr); } }

@@ -241,6 +241,7 @@ test("Host validates credential names in Chromium", async () => {
   const page = await context.newPage();
   await page.route("**/api/v1/**", route => mockApi(route));
   await page.goto("/#/host");
+  await page.getByRole("button", { name: "Add credential", exact: true }).click();
   const name = page.getByRole("textbox", { name: "Credential name" });
   await name.fill("bad/name");
   await expect.poll(() => name.evaluate(input => input.checkValidity())).toBe(false);

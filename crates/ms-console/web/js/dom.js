@@ -44,3 +44,6 @@ export function setAttr(node, name, value) {
 export function setProp(node, name, value) { node[name] = value; }
 export function toggleClass(node, name, force) { node.classList.toggle(name, Boolean(force)); }
 export function remove(node) { node.remove(); }
+export function openModal(dialog) { dialog.showModal(); }
+export function closeDialog(dialog) { dialog.close(); }
+export function focus(node) { node?.focus(); }

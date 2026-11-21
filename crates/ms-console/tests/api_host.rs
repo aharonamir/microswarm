@@ -89,3 +89,21 @@ tools = [{ server = "microswarm-tools", tools = "*", policy = "ask" }]
     assert!(!serialized.contains("synthetic-search-secret"));
     fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn host_lists_authoritative_skills_and_ceiling() {
+    let home = std::env::temp_dir().join(format!("ms-host-skills-{}", std::process::id()));
+    fs::create_dir_all(&home).unwrap();
+    let db = rusqlite::Connection::open(home.join("supervisor.db")).unwrap();
+    db.execute_batch("CREATE TABLE team_roles(skill TEXT,skill_version TEXT,role TEXT,spawn_policy TEXT); INSERT INTO team_roles VALUES('review','1.0','tester','ask')").unwrap();
+    fs::write(
+        home.join("ceiling.toml"),
+        "paths = ['/work']\n[limits]\nmemory_mb = 1024\n",
+    )
+    .unwrap();
+    let host = read::host(&home);
+    assert_eq!(host["host"]["skills"][0]["name"], "review");
+    assert_eq!(host["host"]["skills"][0]["policy"], "ask");
+    assert_eq!(host["host"]["ceiling"]["limits"]["memory_mb"], 1024);
+    fs::remove_dir_all(home).unwrap();
+}

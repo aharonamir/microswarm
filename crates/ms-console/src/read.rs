@@ -521,7 +521,25 @@ pub fn host(home: &Path) -> Value {
         .filter_map(|name| name.as_str().map(|name| json!({"name":name,"used_by":[]})))
         .collect::<Vec<_>>();
     let channels=config.get("channels").and_then(toml::Value::as_array).cloned().unwrap_or_default().iter().map(|channel|json!({"kind":channel.get("kind").and_then(toml::Value::as_str).unwrap_or("unknown"),"detail":"Configured","enabled":true})).collect::<Vec<_>>();
-    json!({"host":{"doctor":doctor,"channels":channels,"tools":[{"id":"web.search","provider":search_provider,"configured":search_provider.is_some(),"credential_present":search_credential_present,"enabled":search_enabled}],"skills":[],"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":{}}})
+    let ceiling_file = if home.join("config/ceiling.toml").exists() {
+        home.join("config/ceiling.toml")
+    } else {
+        home.join("ceiling.toml")
+    };
+    let ceiling = read_config_value(&ceiling_file);
+    json!({"host":{"doctor":doctor,"channels":channels,"tools":[{"id":"web.search","provider":search_provider,"configured":search_provider.is_some(),"credential_present":search_credential_present,"enabled":search_enabled}],"skills":installed_roles(home),"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":ceiling.get("ceiling").unwrap_or(&ceiling)}})
+}
+
+fn installed_roles(home: &Path) -> Vec<Value> {
+    let Ok(db) = supervisor(home) else {
+        return vec![];
+    };
+    let Ok(mut statement) = db.prepare(
+        "SELECT skill,skill_version,role,spawn_policy FROM team_roles ORDER BY skill,role",
+    ) else {
+        return vec![];
+    };
+    statement.query_map([], |row| Ok(json!({"name":row.get::<_,String>(0)?,"version":row.get::<_,String>(1)?,"role":row.get::<_,String>(2)?,"policy":row.get::<_,String>(3)?}))).map(|rows| rows.filter_map(Result::ok).collect()).unwrap_or_default()
 }
 
 fn configured_tool_in_scope(config: &toml::Value, server: &str, tool: &str) -> bool {
