@@ -137,7 +137,7 @@ test("outside clicks dismiss mobile navigation and desktop session controls stay
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/sessions");
   await page.getByRole("button", { name: "Menu" }).click();
-  await page.locator(".session-main").click({ position: { x: 20, y: 350 } });
+  await page.locator(".new-session-page h1").click();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeHidden();
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -145,14 +145,14 @@ test("outside clicks dismiss mobile navigation and desktop session controls stay
   const sizing = await page.evaluate(() => {
     const header = document.querySelector(".global-header").getBoundingClientRect();
     const rail = document.querySelector(".page-rail").getBoundingClientRect();
-    const main = document.querySelector(".session-main").getBoundingClientRect();
-    const button = document.querySelector(".page-rail .new-session").getBoundingClientRect();
+    const main = document.querySelector(".new-session-page").getBoundingClientRect();
+    const button = document.querySelector(".new-session-page button[type=submit]").getBoundingClientRect();
     const navLinks = [...document.querySelectorAll(".primary-nav > a")];
     const navigationFitsParent = navLinks.every(link => {
       const rect = link.getBoundingClientRect();
       return rect.left >= header.left && rect.right <= header.right;
     });
-    return { rail: rail.width, main: main.width, buttonWithinRail: button.left >= rail.left && button.right <= rail.right, navigationFitsParent };
+    return { rail: rail.width, main: main.width, buttonWithinRail: button.left >= main.left && button.right <= main.right, navigationFitsParent };
   });
   expect(sizing.rail).toBeLessThan(320);
   expect(sizing.main).toBeGreaterThan(sizing.rail);

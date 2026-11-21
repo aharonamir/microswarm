@@ -4,7 +4,7 @@ import { currentRoute, onRoute } from "./router.js";
 import { loadLocale, t } from "./i18n.js";
 import { connectEvents } from "./sse.js";
 import { api } from "./api.js";
-import { renderSessions, handleConsoleEvent } from "./pages/sessions.js";
+import { renderNewSession } from "./pages/new-session.js";
 import { renderApprovals } from "./pages/approvals.js";
 import { renderTrajectory } from "./pages/trajectory.js";
 import { renderHost } from "./pages/host.js";
@@ -52,9 +52,6 @@ async function renderNow() {
   toggleClass(app, "session-index", page === "sessions" && parts.length === 0);
   toggleClass(document.querySelector(".console-shell"), "member-drawer-open", page === "member" && parts.length > 1);
   toggleClass(app, "session-workspace", isSessionDetail);
-  const composer = page === "sessions" ? document.getElementById("message-input") : null;
-  const composerDraft = composer?.value;
-  const composerRoute = location.hash;
   let pending = 0;
   try { pending = Number((await api("/overview")).pending_approvals || 0); } catch { /* The page view reports its own connection error. */ }
   const focusedNavHref = nav.contains(document.activeElement)
@@ -73,14 +70,7 @@ async function renderNow() {
       await renderSession(app, sessionId, t, { snapshot: sessionSnapshot });
       return;
     }
-    await renderSessions(app, null, t);
-    if (composerDraft !== undefined && composerRoute === location.hash) {
-      const nextComposer = document.getElementById("message-input");
-      if (nextComposer) {
-        nextComposer.value = composerDraft;
-        nextComposer.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    }
+    await renderNewSession(app, t, render);
     return;
   }
   if (page === "approvals") {
@@ -168,14 +158,14 @@ connectEvents((type, data) => {
       await renderMember(app, sessionId, memberId, t, { selectedTab });
     } : null;
     if (sessionId && handleSessionLiveEvent(type, data, sessionId, app, t, refreshMember)) return;
-    if (type === "supervisor") handleConsoleEvent(type, data, render, t);
+    if (type === "supervisor") render();
   }
   else if (["chat.pending", "chat.reply", "chat.error"].includes(type)) {
     handleStartEvent(type, data, t);
     const route = currentRoute();
     const sessionId = route.page === "sessions" ? route.parts[0] : null;
     if (sessionId) handleSessionChatEvent(type, data, render, sessionId);
-    else handleConsoleEvent(type, data, render, t);
+    else render();
   }
-  else if (type === "status.changed") handleConsoleEvent(type, data, render, t);
+  else if (type === "status.changed") render();
 });

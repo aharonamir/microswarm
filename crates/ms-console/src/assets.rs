@@ -94,10 +94,6 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/i18n.js"),
         ),
-        "/js/pages/sessions.js" => (
-            "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/sessions.js"),
-        ),
         "/js/pages/session.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/session.js"),
@@ -114,10 +110,6 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/components/inspector.js"),
         ),
-        "/js/pages/trace.js" => (
-            "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/trace.js"),
-        ),
         "/js/pages/host.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/host.js"),
@@ -126,6 +118,10 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/member.js"),
         ),
+        "/js/pages/new-session.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/new-session.js"),
+        ),
         "/js/pages/home.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/home.js"),
@@ -133,10 +129,6 @@ pub fn get(path: &str) -> Option<Asset> {
         "/js/components/start-session.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/components/start-session.js"),
-        ),
-        "/js/pages/overview.js" => (
-            "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/overview.js"),
         ),
         "/i18n/en.json" => (
             "application/json; charset=utf-8",
