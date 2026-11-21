@@ -71,8 +71,7 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
 
     if scenario == "demo" || scenario == "hostile" || scenario == "load" {
         let count = if scenario == "load" { 6 } else { 2 };
-        for index in 0..count {
-            let id = MEMBER_IDS[index];
+        for (index, id) in MEMBER_IDS.iter().take(count).copied().enumerate() {
             let role = if scenario == "hostile" {
                 "<img src=x onerror=alert(1)>"
             } else {
@@ -121,8 +120,7 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
         }
         seed_lead_events(home, &db, &now)?;
         let mut seq = 1i64;
-        for index in 0..count {
-            let id = MEMBER_IDS[index];
+        for id in MEMBER_IDS.iter().take(count).copied() {
             let role = db.query_row("SELECT role FROM sessions WHERE id=?1", [id], |row| {
                 row.get::<_, String>(0)
             })?;
@@ -133,8 +131,7 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
             seed_ended_and_telegram(&db, home, &now)?;
         }
         if scenario == "load" {
-            let mut seq = 100;
-            for index in 0..1982 {
+            for (seq, index) in (100..).zip(0..1982) {
                 let id = MEMBER_IDS[index % count];
                 let role = if index % count == 0 {
                     "researcher"
@@ -153,13 +150,13 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
                     json!({"call_id":format!("call-{index}"),"server":"filesystem","tool":"fs.read","args":{"path":format!("/work/src/file-{index}.rs")}}),
                     ms_runtime::utc_now(),
                 )?;
-                seq += 1;
             }
         }
     }
     Ok(db)
 }
 
+#[allow(clippy::too_many_arguments)] // Fixture rows mirror the session schema.
 fn insert_session(
     db: &Connection,
     id: &str,
@@ -241,6 +238,7 @@ fn offset_timestamp(base: &str, seconds: i64) -> Result<String, rusqlite::Error>
     )
 }
 
+#[allow(clippy::too_many_arguments)] // Fixture events explicitly name their envelope fields.
 fn append_agent_event(
     home: &Path,
     id: &str,
