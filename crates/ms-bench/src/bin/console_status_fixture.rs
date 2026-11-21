@@ -393,6 +393,17 @@ fn seed_member_events(
             root,
             role,
             *seq,
+            "permit.decision",
+            json!({"call_id":"pending-shell","decision":"ask","rule":"shell.run = ask"}),
+            now.clone(),
+        )?;
+        *seq += 1;
+        append_agent_event(
+            home,
+            id,
+            root,
+            role,
+            *seq,
             "tool.call",
             json!({"call_id":"denied-fetch","server":"web","tool":"web.fetch","args":{"url":"https://example.com"}}),
             now.clone(),
@@ -415,8 +426,8 @@ fn seed_member_events(
 
 fn seed_approval(db: &Connection, now: &str) -> Result<(), rusqlite::Error> {
     let expires = "2026-12-31T23:59:59Z";
-    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string(),expires,now])?;
-    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(120,?1,20000,?2,?2,'tester','approval.requested',?3)", params![now,SESSION_ID,json!({"approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string()])?;
+    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"binding":{"server":"shell","tool":"shell.run","argument_hash":"sha256:demo-command"},"arguments":{"command":"cargo test -p auth"}}).to_string(),expires,now])?;
+    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(120,?1,20000,?2,?3,'tester','approval.requested',?4)", params![now,TESTER_ID,SESSION_ID,json!({"call_id":"pending-shell","approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string()])?;
     Ok(())
 }
 
@@ -620,6 +631,23 @@ mod tests {
             1
         );
         drop(db);
+        let trace = ms_runtime::trace::build(&home, SESSION_ID, None).unwrap();
+        let agents = ms_console::views::agents(&trace);
+        let steps =
+            ms_console::views::steps::derive(&trace.events, &agents, None, None, 200, "everything");
+        let pending = steps["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|step| step["decision"]["value"] == "asked_you")
+            .unwrap();
+        assert_eq!(pending["sentence"]["args"]["command"], "cargo test -p auth");
+        assert_eq!(pending["approval"]["code"], "K7QF");
+        let approval = ms_console::read::approval(&home, "K7QF").unwrap();
+        assert_eq!(
+            approval["approval"]["tool_call"]["arguments"]["command"],
+            "cargo test -p auth"
+        );
         let reach = ms_console::read::scope(&home, TESTER_ID, true).unwrap();
         assert_eq!(reach["role"], "tester");
         assert_eq!(reach["rows"][0]["granted"][0]["mode"], "ro");

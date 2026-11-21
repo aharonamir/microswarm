@@ -140,3 +140,46 @@ fn approval_reach_uses_requester_permissions() {
     );
     fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn tool_approval_includes_the_requesters_task() {
+    let home = fixture();
+    let db = Connection::open(home.join("supervisor.db")).unwrap();
+    db.execute_batch("CREATE TABLE delegations(member_id TEXT, task TEXT, created_at TEXT)")
+        .unwrap();
+    db.execute(
+        "INSERT INTO delegations VALUES(?1,'Run auth tests and report failures','2026-11-19')",
+        [MEMBER],
+    )
+    .unwrap();
+    let detail = read::approval(&home, "A1B2").unwrap();
+    assert_eq!(
+        detail["approval"]["brief"]["text"],
+        "Run auth tests and report failures"
+    );
+    fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn spawn_preview_has_reach_summary_and_derivation() {
+    let home = fixture();
+    let scope = json!({"version":1,"session_id":ROOT,"derived_from":"config","source_ref":"cfg","mounts":[],"credentials":[],"tools":[],"delegation":null,"limits":{"memory_mb":1,"pids":1,"tmp_mb":1,"max_turns":1,"max_tokens":1},"narrowed":[],"hash":"x"});
+    let db = Connection::open(home.join("supervisor.db")).unwrap();
+    db.execute(
+        "UPDATE sessions SET scope_json=?1 WHERE id=?2",
+        rusqlite::params![scope.to_string(), ROOT],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE approvals SET kind='spawn',payload=?1",
+        [json!({"role":"reviewer","task":"Review auth","scope":scope}).to_string()],
+    )
+    .unwrap();
+    let detail = read::approval(&home, "A1B2").unwrap();
+    assert_eq!(
+        detail["approval"]["spawn_preview"]["summary"]["key"],
+        "reach.summary"
+    );
+    assert!(detail["approval"]["spawn_preview"]["derivation"]["requested"].is_array());
+    fs::remove_dir_all(home).unwrap();
+}

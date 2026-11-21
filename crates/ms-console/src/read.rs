@@ -800,9 +800,14 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
         json!({"key":"step.approval.asked","args":{"role":role,"what":tool_name}})
     };
     let brief = if kind == "spawn" {
-        payload["task"].as_str()
+        payload["task"].as_str().map(str::to_owned)
     } else {
-        None
+        db.query_row(
+            "SELECT task FROM delegations WHERE member_id=?1 ORDER BY created_at DESC LIMIT 1",
+            [&requester],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
     };
     let policy = json!({"rule":format!("{tool_name} = ask"),"source":"policy","source_ref":null});
     let facts = command.map(|command| vec![json!({"key":"parse.simple"}),json!({"key":"parse.program","args":{"program":command.split_whitespace().next().unwrap_or("")}}),json!({"key":"parse.no_pipes"})]).unwrap_or_default();
@@ -845,4 +850,5 @@ fn spawn_preview(home: &Path, root: &str, payload: &Value) -> Option<Value> {
     ms_proto::intersect_scope(&request, &lead, &ceiling)
         .ok()
         .and_then(|scope| serde_json::to_value(scope).ok())
+        .and_then(|granted| crate::views::reach::derive(&json!({"granted":granted,"lead_scope":lead,"rows":[{"dimension":"mounts","requested":request.mounts,"ceiling":ceiling.paths}]}), false).ok())
 }
