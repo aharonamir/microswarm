@@ -373,6 +373,21 @@ mod steps {
         }
 
         #[test]
+        fn failed_allowed_tool_is_a_problem() {
+            let events = vec![
+                tool(1, "failed"),
+                event(
+                    2,
+                    "permit.decision",
+                    json!({"call_id":"failed","decision":"allow"}),
+                ),
+                event(3, "tool.result", json!({"call_id":"failed","ok":false})),
+            ];
+            let result = derive(&events, &agents(), None, None, 20, "problems");
+            assert_eq!(result["steps"][0]["decision"]["value"], "failed");
+        }
+
+        #[test]
         fn pairs_tool_call_decision_and_result() {
             let events = vec![
                 tool(1, "c1"),

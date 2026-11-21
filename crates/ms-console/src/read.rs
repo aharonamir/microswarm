@@ -806,7 +806,7 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
     };
     let policy = json!({"rule":format!("{tool_name} = ask"),"source":"policy","source_ref":null});
     let facts = command.map(|command| vec![json!({"key":"parse.simple"}),json!({"key":"parse.program","args":{"program":command.split_whitespace().next().unwrap_or("")}}),json!({"key":"parse.no_pipes"})]).unwrap_or_default();
-    let runs_summary = json!({"folders":runs_in["mounts"].as_array().into_iter().flatten().map(|m|json!({"path":m["container_path"],"mode":m["mode"]})).collect::<Vec<_>>(),"network":"none","credentials":runs_in["credentials"],"tools_ask":[]});
+    let runs_summary = crate::views::reach::summary(&runs_in);
     let spawn_preview = if kind == "spawn" {
         spawn_preview(home, &root, &payload)
     } else {

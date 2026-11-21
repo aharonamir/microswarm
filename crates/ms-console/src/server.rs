@@ -329,20 +329,8 @@ fn memo_view(
     let value = build();
     if let Ok(mut entries) = cache.lock() {
         entries.push_front((home, root, newest, name, value.clone()));
-        let mut sessions = Vec::<(String, String)>::new();
-        for entry in entries.iter() {
-            let session = (entry.0.clone(), entry.1.clone());
-            if !sessions.contains(&session) {
-                sessions.push(session);
-            }
-        }
-        while sessions.len() > 32 {
-            if let Some(evicted) = sessions.pop() {
-                entries.retain(|entry| {
-                    (entry.0.as_str(), entry.1.as_str()) != (evicted.0.as_str(), evicted.1.as_str())
-                });
-            }
-        }
+        // Bound response objects, including query variants and old generations.
+        entries.truncate(32);
     }
     value
 }
@@ -535,12 +523,17 @@ fn api_get(
         }
         ["sessions", id, "steps", step_id] => {
             let (trace, agents) = session_view_data(home, id)?;
-            let steps =
-                crate::views::steps::derive(&trace.events, &agents, None, None, 200, "everything")
-                    ["steps"]
-                    .as_array()
-                    .cloned()
-                    .unwrap_or_default();
+            let steps = crate::views::steps::derive(
+                &trace.events,
+                &agents,
+                None,
+                None,
+                trace.events.len(),
+                "everything",
+            )["steps"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             let step = steps
                 .iter()
                 .find(|step| step["step_id"] == *step_id)
@@ -1050,6 +1043,23 @@ pub fn encode_sse_event(event: &ConsoleEvent) -> String {
 mod route_tests {
     use super::*;
     #[test]
+    fn cache_bounds_single_session_variants() {
+        let home = Path::new("/cache-bound-regression");
+        let mut trace = ms_runtime::trace::TraceData {
+            sessions: vec![],
+            events: vec![],
+        };
+        for generation in 0..100 {
+            trace.events.push(serde_json::json!({"seq":generation}));
+            memo_view(home, &trace, format!("timeline:{generation}"), || {
+                serde_json::json!(generation)
+            });
+        }
+        let entries = VIEW_CACHE.get().unwrap().lock().unwrap();
+        assert!(entries.len() <= 32);
+    }
+
+    #[test]
     fn new_routes_reject_bad_ids_before_filesystem_reads() {
         let home = std::path::Path::new("/no-such-ms-home");
         for path in [
@@ -1088,6 +1098,9 @@ mod route_tests {
         )
         .unwrap();
         db.execute("INSERT INTO supervisor_events VALUES(1,'2026-11-19T00:00:00Z',1,?1,?1,'lead','session.created','{}')",[id]).unwrap();
+        for seq in 2..=250 {
+            db.execute("INSERT INTO supervisor_events VALUES(?1,'2026-11-19T00:00:00Z',?1,?2,?2,'lead','message.inbound','{}')", rusqlite::params![seq,id]).unwrap();
+        }
         drop(db);
         let team = api_get(&home, &format!("/api/v1/sessions/{id}/team"), "").unwrap();
         assert!(team["groups"].is_array() && team["agents"].is_array());
@@ -1097,6 +1110,14 @@ mod route_tests {
                 && steps["phases"].is_array()
                 && steps["last_seq"].is_number()
         );
+        let older = api_get(
+            &home,
+            &format!("/api/v1/sessions/{id}/steps"),
+            "before_seq=20&limit=10",
+        )
+        .unwrap();
+        let old_id = older["steps"][0]["step_id"].as_str().unwrap();
+        assert!(api_get(&home, &format!("/api/v1/sessions/{id}/steps/{old_id}"), "").is_ok());
         let timeline = api_get(&home, &format!("/api/v1/sessions/{id}/timeline"), "").unwrap();
         assert!(timeline["lanes"].is_array() && timeline["stats"].is_object());
         let missing = api_get(

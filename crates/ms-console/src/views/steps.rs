@@ -214,7 +214,8 @@ pub fn derive_for_agent(
             filter_step(step, filter) && agent_id.is_none_or(|id| step["agent"]["id"] == id)
         })
         .collect::<Vec<_>>();
-    let limit = limit.clamp(1, 200);
+    // HTTP callers enforce the page cap; internal detail lookups need full history.
+    let limit = limit.max(1);
     let (page, more) = if let Some(after) = after_seq {
         (
             filtered
@@ -258,7 +259,7 @@ fn tool_step(call: &Value, result: &Value, agents: &[Value], exited: bool) -> Va
     if !result.is_null() {
         seqs.push(result["seq"].clone());
     }
-    let decision = if exited || result["ok"] == false {
+    let decision = if exited || (result["data"]["ok"] == false && call["_decision"] != "deny") {
         Some("failed")
     } else {
         match call["_decision"].as_str() {
