@@ -161,6 +161,22 @@ test("outside clicks dismiss mobile navigation and desktop session controls stay
   await page.close();
 });
 
+test("render consistent Tabler SVG icons for every navigation destination", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/sessions");
+  await page.getByRole("button", { name: "Menu" }).click();
+  const icons = page.locator('.primary-nav a[data-route] svg.nav-icon');
+  await expect(icons).toHaveCount(5);
+  for (const icon of await icons.all()) {
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("stroke", "currentColor");
+    await expect(icon.locator("path")).not.toHaveCount(0);
+  }
+  await page.close();
+});
+
 test("console reaches the Sessions page within two seconds", () => {
   console.log(`console startup-to-render: ${startupMs} ms`);
   expect(startupMs).toBeLessThan(2000);

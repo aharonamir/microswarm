@@ -499,6 +499,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .global-header { position: fixed; inset: 0 auto 0 0; z-index: 3; display: flex; flex-direction: column; align-items: stretch; gap: 22px; inline-size: 240px; min-block-size: 100dvh; padding: 20px 14px; border: 0; border-inline-end: 1px solid var(--line); }
 .global-header { background: var(--bg); }
 .global-header > .primary-nav { min-inline-size: 0; grid-template-columns: minmax(0, 1fr); }
+.global-header > .primary-nav > a { gap: 10px; }
+.global-header .primary-nav .nav-icon { display: block; flex: none; inline-size: 20px; block-size: 20px; }
 .global-header > .primary-nav > a, .global-header > .primary-nav > .session-list { min-inline-size: 0; }
 .global-header .session-link { min-inline-size: 0; }
 .global-header .session-link .status-line { min-inline-size: 0; flex-wrap: wrap; overflow-wrap: anywhere; }
@@ -531,7 +533,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .brand > span:last-child, .header-tools .supervisor-chip, .language-toggle { display: none; }
   .primary-nav a { justify-content: center; inline-size: 44px; padding: 0; font-size: 0; }
   .primary-nav .nav-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; font-size: 1px; }
-  .primary-nav .nav-icon { font-size: 20px; }
   .primary-nav a .badge { font-size: 11px; }
   .page-frame { margin-inline-start: 64px; }
 }
@@ -545,7 +546,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .primary-nav:not([hidden]) > a { inline-size: 100%; }
   .primary-nav a { flex: 0 0 auto; }
   .primary-nav .nav-label { position: static; inline-size: auto; block-size: auto; overflow: visible; clip-path: none; white-space: normal; }
-  .primary-nav .nav-icon { display: none; }
   .header-tools { display: flex; margin-inline-start: auto; }
   .page-frame { margin-inline: 0; padding: 14px; }
   .page-frame.session-index { grid-template-columns: minmax(0, 1fr); }
