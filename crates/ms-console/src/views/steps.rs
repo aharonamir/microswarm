@@ -21,6 +21,19 @@ pub fn derive_for_agent(
     filter: &str,
     agent_id: Option<&str>,
 ) -> Value {
+    let positions: std::collections::HashMap<_, _> = events
+        .iter()
+        .enumerate()
+        .map(|(index, event)| {
+            (
+                (
+                    event["session_id"].as_str().unwrap_or_default(),
+                    event["seq"].as_i64().unwrap_or_default(),
+                ),
+                index,
+            )
+        })
+        .collect();
     let mut pending = Vec::<Value>::new();
     let mut spawn_requests = std::collections::BTreeMap::<String, Value>::new();
     let mut spawn_indexes = std::collections::BTreeMap::<String, usize>::new();
@@ -59,9 +72,9 @@ pub fn derive_for_agent(
                     call["session_id"] == sid && call["data"]["call_id"] == call_id
                 }) {
                     let call = pending.remove(pos);
-                    let cursor = events
-                        .iter()
-                        .position(|item| item["session_id"] == sid && item["seq"] == call["seq"])
+                    let cursor = positions
+                        .get(&(sid, call["seq"].as_i64().unwrap_or_default()))
+                        .copied()
                         .unwrap_or(index);
                     steps.push((
                         tool_step(&call, event, agents, false),
@@ -118,12 +131,12 @@ pub fn derive_for_agent(
                     if denied {
                         step["decision"] = json!({"value":"denied_by_you"});
                     }
-                    let cursor = events
-                        .iter()
-                        .position(|item| {
-                            item["session_id"] == request["session_id"]
-                                && item["seq"] == request["seq"]
-                        })
+                    let cursor = positions
+                        .get(&(
+                            request["session_id"].as_str().unwrap_or_default(),
+                            request["seq"].as_i64().unwrap_or_default(),
+                        ))
+                        .copied()
                         .unwrap_or(index);
                     spawn_indexes.insert(id, steps.len());
                     steps.push((

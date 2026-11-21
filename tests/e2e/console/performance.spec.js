@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {startConsole,ROOT} from './support.js';
-test.fixme('red: T349 — 2000 event session and trajectory meet interaction budgets',async({browser},testInfo)=>{
+test('2000 event session and trajectory meet interaction budgets',async({browser},testInfo)=>{
   const harness=await startConsole(browser,{scenario:'load',mock:false});
   try{
     const page=await harness.context.newPage();const timings={};
