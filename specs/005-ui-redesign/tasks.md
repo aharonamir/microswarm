@@ -91,12 +91,12 @@ Wait for confirmation before Phase 5.
 
 - [x] T334 [P] Red e2e for US4 (tool and spawn variants, the decided-elsewhere message, 390 px full screen with a sticky 52 px footer) — `tests/e2e/console/approvals.spec.js`
 - [x] T335 `approvals.js`: queue tabs and items, decision layout (title, code, command block, three tiles, binding note, brief, Exact call disclosure, sticky footer), spawn variant with the derivation preview — `C/web/js/pages/approvals.js`
-- [ ] T336 [P] Red e2e for US3 (selection sync lane ↔ row ↔ URL, filters, phases, paging past 200, export, raw disclosure) — `tests/e2e/console/trajectory.spec.js`
-- [ ] T337 `trajectory.js`: header, filter segmented control, tiles, full lanes card with legend, horizontal scroll inside the card below 640 px — `C/web/js/pages/trajectory.js`
-- [ ] T338 Steps card: phase headings, rows, filter, paging on scroll, selection in the URL (`/trajectory/<step_id>`) — `C/web/js/pages/trajectory.js`
-- [ ] T339 Inspector: explanation box, facts list, actions, "Raw events (N)" `<details>` marked `data-raw`, Export JSON kept from 002 — `C/web/js/components/inspector.js`
+- [x] T336 [P] Red e2e for US3 (selection sync lane ↔ row ↔ URL, filters, phases, paging past 200, export, raw disclosure) — `tests/e2e/console/trajectory.spec.js`
+- [x] T337 `trajectory.js`: header, filter segmented control, tiles, full lanes card with legend, horizontal scroll inside the card below 640 px — `C/web/js/pages/trajectory.js`
+- [x] T338 Steps card: phase headings, rows, filter, paging on scroll, selection in the URL (`/trajectory/<step_id>`) — `C/web/js/pages/trajectory.js`
+- [x] T339 Inspector: explanation box, facts list, actions, "Raw events (N)" `<details>` marked `data-raw`, Export JSON kept from 002 — `C/web/js/components/inspector.js`
 
-**Checkpoint C:** stop and report screenshots of the approvals (tool and spawn) and trajectory (selected waiting step; Problems filter) at 1440 and 390, plus the e2e results.
+**Checkpoint C:** review evidence: [screenshots and test results](../../docs/reviews/005-checkpoint-c/README.md). Stop and report screenshots of the approvals (tool and spawn) and trajectory (selected waiting step; Problems filter) at 1440 and 390, plus the e2e results.
 
 ## Phase 6 — US5 Home, US6 Host, phone and cleanup
 
