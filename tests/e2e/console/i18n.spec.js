@@ -13,7 +13,7 @@ test("English and Chinese dictionaries have matching keys and placeholders", asy
 });
 
 import {startConsole,ROOT,TESTER} from './support.js';
-for(const locale of ['en','zh']) test.fixme(`red: T346 — long ${locale} labels fit at four widths`,async({browser})=>{
+for(const locale of ['en','zh']) test(`long ${locale} labels fit at four widths`,async({browser})=>{
   const harness=await startConsole(browser,{scenario:'demo',mock:false});
   try{
     const page=await harness.context.newPage();

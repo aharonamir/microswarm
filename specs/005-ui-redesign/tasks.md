@@ -116,7 +116,7 @@ Wait for confirmation before Phase 5.
   - axe on every page at the 4 widths, with no horizontal page scroll (SC-U06).
 
   Files: `C/web/`, `tests/e2e/console/`
-- [ ] T346 [P] zh: translate the new keys, check layouts with long zh and long en strings, and record native review notes — `C/web/i18n/zh.json`, `docs/reviews/`
+- [x] T346 [P] zh: translate the new keys, check layouts with long zh and long en strings, and record native review notes — `C/web/i18n/zh.json`, `docs/reviews/`
 - [ ] T347 Make T310's text scanner green on every page in both locales, using the `demo` and `hostile` fixtures (SC-U04) — `tests/e2e/console/text-scan.spec.js`
 - [ ] T348 Security e2e: every new route under the 002 checks (Host, cookie, bad ids); the `hostile` fixture rendered as text on every new view; CSP violation listener with zero reports (SC-U08) — `tests/e2e/console/security.spec.js`
 - [ ] T349 Docs:
