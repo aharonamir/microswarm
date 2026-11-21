@@ -52,10 +52,10 @@ const reach = {
   raw: { granted: { mounts: [{ container_path: "/work/src/auth", mode: "ro" }], tools: [], credentials: [] }, requested: {}, lead: {}, ceiling: {} },
 };
 
-export async function startConsole(browser) {
+export async function startConsole(browser, { scenario, mock = true } = {}) {
   const home = await mkdtemp(join(tmpdir(), "ms-console-005-e2e-"));
   const fixtureBinary = process.env.MS_CONSOLE_FIXTURE_BIN || resolve("../../../target/debug/console_status_fixture");
-  const fixture = spawn(fixtureBinary, [home], { stdio: ["pipe", "pipe", "inherit"] });
+  const fixture = spawn(fixtureBinary, [home, ...(scenario ? ["--scenario", scenario] : [])], { stdio: ["pipe", "pipe", "inherit"] });
   const fixtureLines = createInterface({ input: fixture.stdout })[Symbol.asyncIterator]();
   await expectLine(fixtureLines, "READY");
   const port = await freePort();
@@ -69,7 +69,7 @@ export async function startConsole(browser) {
   if (!token) throw new Error(`console did not print a startup token: ${stderr}`);
   await expectLine(fixtureLines, "CONNECTED");
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  installDemoApi(context);
+  if (mock) installDemoApi(context);
   await context.addInitScript(() => {
     window.EventSource = class {
       constructor() { this.listeners = {}; window.__consoleEvents = this; setTimeout(() => this.onopen?.(), 0); }
