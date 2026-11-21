@@ -571,7 +571,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .approval-command { font-size: 15px; padding: 18px; margin-block: 22px; }
 .decision-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 22px; }
 .decision-tiles article { min-inline-size: 0; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; }
-.decision-tiles h3, .approval-brief h3 { margin: 0 0 10px; font-size: 14px; }
+.decision-tiles h2, .approval-brief h2 { margin: 0 0 10px; font-size: 14px; }
 .decision-tiles p { margin-block: 8px; }
 .decision-tiles ul { padding-inline-start: 18px; }
 .approval-brief { margin-block: 24px; }
@@ -601,3 +601,88 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .approval-workspace { grid-template-rows: minmax(0, 1fr); }
 .approval-decision { min-block-size: 0; }
+/* Shared clock, sentence rows, and decision inspector. */
+.trajectory-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 24px; min-inline-size: 0; block-size: calc(100dvh - 48px); overflow: auto; overscroll-behavior: contain; }
+.trajectory-main { min-inline-size: 0; }
+.trajectory-header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.trajectory-header h1 { margin: 10px 0 4px; font-size: 24px; }
+.trajectory-header p { max-inline-size: 64ch; }
+.trajectory-header button { flex: none; }
+.trajectory-filters { display: flex; gap: 4px; padding: 4px; inline-size: fit-content; background: var(--sunken); border-radius: 10px; margin-block: 18px; }
+.trajectory-filters .tab { flex: none; padding: 7px 12px; min-block-size: 40px; }
+.trajectory-filters [aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+.trajectory-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-block: 20px; }
+.trajectory-stat { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.trajectory-stat span { color: var(--ink-2); font-size: 12px; }
+.trajectory-stat strong { font-size: 19px; font-weight: 500; }
+.trajectory-stat-waiting { border-color: var(--seal); color: var(--seal-ink); }
+.trajectory-stat-reduced { color: var(--amber-ink); background: var(--amber-soft); }
+.trajectory-lanes, .trajectory-steps-card { padding: 16px; margin-block: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.trajectory-lanes h2, .trajectory-steps-card h2 { font-size: 16px; margin: 0 0 18px; }
+.trajectory-lanes-scroll { overflow: auto; overscroll-behavior-inline: contain; }
+.trajectory-lanes-grid { min-inline-size: 500px; }
+.trajectory-ticks { margin-inline-start: 110px; display: flex; justify-content: space-between; color: var(--ink-3); font-size: 11px; }
+.trajectory-lane { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 0; margin-block: 12px; }
+.trajectory-lane-label { display: flex; align-items: center; gap: 6px; min-inline-size: 0; font-size: 12px; }
+.trajectory-lane-label > span:last-child { overflow-wrap: anywhere; }
+.trajectory-lane-track { position: relative; block-size: 28px; border-radius: 7px; background: var(--bg); margin-inline-end: 8px; }
+.trajectory-span { position: absolute; inset-block-start: 4px; block-size: 20px; padding: 0; border: 0; border-radius: 5px; background: var(--agent-1-bar); color: white; font-size: 10px; white-space: nowrap; overflow: clip; }
+.trajectory-span.lane-span-colour-0 { background: var(--ink); }
+.trajectory-span.lane-span-working { background: var(--teal); }
+.trajectory-span.lane-span-waiting_you { color: var(--seal-ink); }
+.trajectory-mark { position: absolute; inset-block-start: 7px; inline-size: 14px; block-size: 14px; transform: translateX(-50%) rotate(45deg); padding: 0; border: 0; background: var(--ink-2); }
+.trajectory-mark-approval, .trajectory-mark-denied { background: var(--seal); }
+.trajectory-mark-tool { inline-size: 3px; transform: translateX(-50%); background: var(--surface); }
+.trajectory-lane-control { cursor: pointer; }
+.trajectory-lane-control[aria-pressed="true"] { outline: 2px solid var(--ink); outline-offset: 2px; z-index: 1; }
+.trajectory-phase { margin: 20px 0 8px; font-size: 14px; }
+.trajectory-step { display: grid; grid-template-columns: 42px 22px minmax(0, 1fr) auto 48px; gap: 8px; align-items: center; inline-size: 100%; min-block-size: 52px; padding: 10px 6px; border: 1.5px solid transparent; border-block-end-color: var(--line-soft); border-radius: 8px; background: transparent; color: var(--ink); text-align: start; cursor: pointer; }
+.trajectory-step .mono { font-size: 10px; }
+.trajectory-step[aria-current="step"] { border-color: var(--ink); background: var(--sunken); }
+.trajectory-step.waiting[aria-current="step"] { background: var(--seal-wash, #FFF8F6); }
+.trajectory-inspector { min-inline-size: 0; align-self: start; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow-wrap: anywhere; }
+.inspector-header { display: flex; gap: 10px; align-items: start; margin-block-end: 18px; }
+.inspector-header h2 { margin: 0; font-size: 18px; line-height: 25px; }
+.inspector-why { padding: 14px; border-radius: 12px; margin-block: 20px; background: var(--bg); }
+.inspector-why h3 { margin: 0; font-size: 13px; }
+.inspector-facts { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; font-size: 13px; }
+.inspector-facts dt { color: var(--ink-2); }
+.inspector-facts dd { margin: 0; }
+.inspector-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-block: 20px; }
+@media (max-width: 1099px) { .trajectory-workspace { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 699px) {
+ .trajectory-workspace { block-size: auto; overflow: visible; gap: 14px; }
+ .trajectory-header { flex-wrap: wrap; }
+ .trajectory-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .trajectory-step { grid-template-columns: 34px 22px minmax(0, 1fr); }
+ .trajectory-step .decision-pill { grid-column: 3; justify-self: start; }
+ .trajectory-step > span:last-child { grid-column: 3; }
+ .trajectory-lanes, .trajectory-steps-card, .trajectory-inspector { padding: 12px; }
+}
+@media (min-width: 700px) {
+ .detail-view .global-header { inline-size: 64px; padding-inline: 8px; }
+ .detail-view .page-frame { margin-inline-start: 64px; }
+ .detail-view .brand { inline-size: 48px; justify-content: center; }
+ .detail-view .brand-name, .detail-view .header-tools, .detail-view .nav-section-title, .detail-view .primary-nav .session-list { display: none; }
+ .detail-view .primary-nav { inline-size: 48px; }
+ .detail-view .primary-nav > a { inline-size: 44px; padding-inline: 0; justify-content: center; }
+ .detail-view .primary-nav .nav-label { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; }
+ .detail-view .primary-nav .badge { position: absolute; margin-inline-start: 32px; }
+}
+.approval-back { display: inline-block; margin-block-end: 18px; color: var(--teal); }
+.approval-queue-item .avatar { align-self: start; block-size: 32px; }
+.trajectory-inspector { position: sticky; inset-block-start: 0; }
+.trajectory-span.lane-span-waiting_you { background: repeating-linear-gradient(135deg, var(--seal) 0 2px, var(--seal-soft) 2px 4px); }
+@media (max-width: 1099px) { .trajectory-inspector { position: static; } }
+.trajectory-span { container-type: inline-size; }
+.trajectory-span > span { display: none; }
+@container (min-width: 60px) { .trajectory-span > span { display: inline; } }
+.trajectory-span.lane-span-colour-0 { background: var(--agent-0-bar); }
+.trajectory-span.lane-span-colour-1 { background: var(--agent-1-bar); }
+.trajectory-span.lane-span-colour-2 { background: var(--agent-2-bar); }
+.trajectory-span.lane-span-colour-3 { background: var(--agent-3-bar); }
+.trajectory-span.lane-span-colour-4 { background: var(--agent-4-bar); }
+.trajectory-span.lane-span-colour-5 { background: var(--agent-5-bar); }
+.trajectory-span.lane-span-colour-6 { background: var(--agent-6-bar); }
+.trajectory-span.lane-span-waiting_you { background: repeating-linear-gradient(135deg, #F3C6BF 0 5px, var(--seal-soft) 5px 10px); color: var(--seal-ink); }
+.trajectory-span > span { background: var(--ink); color: white; padding-inline: 3px; border-radius: 3px; }

@@ -6,7 +6,7 @@ import { connectEvents } from "./sse.js";
 import { api } from "./api.js";
 import { renderSessions, handleConsoleEvent } from "./pages/sessions.js";
 import { renderApprovals } from "./pages/approvals.js";
-import { renderTrace } from "./pages/trace.js";
+import { renderTrajectory } from "./pages/trajectory.js";
 import { renderHost } from "./pages/host.js";
 import { captureMemberTab, renderMember } from "./pages/member.js";
 import { renderOverview } from "./pages/overview.js";
@@ -46,6 +46,7 @@ async function renderNow() {
   const route = currentRoute();
   const { page, parts = [] } = route;
   const isSessionDetail = (page === "sessions" && parts.length > 0) || page === "member";
+  toggleClass(document.querySelector(".console-shell"), "detail-view", ["approvals", "trajectory", "trajectories"].includes(page));
   const sessionSnapshot = isSessionDetail ? captureSessionUi(app) : null;
   toggleClass(app, "session-index", page === "sessions" && parts.length === 0);
   toggleClass(document.querySelector(".console-shell"), "member-drawer-open", page === "member" && parts.length > 1);
@@ -86,7 +87,7 @@ async function renderNow() {
     return;
   }
   if (page === "trajectory" || page === "trajectories") {
-    await renderTrace(app, route.parts[0] || null, t);
+    await renderTrajectory(app, route.parts[0] || null, route.parts[1] || null, t);
     return;
   }
   if (page === "host") {

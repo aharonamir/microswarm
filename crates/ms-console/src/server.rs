@@ -534,6 +534,10 @@ fn api_get(
                 .as_array()
                 .cloned()
                 .unwrap_or_default();
+            let position = steps
+                .iter()
+                .position(|step| step["step_id"] == *step_id)
+                .map(|index| index + 1);
             let step = steps
                 .iter()
                 .find(|step| step["step_id"] == *step_id)
@@ -547,7 +551,7 @@ fn api_get(
                 .cloned()
                 .collect::<Vec<_>>();
             Ok(
-                serde_json::json!({"step":step,"explanation":{"decision":step["decision"],"facts":[]},"events":events}),
+                serde_json::json!({"step":step,"position":position,"total":steps.len(),"explanation":{"decision":step["decision"],"facts":[]},"events":events}),
             )
         }
         ["sessions", id] => crate::read::session(home, id).map_err(|e| read_error(&e)),
@@ -1117,7 +1121,9 @@ mod route_tests {
         )
         .unwrap();
         let old_id = older["steps"][0]["step_id"].as_str().unwrap();
-        assert!(api_get(&home, &format!("/api/v1/sessions/{id}/steps/{old_id}"), "").is_ok());
+        let detail = api_get(&home, &format!("/api/v1/sessions/{id}/steps/{old_id}"), "").unwrap();
+        assert!(detail["position"].as_u64().unwrap() < 20);
+        assert!(detail["total"].as_u64().unwrap() > 200);
         let timeline = api_get(&home, &format!("/api/v1/sessions/{id}/timeline"), "").unwrap();
         assert!(timeline["lanes"].is_array() && timeline["stats"].is_object());
         let missing = api_get(

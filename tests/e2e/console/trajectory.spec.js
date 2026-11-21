@@ -1,9 +1,10 @@
+import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 import { startConsole, ROOT, TESTER, MEMBER } from "./support.js";
 let harness;
 test.beforeAll(async ({ browser }) => { harness = await startConsole(browser); });
 test.afterAll(async () => harness?.close());
-test.fixme("red: T336 — lanes rows URL and inspector select the same step", async () => {
+test("lanes rows URL and inspector select the same step", async () => {
  const page=await harness.context.newPage();
  await page.goto(`${harness.baseUrl}/#/sessions/${ROOT}/trajectory`);
  await page.locator('.trajectory-step').filter({hasText:'cargo test -p auth'}).click();
@@ -11,11 +12,11 @@ test.fixme("red: T336 — lanes rows URL and inspector select the same step", as
  await expect(page.locator('.trajectory-inspector')).toContainText('cargo test -p auth');
  await expect(page.locator('.trajectory-step[aria-current="step"]')).toHaveCount(1);
  await expect(page.locator('.trajectory-lane-control[aria-pressed="true"]')).not.toHaveCount(0);
- await page.locator('.trajectory-lane-control').filter({hasText:'researcher'}).first().click();
+ await page.getByRole('button', { name: /Select researcher step/ }).first().click();
  await expect(page).toHaveURL(new RegExp(`${MEMBER}:1`));
  await page.close();
 });
-test.fixme("red: T336 — filters request server sentences and show phase headings", async () => {
+test("filters request server sentences and show phase headings", async () => {
  const page=await harness.context.newPage();
  let query='';page.on('request',r=>{if(r.url().includes('/steps?'))query=r.url();});
  await page.goto(`${harness.baseUrl}/#/sessions/${ROOT}/trajectory`);
@@ -24,7 +25,7 @@ test.fixme("red: T336 — filters request server sentences and show phase headin
  await expect.poll(()=>query).toContain('filter=problems');
  await page.close();
 });
-test.fixme("red: T336 — inspector discloses raw events and exports JSON", async () => {
+test("inspector discloses raw events and exports JSON", async () => {
  const page=await harness.context.newPage();
  await page.goto(`${harness.baseUrl}/#/sessions/${ROOT}/trajectory/${TESTER}:1`);
  const raw=page.locator('.trajectory-inspector details[data-raw]');
@@ -34,7 +35,7 @@ test.fixme("red: T336 — inspector discloses raw events and exports JSON", asyn
  expect((await download).suggestedFilename()).toContain('.json');
  await page.close();
 });
-test.fixme("red: T336 — paging loads older than the latest 200 without duplicates", async () => {
+test("paging loads older than the latest 200 without duplicates", async () => {
  const page=await harness.context.newPage();
  let pages=0;
  await page.route(`**/api/v1/sessions/${ROOT}/steps?**`,r=>{
@@ -48,3 +49,16 @@ test.fixme("red: T336 — paging loads older than the latest 200 without duplica
  await expect(page.locator('.trajectory-step')).toHaveCount(250);expect(pages).toBeGreaterThan(1);
  await page.close();
 });
+
+for (const width of [1440, 768, 390, 320]) {
+ test(`populated trajectory remains accessible at ${width}px`, async () => {
+  const page = await harness.context.newPage();
+  await page.setViewportSize({width,height:900});
+  await page.goto(`${harness.baseUrl}/#/sessions/${ROOT}/trajectory/${TESTER}:1`);
+  await expect(page.locator('.trajectory-inspector h2')).toContainText('cargo test -p auth');
+  const result=await new AxeBuilder({page}).analyze();
+  expect(result.violations,JSON.stringify(result.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})))).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  await page.close();
+ });
+}

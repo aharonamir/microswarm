@@ -41,3 +41,32 @@ export function laneStrip(timeline = {}, t) {
     el("p", { class: "lane-legend" }, [el("span", { class: "lane-legend-swatch lane-span-waiting_you" }, []), t("team.striped_waiting")]),
   ]);
 }
+
+export function fullLanes(timeline, t, selectedId, select) {
+  const start = Date.parse(timeline.range?.start) || Date.now();
+  const end = Math.max(start + 1, Date.parse(timeline.range?.end) || start + 1);
+  const percent = at => Math.max(0, Math.min(100, (Date.parse(at) - start) / (end - start) * 100));
+  return el("section", { class: "trajectory-lanes", "aria-label": t("trajectory.lanes") }, [
+    el("h2", {}, [t("trajectory.lanes")]),
+    el("div", { class: "trajectory-lanes-scroll", tabindex: "0" }, [el("div", { class: "trajectory-lanes-grid" }, [
+      el("div", { class: "trajectory-ticks" }, [0, .25, .5, .75, 1].map(ratio => el("span", { class: "mono" }, [ratio === 1 ? t("team.now") : localTime(start + ratio * (end - start))]))),
+      ...(timeline.lanes || []).map(lane => el("div", { class: "trajectory-lane" }, [
+        el("div", { class: "trajectory-lane-label" }, [avatar(lane.agent, { className: "lane-avatar" }), el("span", {}, [lane.agent?.role || t("sessions.you")])]),
+        el("div", { class: "trajectory-lane-track" }, [
+          ...(lane.spans || []).map(span => {
+            const stepId = span.step_id || (lane.marks || []).find(mark => mark.step_id && Date.parse(mark.at) >= Date.parse(span.start) && Date.parse(mark.at) <= Date.parse(span.end))?.step_id;
+            const node = el(stepId ? "button" : "span", { class: `trajectory-span lane-span-${span.state} lane-span-colour-${Number(lane.agent?.colour_index) || 0}${stepId ? " trajectory-lane-control" : ""}`, ...(stepId ? { type: "button", "aria-label": `${lane.agent?.role || t("sessions.you")}: ${t(stateKeys[span.state] || "status.unknown")}`, "aria-pressed": String(selectedId === stepId), onclick: () => select(stepId) } : { "aria-hidden": "true" }) }, [el("span", {}, [t(stateKeys[span.state] || "status.unknown")])]);
+            style(node, { left: `${percent(span.start)}%`, width: `${Math.max(1, percent(span.end) - percent(span.start))}%` });
+            return node;
+          }),
+          ...(lane.marks || []).map(mark => {
+            const node = el(mark.step_id ? "button" : "span", { class: `trajectory-mark trajectory-mark-${mark.kind}${mark.step_id ? " trajectory-lane-control" : ""}`, ...(mark.step_id ? { type: "button", "aria-label": t("trajectory.select_step", { role: lane.agent?.role || t("sessions.you"), time: localTime(mark.at) }), "aria-pressed": String(selectedId === mark.step_id), onclick: () => select(mark.step_id) } : { "aria-hidden": "true" }) }, []);
+            style(node, { left: `${percent(mark.at)}%` });
+            return node;
+          }),
+        ]),
+      ])),
+    ])]),
+    el("p", { class: "lane-legend" }, [t("trajectory.legend")]),
+  ]);
+}

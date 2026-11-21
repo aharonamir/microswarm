@@ -43,7 +43,9 @@ Times are RFC 3339 UTC on the wire. The client formats them as local `HH:MM` (FR
 
 ## Step detail
 
-`GET /api/v1/sessions/{id}/steps/{step_id}` → `200 { "step": Step, "explanation": Explanation, "events": [raw event objects] }`
+`GET /api/v1/sessions/{id}/steps/{step_id}` → `200 { "step": Step, "position": n, "total": n, "explanation": Explanation, "events": [raw event objects] }`
+
+`position` is the one-based position in the complete derived history; `total` counts the complete history, independent of the currently loaded page or filter.
 
 `events` is the only place raw event JSON appears outside Export.
 

@@ -61,8 +61,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 
     { name: "overview", hash: "#/overview", heading: "Needs your attention" },
     { name: "new session", hash: "#/sessions", heading: "Start a conversation" },
     { name: "sessions", hash: `#/sessions/${ROOT}`, heading: hostile },
-    { name: "approvals", hash: "#/approvals", heading: "microswarm-tools / shell.run" },
-    { name: "trace", hash: `#/trace/${ROOT}`, heading: "Trace" },
+    { name: "approvals", hash: "#/approvals", heading: "The reviewer wants to run a command" },
+    { name: "trace", hash: `#/trace/${ROOT}`, heading: "Trajectory" },
     { name: "host", hash: "#/host", heading: "Host" },
     { name: "member", hash: `#/members/${MEMBER}`, heading: "reviewer" },
   ]) {
@@ -270,6 +270,14 @@ test("Host shows when web.search is configured for new sessions", async () => {
 
 test("chat send posts through the console and keeps the session locked while pending", async () => {
   const page = await context.newPage();
+  // This request test must not replay status events from the earlier latency test.
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { setTimeout(() => this.onopen?.(), 0); }
+      addEventListener() {}
+      close() {}
+    };
+  });
   let request;
   await page.route("**/api/v1/**", async route => {
     const url = new URL(route.request().url());
@@ -406,8 +414,8 @@ test("approval decision posts only through its code route", async () => {
   await expect.poll(() => request?.url()).toContain("/api/v1/approvals/A1B2/approve");
   expect(request.postDataJSON()).toEqual({});
   expect(request.headers()["x-ms-console"]).toBeTruthy();
-  await page.getByRole("tab", { name: "Decided" }).click();
-  await expect(page.getByRole("link", { name: /A1B2 approved/ })).toBeVisible();
+  await page.getByRole("button", { name: "Decided", exact: true }).click();
+  await expect(page.locator(".approval-queue-item").filter({ hasText: "Allowed" })).toBeVisible();
   await expect(page.getByText("Already decided on another channel")).toHaveCount(0);
   await page.close();
 });

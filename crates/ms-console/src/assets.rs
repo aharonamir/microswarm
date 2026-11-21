@@ -98,6 +98,14 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/approvals.js"),
         ),
+        "/js/pages/trajectory.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/trajectory.js"),
+        ),
+        "/js/components/inspector.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/inspector.js"),
+        ),
         "/js/pages/trace.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/trace.js"),

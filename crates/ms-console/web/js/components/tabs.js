@@ -3,7 +3,7 @@ import { append, el, setAttr } from "../dom.js";
 export function tabs(items, selected, onChange, t) {
   const tablist = el("div", { class: "member-tabs", role: "tablist", "aria-label": t("member.tablist") }, []);
   const buttons = items.map(([id, key, args = {}]) => el("button", {
-    id: `member-tab-${id}`, class: "member-tab", type: "button", role: "tab", "aria-selected": selected === id,
+    id: `member-tab-${id}`, class: "member-tab", type: "button", role: "tab", "aria-selected": String(selected === id),
     "aria-controls": `member-panel-${id}`, tabindex: selected === id ? "0" : "-1",
     onclick: () => onChange(id),
     onkeydown: event => {

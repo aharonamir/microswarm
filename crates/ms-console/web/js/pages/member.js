@@ -115,7 +115,7 @@ function reachContent(reach, agent, t) {
   return content;
 }
 
-function reachSummarySentence(summary, t) {
+export function reachSummarySentence(summary, t) {
   const args = summary?.args || {};
   if (summary?.key === "reach.summary" && args.network === "none" && Number(args.credentials || 0) === 0) {
     return t("reach.summary.no_network", { folders: Number(args.folders || 0) });
