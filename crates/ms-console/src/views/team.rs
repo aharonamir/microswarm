@@ -74,7 +74,8 @@ pub fn derive(events: &[Value], agents: &[Value], steps: &[Value]) -> Value {
                 );
             }
             if typ == "approval.requested" {
-                member["pending_approval"] = json!({"id":event["data"]["approval_id"].as_str().or(event["data"]["id"].as_str()),"code":event["data"]["code"],"summary":{"key":"step.shell.ask","args":{}}});
+                let sentence = super::sentences::sentence(typ, &event["data"]);
+                member["pending_approval"] = json!({"id":event["data"]["approval_id"].as_str().or(event["data"]["id"].as_str()),"code":event["data"]["code"],"summary":{"key":sentence.key,"args":sentence.args}});
             }
         }
     }

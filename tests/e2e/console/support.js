@@ -83,6 +83,7 @@ export async function startConsole(browser, { scenario, mock = true } = {}) {
   login.on("console", message => { if (message.type() === "error") console.error(`console browser error: ${message.text()}`); });
   await login.goto(`http://127.0.0.1:${port}/login?token=${encodeURIComponent(token)}`);
   await expect(login).toHaveURL(`http://127.0.0.1:${port}/#/home`);
+  await expect(login.locator(".home-page")).toBeVisible();
   await login.close();
   return {
     context,
@@ -152,4 +153,9 @@ function freePort() {
       server.close(error => error ? reject(error) : resolve(port));
     });
   });
+}
+
+export async function expectView(page, route) {
+  const selector = route.includes('/members/') ? 'dialog' : route.includes('/trajectory') ? '.trajectory-workspace' : route.startsWith('approvals/') ? '.approval-command' : route === 'approvals' ? '.approval-workspace' : route === 'home' ? '.home-page' : route === 'host' ? '.host-workspace' : route === 'sessions' ? '.new-session-page' : '.session-page';
+  await expect(page.locator(selector)).toBeVisible();
 }

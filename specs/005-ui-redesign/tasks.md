@@ -117,8 +117,8 @@ Wait for confirmation before Phase 5.
 
   Files: `C/web/`, `tests/e2e/console/`
 - [x] T346 [P] zh: translate the new keys, check layouts with long zh and long en strings, and record native review notes — `C/web/i18n/zh.json`, `docs/reviews/`
-- [ ] T347 Make T310's text scanner green on every page in both locales, using the `demo` and `hostile` fixtures (SC-U04) — `tests/e2e/console/text-scan.spec.js`
-- [ ] T348 Security e2e: every new route under the 002 checks (Host, cookie, bad ids); the `hostile` fixture rendered as text on every new view; CSP violation listener with zero reports (SC-U08) — `tests/e2e/console/security.spec.js`
+- [x] T347 Make T310's text scanner green on every page in both locales, using the `demo` and `hostile` fixtures (SC-U04) — `tests/e2e/console/text-scan.spec.js`
+- [x] T348 Security e2e: every new route under the 002 checks (Host, cookie, bad ids); the `hostile` fixture rendered as text on every new view; CSP violation listener with zero reports (SC-U08) — `tests/e2e/console/security.spec.js`
 - [ ] T349 Docs:
   - design/README replaces `specs/002-console/design/README.md`, which then points here;
   - update the 002 quickstart screenshots/wording;

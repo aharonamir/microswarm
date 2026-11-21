@@ -126,8 +126,10 @@ fn init_home(home: &Path, scenario: &str) -> Result<Connection, Box<dyn std::err
             })?;
             seed_member_events(home, id, SESSION_ID, &role, &mut seq, scenario, &now)?;
         }
+        if scenario == "demo" || scenario == "hostile" {
+            seed_approval(&db, &offset_timestamp(&now, 20)?, scenario == "hostile")?;
+        }
         if scenario == "demo" {
-            seed_approval(&db, &offset_timestamp(&now, 20)?)?;
             seed_ended_and_telegram(&db, home, &now)?;
         }
         if scenario == "load" {
@@ -424,10 +426,15 @@ fn seed_member_events(
     Ok(())
 }
 
-fn seed_approval(db: &Connection, now: &str) -> Result<(), rusqlite::Error> {
+fn seed_approval(db: &Connection, now: &str, hostile: bool) -> Result<(), rusqlite::Error> {
+    let command = if hostile {
+        "<img src=x onerror=alert(1)>"
+    } else {
+        "cargo test -p auth"
+    };
     let expires = "2026-12-31T23:59:59Z";
-    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"binding":{"server":"shell","tool":"shell.run","argument_hash":"sha256:demo-command"},"arguments":{"command":"cargo test -p auth"}}).to_string(),expires,now])?;
-    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(120,?1,20000,?2,?3,'tester','approval.requested',?4)", params![now,TESTER_ID,SESSION_ID,json!({"call_id":"pending-shell","approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","args":{"command":"cargo test -p auth"}}).to_string()])?;
+    db.execute("INSERT INTO approvals(id,code,root_session_id,requesting_session_id,kind,payload,status,expires_at,created_at) VALUES('01ARZ3NDEKTSV4RRFFQ69G5FB2','K7QF',?1,?2,'tool_call',?3,'pending',?4,?5)", params![SESSION_ID,TESTER_ID,json!({"binding":{"server":"shell","tool":"shell.run","argument_hash":"sha256:demo-command"},"arguments":{"command":command}}).to_string(),expires,now])?;
+    db.execute("INSERT INTO supervisor_events(seq,ts,ts_mono,session_id,root_session_id,agent_role,type,data) VALUES(120,?1,20000,?2,?3,'tester','approval.requested',?4)", params![now,TESTER_ID,SESSION_ID,json!({"call_id":"pending-shell","approval_id":"01ARZ3NDEKTSV4RRFFQ69G5FB2","requesting_session_id":TESTER_ID,"code":"K7QF","kind":"tool_call","server":"shell","tool":"shell.run","args":{"command":command}}).to_string()])?;
     Ok(())
 }
 
