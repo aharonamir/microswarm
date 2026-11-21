@@ -108,7 +108,7 @@ Wait for confirmation before Phase 5.
 
 ## Phase 7 — Polish
 
-- [ ] T345 Accessibility:
+- [x] T345 Accessibility:
   - keyboard paths for every page (Tab order, Enter/Space on rows, arrow keys in tabs and segmented controls);
   - `aria-live` for the dock and session status;
   - focus return from the drawer, sheet and dialog;

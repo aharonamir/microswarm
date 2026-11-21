@@ -285,7 +285,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .dock-why { margin-inline: auto; }
 .dock-error { margin: 0; color: var(--seal-ink); font-size: 12px; }
 .dock-error[hidden] { display: none; }
-.member-content-dim { opacity: .55; }
+.member-content-dim { background: var(--sunken); }
 .team-member-highlight { outline: 3px solid var(--agent-1-bg); outline-offset: 2px; }
 .member-drawer { position: fixed; z-index: 5; inset-block: 0; inset-inline-start: auto; inset-inline-end: 0; inline-size: min(620px, calc(100vw - 88px)); block-size: 100dvh; max-inline-size: none; max-block-size: none; margin: 0; padding: 0; overflow: visible; border: 0; border-inline-start: 1px solid var(--line); background: var(--surface); color: var(--ink); box-shadow: -12px 0 32px rgb(28 25 23 / .06); }
 .member-drawer::backdrop { background: rgb(28 25 23 / .42); }
@@ -304,7 +304,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .member-tabpanel { min-block-size: 0; overflow: auto; padding: 16px 18px; }
 .member-reach-summary { margin: 0 0 16px; font-size: 15px; line-height: 22px; }
 .reach-section { margin-block: 16px; }
-.reach-section h3 { margin: 0 0 8px; font-size: 13px; }
+.reach-section > h2 { margin: 0 0 8px; font-size: 13px; }
 .reach-items, .reach-reductions { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .reach-item { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--bg); }
 .reach-item .reach-tag { margin-inline-start: auto; color: var(--teal-ink); font-size: 12px; }
@@ -313,14 +313,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .reach-derivation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .reach-derivation-column { min-inline-size: 0; padding: 8px; border-radius: 8px; background: var(--bg); }
 .reach-derivation-column:last-child { background: var(--teal-soft); }
-.reach-derivation-column h4 { margin: 0 0 6px; font-size: 11px; }
+.reach-derivation-column h3 { margin: 0 0 6px; font-size: 11px; }
 .reach-chip { display: block; margin-block: 4px; padding: 4px 5px; border-radius: 5px; background: var(--surface); overflow-wrap: anywhere; font-size: 11px; }
 .reach-chip.struck { color: var(--seal-ink); text-decoration: line-through; }
 .reach-chip.lowered { color: var(--amber-ink); }
 .reach-explanation { margin: 10px 0; color: var(--ink-2); font-size: 12px; }
 .container-profile { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .container-profile article { min-inline-size: 0; padding: 10px; border-radius: 8px; background: var(--bg); }
-.container-profile h4 { margin: 0 0 4px; font-size: 12px; }
+.container-profile h3 { margin: 0 0 4px; font-size: 12px; }
 .container-profile p { margin: 0; color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
 .member-report { white-space: pre-wrap; overflow-wrap: anywhere; }
 .member-drawer-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-block-start: 1px solid var(--line); background: var(--surface); }
@@ -703,3 +703,9 @@ dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
  .phone-review-bar strong { min-inline-size: 0; flex: 1; font-size: 13px; overflow-wrap: anywhere; }
  .phone-review-bar button { min-block-size: 52px; flex: none; }
 }
+
+.home-page > * { min-inline-size: 0; }
+.home-approval { overflow-wrap: anywhere; }
+dialog:modal { overscroll-behavior: contain; }
+dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
+.reconnecting-banner { grid-column: 1 / -1; }

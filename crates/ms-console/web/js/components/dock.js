@@ -14,7 +14,7 @@ export function approvalDock(items, sessionId, t, onChange = () => {}) {
   const agent = item.agent || { role: item.requesting_role || t("sessions.member"), initial: String(item.requesting_role || "M").slice(0, 1).toUpperCase(), colour_index: 0 };
   const command = item.sentence?.args?.command || item.tool_call?.arguments?.command || "";
   const code = item.code || "";
-  return el("section", { class: "approval-dock", "data-approval-dock": "", "aria-label": t("dock.approval_heading") }, [
+  return el("section", { class: "approval-dock", "data-approval-dock": "", "aria-label": t("dock.approval_heading"), "aria-live": "polite" }, [
     el("div", { class: "phone-review-bar" }, [el("strong", {}, item.sentence ? sentenceNodes(item.sentence, t) : [t("dock.request", { role: agent.role })]), el("button", { class: "primary-button", type: "button", onclick: () => openApprovalSheet(item, t, onChange) }, [t("sheet.review")])]),
     el("article", { class: "dock-card" }, [
       el("header", { class: "dock-header" }, [

@@ -58,7 +58,6 @@ export async function renderMember(root, sessionId, memberId, t, { selectedTab: 
     } }, [t("member.ask_dismiss")]),
     el("a", { class: "secondary-button button-link", href: `#/sessions/${sessionId}/trajectory?agent=${encodeURIComponent(memberId)}` }, [t("member.see_trajectory")]),
     el("span", { class: "mono" }, [`${t("member.short_id")}: ${shortId(memberId)}`]),
-    el("span", { class: "mono" }, [`${t("member.scope_hash")}: ${String(reach.raw?.granted?.hash || "").slice(0, 16)}`]),
   ]);
   const content = el("div", { class: "member-drawer-panel" }, [header, task, tablist, panel, footer]);
   append(dialog, content);
@@ -71,6 +70,7 @@ export async function renderMember(root, sessionId, memberId, t, { selectedTab: 
     memberLink.focus();
   }
   dialog.addEventListener("close", () => {
+    if (location.hash !== `#/sessions/${sessionId}/members/${memberId}`) return;
     toggleClass(document.querySelector(".console-shell"), "member-drawer-open", false);
     if (returnToMember) focusMemberOnSession(sessionId, memberId);
     location.hash = `#/sessions/${sessionId}`;
@@ -93,7 +93,7 @@ function reachContent(reach, agent, t) {
   const content = el("div", { class: "reach-content" }, [
     el("p", { class: "member-reach-summary" }, [reachSummarySentence(reach.summary, t)]),
     el("section", { class: "reach-section" }, [
-      el("h3", {}, [t("reach.can_reach")]),
+      el("h2", {}, [t("reach.can_reach")]),
       (reach.can_reach || []).length ? el("ul", { class: "reach-items" }, reach.can_reach.map(item => el("li", { class: "reach-item" }, [
         el("span", { class: "reach-check", "aria-hidden": "true" }, ["✓"]),
         el("span", {}, [t(item.text?.key || "reach.item", item.text?.args || {})]),
@@ -101,7 +101,7 @@ function reachContent(reach, agent, t) {
       ]))) : el("p", { class: "muted" }, [t("reach.none")]),
     ]),
     el("section", { class: "reach-section" }, [
-      el("h3", {}, [t("reach.reduced")]),
+      el("h2", {}, [t("reach.reduced")]),
       (reach.reduced || []).length ? el("ul", { class: "reach-reductions" }, reach.reduced.map(item => el("li", { class: "reach-reduction" }, [
         el("code", { class: "mono" }, [item.item || ""]),
         el("span", { class: "pill pill-reduced" }, [t(`reach.reason.${item.reason}`)]),
@@ -126,9 +126,9 @@ export function reachSummarySentence(summary, t) {
 export function derivation(value = {}, t) {
   const keys = [["requested", "member.derivation_requested"], ["lead", "member.derivation_lead"], ["ceiling", "member.derivation_ceiling"], ["granted", "member.derivation_granted"]];
   return el("section", { class: "reach-section" }, [
-    el("h3", {}, [t("reach.derivation")]),
+    el("h2", {}, [t("reach.derivation")]),
     value ? el("div", { class: "reach-derivation" }, keys.map(([key, title]) => el("div", { class: "reach-derivation-column" }, [
-      el("h4", {}, [t(title)]),
+      el("h3", {}, [t(title)]),
       ...(value[key] || []).map(chip => el("code", { class: `reach-chip${chip.struck ? " struck" : ""}${chip.lowered ? " lowered" : ""}` }, [chip.text || ""])),
       ...(value[key] || []).length ? [] : [el("span", { class: "muted" }, [t("reach.none")])],
     ]))) : el("p", { class: "muted" }, [t("reach.lead_only")]),
@@ -144,11 +144,11 @@ function containerProfile(profile, t) {
     network: t(`reach.network.${args.network || "none"}`),
   };
   return el("section", { class: "reach-section" }, [
-    el("h3", {}, [t("member.container_profile")]),
+    el("h2", {}, [t("member.container_profile")]),
     el("div", { class: "container-profile" }, [
-      el("article", {}, [el("h4", {}, [t("reach.files")]), el("p", {}, [t(profile.files_key || "reach.container.files", localized)])]),
-      el("article", {}, [el("h4", {}, [t("reach.process")]), el("p", {}, [t(profile.process_key || "reach.container.process", localized)])]),
-      el("article", {}, [el("h4", {}, [t("reach.network")]), el("p", {}, [t(profile.network_key || "reach.container.network", localized)])]),
+      el("article", {}, [el("h3", {}, [t("reach.files")]), el("p", {}, [t(profile.files_key || "reach.container.files", localized)])]),
+      el("article", {}, [el("h3", {}, [t("reach.process")]), el("p", {}, [t(profile.process_key || "reach.container.process", localized)])]),
+      el("article", {}, [el("h3", {}, [t("reach.network")]), el("p", {}, [t(profile.network_key || "reach.container.network", localized)])]),
     ]),
   ]);
 }

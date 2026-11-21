@@ -4,7 +4,7 @@ import { avatar } from "./avatar.js";
 
 const stateKeys = {
   working: "status.working", waiting_you: "status.waiting_for_you", waiting_for_you: "status.waiting_for_you",
-  done: "status.done", failed: "status.failed", denied: "status.denied",
+  reported: "status.done", idle: "status.idle", done: "status.done", failed: "status.failed", denied: "status.denied",
 };
 
 export function laneStrip(timeline = {}, t) {
@@ -22,7 +22,7 @@ export function laneStrip(timeline = {}, t) {
     ...lanes.filter(lane => lane.agent?.kind !== "you").map(lane => el("div", { class: "lane-row" }, [
       avatar(lane.agent, { className: "lane-avatar" }),
       el("span", { class: "lane-role" }, [lane.agent?.role || t("sessions.member")]),
-      el("div", { class: "lane-track", "aria-label": `${lane.agent?.role || t("sessions.member")}: ${(lane.spans || []).map(span => t(stateKeys[span.state] || "status.unknown")).join(", ")}` }, [
+      el("div", { class: "lane-track", role: "img", "aria-label": `${lane.agent?.role || t("sessions.member")}: ${(lane.spans || []).map(span => t(stateKeys[span.state] || "status.unknown")).join(", ")}` }, [
         ...(lane.spans || []).map(span => {
           const left = pct(span.start);
           const right = pct(span.end);

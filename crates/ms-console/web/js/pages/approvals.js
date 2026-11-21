@@ -32,8 +32,17 @@ export async function renderApprovals(root, selectedId, t) {
   }
   const queue = el("aside", { class: "approval-queue", "aria-label": t("nav.approvals") }, [
     el(selected ? "h2" : "h1", { class: "page-title" }, [t("nav.approvals")]),
-    el("div", { class: "approval-tabs", "aria-label": t("nav.approvals") }, ["pending", "decided", "expired"].map(value => el("button", {
-      class: "tab", "aria-pressed": String(value === state), onclick: () => { state = value; if (location.hash !== "#/approvals") location.hash = "#/approvals"; else renderApprovals(root, null, t); },
+    el("div", { class: "approval-tabs", role: "group", "aria-label": t("nav.approvals") }, ["pending", "decided", "expired"].map((value, index) => el("button", {
+      class: "tab", type: "button", "aria-pressed": String(value === state), onclick: async () => {
+        state = value;
+        if (location.hash !== "#/approvals") location.hash = "#/approvals";
+        else { await renderApprovals(root, null, t); root.querySelectorAll(".approval-tabs button")[index]?.focus(); }
+      }, onkeydown: event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (index + (event.key === "ArrowRight" ? 1 : 2)) % 3;
+        root.querySelectorAll(".approval-tabs button")[next].click();
+      },
     }, [t(`approvals.${value === "pending" ? "waiting" : value}`)]))),
     el("div", { class: "approval-queue-items" }, items.length ? items.map(item => el("a", {
       class: `approval-queue-item${item.state === "expired" ? " expired" : ""}`, href: `#/approvals/${item.code}`, "aria-current": item.code === selected?.code ? "page" : false,

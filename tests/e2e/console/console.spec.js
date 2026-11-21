@@ -137,7 +137,7 @@ test("outside clicks dismiss mobile navigation and desktop session controls stay
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/#/sessions");
   await page.getByRole("button", { name: "Menu" }).click();
-  await page.locator(".new-session-page h1").click();
+  await page.mouse.click(380, 820);
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeHidden();
 
   await page.setViewportSize({ width: 1440, height: 900 });
