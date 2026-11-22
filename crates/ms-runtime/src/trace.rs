@@ -31,7 +31,7 @@ pub fn build_cached(home: &Path, id: &str) -> Result<TraceData, String> {
     let cache = TRACE_CACHE.get_or_init(|| Mutex::new(VecDeque::new()));
     let mut entries = cache.lock().map_err(|error| error.to_string())?;
     if let Some(index) = entries.iter().position(|entry| {
-        entry.0 == home && entry.1 == id && entry.2.elapsed() < Duration::from_millis(250)
+        entry.0 == home && entry.1 == id && entry.2.elapsed() < Duration::from_millis(900)
     }) {
         let entry = entries.remove(index).expect("cached trace index exists");
         let trace = entry.3.clone();

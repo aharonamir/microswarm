@@ -31,7 +31,7 @@ export async function renderMember(root, sessionId, memberId, t, { selectedTab: 
   const sourceRef = reach.raw?.granted?.source_ref || member.source_ref || member.skill_ref || "";
   const dialog = drawer();
   const closeButton = el("button", { class: "secondary-button member-drawer-close", type: "button", "aria-label": t("member.close"), autofocus: true, onclick: () => dialog.close() }, [t("common.close")]);
-  const headingTag = matchMedia("(max-width: 1099px)").matches ? "h1" : "h2";
+  const headingTag = "h1";
   const header = el("header", { class: "member-drawer-header" }, [
     avatar(agent),
     el("div", {}, [el(headingTag, { id: "member-title" }, [agent.role]), el("p", {}, [t("member.source_skill", { skill: sourceRef })])]),
