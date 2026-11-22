@@ -26,14 +26,14 @@ Open "Audit the auth module". Check:
 - Expanding the researcher shows sentences ("Read `refresh.rs` and 5 more", "Sent its report to the lead · 2 findings").
 - The dock above the composer shows the tester's request. Scroll the conversation: the dock stays put.
 - Type a draft and type `emit tester` in terminal 1: the draft, caret and scroll position are unchanged.
-- Approve in the dock: within 2 s the dock clears and the tester row changes.
+- Approve in the dock (on a disposable fixture, the decision RPC is acknowledged; use a real supervisor to verify member continuation): within 2 s the dock clears and the tester row changes.
 
 ## 3. Member drawer (US2)
 
 Click the researcher in the Team panel. Check:
 - The reach tab says it reads one folder, with no network and no credentials.
 - "Asked for, but reduced" shows two rows with reasons in words.
-- The derivation shows a struck `net: crates.io` under "Host allows".
+- The derivation explains what the lead requested, holds, and the host allows.
 - Close returns focus to the researcher's card.
 
 ## 4. Approvals (US4)
@@ -72,3 +72,7 @@ cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
   && cargo build --workspace --bins && cargo test --workspace
 cd tests/e2e/console && npm ci && npx playwright test
 ```
+
+## 9. Checkpoint D evidence
+
+See [screenshots, automated criteria and timings](../../docs/reviews/005-checkpoint-d/README.md) and [language review notes](../../docs/reviews/005-checkpoint-d/language-review.md). T350 remains owner-run; record its three participant results in `docs/reviews/console-human-acceptance.md` under “005”.

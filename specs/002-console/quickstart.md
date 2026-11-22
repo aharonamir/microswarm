@@ -1,6 +1,6 @@
 # Quickstart: MicroSwarm Console
 
-This is the end-to-end acceptance script. Each section maps to a user story. Automated integration checks use Docker with the fake model; manual browser checks need a configured model endpoint and Docker. Run the manual flow once with a real model as well.
+The current visual acceptance flow is the [005 quickstart](../005-ui-redesign/quickstart.md), with [before/after screenshots and automated evidence](../../docs/reviews/005-checkpoint-d/README.md). This script retains the 002 chat and security acceptance checks. Each section maps to a user story. Automated integration checks use Docker with the fake model; manual browser checks need a configured model endpoint and Docker. Run the manual flow once with a real model as well.
 
 ## Prerequisites
 
@@ -18,13 +18,13 @@ Open this link once (valid 10 min): http://127.0.0.1:8790/login?token=4f1c…e9a
 ```
 
 Check:
-- Opening the link lands on the Sessions view at `/`, and the URL no longer contains the token.
+- Opening the link lands on Home at `/#/home`, and the URL no longer contains the token.
 - Opening the same link again returns 401 with "Run microswarm console again for a new link."
 - `microswarm console --listen 0.0.0.0:8790` exits with a non-zero code and includes "The console only listens on loopback. Use an SSH tunnel (ssh -L 8790:127.0.0.1:8790 host) or a TLS proxy."
 
 ## 1 · Chat with a lead (US1)
 
-1. With one Telegram session active, check that Sessions lists it with its status in words.
+1. With one Telegram session active, check that Home and the navigation list it with its status in words.
 2. Open it. The conversation shows your Telegram messages ("You · via telegram") and the lead's replies.
 3. Type "summarise what you found" and press Send. "You" appears at once, then "Lead is working…", then the reply, all without a reload.
 4. Send again while the lead is still answering. The composer is disabled with "The lead is still answering your last message."
@@ -34,8 +34,8 @@ Check:
 ## 2 · Approvals (US2)
 
 1. Ask a session with `code-review-team` to "run the auth tests". The header badge shows 1, and the session banner reads "Waiting for you".
-2. Open Approvals. Check that the detail shows `microswarm-tools / shell.run`, the args, `binding sha256:…`, "simple command · program: cargo", and the tester's mounts.
-3. Click **Approve this call**. The item moves to Decided, and the session receives the follow-up reply.
+2. Open Approvals. Check the command, parser facts, execution environment, policy explanation, task quote and one-command binding notice. Exact tool arguments and hashes are inside Raw.
+3. Click **Approve this command**. The item moves to Decided, and the session receives the follow-up reply.
 4. Repeat, approving from Telegram instead. In the console, the item shows "Already decided on another channel".
 5. At 390 px width, the approval is usable without horizontal scrolling.
 
@@ -43,7 +43,7 @@ Check:
 
 While the researcher is busy, its row reads "Working". When the tester asks for approval, the tester's row and the banner change to "Waiting for you" within 1 s. Restart the console server: the page shows "Reconnecting…", then catches up.
 
-## 4 · Member scope (US4)
+## 4 · Member reach (US4)
 
 Open the researcher. `/data/finance` is struck through with "not in lead scope". The Granted column matches:
 
@@ -55,11 +55,11 @@ The container profile lists "root read-only", "/session/control read-only" and "
 
 ## 5 · Trace (US5)
 
-The trace page's events equal the output of `microswarm trace <root> --json`. Diff the result of Export JSON against it: no difference.
+The trajectory inspector exposes sentences and decisions; Raw events and Export JSON preserve the complete history. Exported events equal the output of `microswarm trace <root> --json`. Diff the result of Export JSON against it: no difference.
 
 ## 6 · Host (US6)
 
-Doctor shows the same checks as `microswarm doctor`. Set `web-search` to `test-secret-123`, then confirm the value never comes back:
+Host has Health, Channels, Team skills, Tools, Credentials and Limits sections. Health shows the same checks as `microswarm doctor`. Set `web-search` to `test-secret-123`, then confirm the value never comes back:
 
 ```console
 $ curl -s -b cookies http://127.0.0.1:8790/api/v1/host | grep -c test-secret-123
