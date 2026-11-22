@@ -64,7 +64,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 
     { name: "approvals", hash: "#/approvals", heading: "The reviewer wants to run a command" },
     { name: "trace", hash: `#/trace/${ROOT}`, heading: "Trajectory" },
     { name: "host", hash: "#/host", heading: "Configuration and permissions for this host" },
-    { name: "member", hash: `#/members/${MEMBER}`, heading: "reviewer" },
+    { name: "member", hash: `#/sessions/${ROOT}/members/${MEMBER}`, heading: "reviewer" },
   ]) {
     test(`${pageCase.name} is usable and accessible at ${viewport.width}px`, async () => {
       const page = await context.newPage();
