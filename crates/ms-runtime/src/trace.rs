@@ -1,6 +1,11 @@
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
+};
 
 #[derive(Clone, Debug)]
 pub struct TraceSession {
@@ -16,6 +21,32 @@ pub struct TraceSession {
 pub struct TraceData {
     pub sessions: Vec<TraceSession>,
     pub events: Vec<Value>,
+}
+
+type CachedTrace = (PathBuf, String, Instant, TraceData);
+static TRACE_CACHE: OnceLock<Mutex<VecDeque<CachedTrace>>> = OnceLock::new();
+
+/// Shares the expensive read-only history build across concurrent console views.
+pub fn build_cached(home: &Path, id: &str) -> Result<TraceData, String> {
+    let cache = TRACE_CACHE.get_or_init(|| Mutex::new(VecDeque::new()));
+    let mut entries = cache.lock().map_err(|error| error.to_string())?;
+    if let Some(index) = entries.iter().position(|entry| {
+        entry.0 == home && entry.1 == id && entry.2.elapsed() < Duration::from_millis(900)
+    }) {
+        let entry = entries.remove(index).expect("cached trace index exists");
+        let trace = entry.3.clone();
+        entries.push_front(entry);
+        return Ok(trace);
+    }
+    let trace = build(home, id, None)?;
+    entries.push_front((
+        home.to_path_buf(),
+        id.to_owned(),
+        Instant::now(),
+        trace.clone(),
+    ));
+    entries.truncate(16);
+    Ok(trace)
 }
 
 pub fn build(

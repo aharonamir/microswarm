@@ -1,14 +1,18 @@
-import { el, clear } from "./dom.js";
+import { append, el, clear, setAttr, setProp, toggleClass } from "./dom.js";
+import { renderNav } from "./components/nav.js";
 import { currentRoute, onRoute } from "./router.js";
 import { loadLocale, t } from "./i18n.js";
 import { connectEvents } from "./sse.js";
 import { api } from "./api.js";
-import { renderSessions, handleConsoleEvent } from "./pages/sessions.js";
+import { renderNewSession } from "./pages/new-session.js";
 import { renderApprovals } from "./pages/approvals.js";
-import { renderTrace } from "./pages/trace.js";
+import { renderTrajectory } from "./pages/trajectory.js";
 import { renderHost } from "./pages/host.js";
-import { renderMember } from "./pages/member.js";
-import { renderOverview } from "./pages/overview.js";
+import { captureMemberTab, renderMember } from "./pages/member.js";
+import { renderHome } from "./pages/home.js";
+import { handleStartEvent } from "./components/start-session.js";
+import { captureSessionUi, handleSessionChatEvent, renderSession } from "./pages/session.js";
+import { handleSessionLiveEvent } from "./live.js";
 
 const app = document.getElementById("app");
 const nav = document.querySelector(".primary-nav");
@@ -35,69 +39,107 @@ function render() {
 
 async function renderNow() {
   await loadLocale(localStorage.getItem("ms-lang") || "en");
-  const { page } = currentRoute();
-  const composer = page === "sessions" ? document.getElementById("message-input") : null;
-  const composerDraft = composer?.value;
-  const composerRoute = location.hash;
+  const menuButton = document.getElementById("mobile-menu-toggle");
+  const menuButtonLabel = document.getElementById("mobile-menu-toggle-label");
+  clear(menuButtonLabel);
+  append(menuButtonLabel, t("nav.menu"));
+  setAttr(menuButton, "aria-label", t("nav.menu"));
+  const route = currentRoute();
+  const { page, parts = [] } = route;
+  const isSessionDetail = (page === "sessions" && parts.length > 0) || page === "member";
+  toggleClass(document.querySelector(".console-shell"), "detail-view", ["approvals", "trajectory", "trajectories", "host"].includes(page));
+  const sessionSnapshot = isSessionDetail ? captureSessionUi(app) : null;
+  toggleClass(app, "session-index", page === "sessions" && parts.length === 0);
+  toggleClass(document.querySelector(".console-shell"), "member-drawer-open", page === "member" && parts.length > 1);
+  toggleClass(app, "session-workspace", isSessionDetail);
   let pending = 0;
   try { pending = Number((await api("/overview")).pending_approvals || 0); } catch { /* The page view reports its own connection error. */ }
   const focusedNavHref = nav.contains(document.activeElement)
     ? document.activeElement.getAttribute("href")
     : null;
-  clear(nav);
-  for (const route of ["overview", "sessions", "approvals", "trace", "host"]) nav.append(el("a", { href: `#/${route}`, "data-route": route, "aria-current": route === page ? "page" : false }, [
-    t(`nav.${route}`),
-    ...(route === "approvals" ? [el("span", { class: "badge", hidden: pending < 1 }, [String(pending)])] : []),
-  ]));
-  if (focusedNavHref) {
-    [...nav.querySelectorAll("a")]
-      .find(link => link.getAttribute("href") === focusedNavHref)
-      ?.focus({ preventScroll: true });
-  }
+  await renderNav(nav, { ...route, pending, t, focusHref: focusedNavHref });
   const supervisorChip = document.querySelector(".supervisor-chip");
   clear(supervisorChip);
-  supervisorChip.append(el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));
+  append(supervisorChip, el("span", { class: "status-dot" }), t(`header.supervisor_${supervisorStatus}`));
   clear(app);
-  if (reconnecting) app.append(el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
-  if (page === "overview") { await renderOverview(app, t); return; }
+  if (reconnecting) append(app, el("p", { class: "reconnecting-banner", role: "status", "aria-live": "polite" }, [t("common.reconnecting")]));
+  if (page === "home") { await renderHome(app, t, render); return; }
   if (page === "sessions") {
-    await renderSessions(app, currentRoute().parts[0] || null, t);
-    if (composerDraft !== undefined && composerRoute === location.hash) {
-      const nextComposer = document.getElementById("message-input");
-      if (nextComposer) {
-        nextComposer.value = composerDraft;
-        nextComposer.dispatchEvent(new Event("input", { bubbles: true }));
-      }
+    const sessionId = parts[0] || null;
+    if (sessionId) {
+      await renderSession(app, sessionId, t, { snapshot: sessionSnapshot });
+      return;
     }
+    await renderNewSession(app, t, render);
     return;
   }
   if (page === "approvals") {
     await renderApprovals(app, currentRoute().parts[0] || null, t);
     return;
   }
-  if (page === "trace") {
-    await renderTrace(app, currentRoute().parts[0] || null, t);
+  if (page === "trajectory" || page === "trajectories") {
+    await renderTrajectory(app, route.parts[0] || null, route.parts[1] || null, t);
     return;
   }
   if (page === "host") {
-    await renderHost(app, t);
+    await renderHost(app, t, route.parts[0]);
     return;
   }
-  if (page === "members" && currentRoute().parts[0]) {
-    await renderMember(app, currentRoute().parts[0], t);
+  if (page === "member" && route.parts[1]) {
+    await renderSession(app, route.parts[0], t, { snapshot: sessionSnapshot });
+    await renderMember(app, route.parts[0], route.parts[1], t);
     return;
   }
-  app.append(el("section", { class: "page-main panel" }, [
+  if (page === "member" && route.parts[0]) {
+    try {
+      const legacy = await api(`/members/${route.parts[0]}/scope`);
+      location.replace(`#/sessions/${legacy.lead_id}/members/${route.parts[0]}`);
+    } catch (error) {
+      append(app, el("section", { class: "page-main panel", role: "alert" }, [error.message]));
+    }
+    return;
+  }
+  append(app, el("section", { class: "page-main panel" }, [
     el("p", { class: "label" }, [t("console.eyebrow")]),
     el("h1", { class: "page-title" }, [t(`nav.${page}`)]),
     el("p", { class: "muted" }, [t("console.loading")]),
   ]));
 }
 
+const mobileMenu = document.getElementById("mobile-menu-toggle");
+function syncMobileMenu() {
+  const mobile = matchMedia("(max-width: 699px)").matches;
+  setProp(nav, "hidden", mobile);
+  setAttr(mobileMenu, "aria-expanded", String(!mobile));
+}
+const mobileQuery = matchMedia("(max-width: 699px)");
+mobileQuery.addEventListener("change", syncMobileMenu);
+syncMobileMenu();
+mobileMenu.addEventListener("click", event => {
+  const expanded = event.currentTarget.getAttribute("aria-expanded") === "true";
+  setAttr(event.currentTarget, "aria-expanded", String(!expanded));
+  setProp(nav, "hidden", expanded);
+});
+document.addEventListener("click", event => {
+  if (!matchMedia("(max-width: 699px)").matches || nav.hidden) return;
+  const target = event.target;
+  if (nav.contains(target)) {
+    if (target.closest("a")) {
+      setProp(nav, "hidden", true);
+      setAttr(mobileMenu, "aria-expanded", "false");
+    }
+    return;
+  }
+  if (!mobileMenu.contains(target)) {
+    setProp(nav, "hidden", true);
+    setAttr(mobileMenu, "aria-expanded", "false");
+  }
+});
+
 document.getElementById("language-toggle").addEventListener("click", async event => {
   const next = localStorage.getItem("ms-lang") === "zh" ? "en" : "zh";
   localStorage.setItem("ms-lang", next);
-  event.currentTarget.setAttribute("aria-pressed", String(next === "zh"));
+  setAttr(event.currentTarget, "aria-pressed", String(next === "zh"));
   await render();
 });
 onRoute(render);
@@ -106,5 +148,24 @@ connectEvents((type, data) => {
   else if (type === "console.connected") { if (reconnecting) { reconnecting = false; render(); } }
   else if (type === "supervisor.up") { reconnecting = false; supervisorStatus = "running"; render(); }
   else if (type === "resync") render();
-  else if (["chat.pending", "chat.reply", "chat.error", "status.changed", "supervisor"].includes(type)) handleConsoleEvent(type, data, render, t);
+  else if (type === "agent" || type === "supervisor") {
+    const route = currentRoute();
+    const sessionId = route.page === "sessions" ? route.parts[0] : route.page === "member" ? route.parts[0] : null;
+    const memberId = route.page === "member" ? route.parts[1] : null;
+    const refreshMember = memberId ? async snapshot => {
+      const selectedTab = captureMemberTab(app);
+      await renderSession(app, sessionId, t, { live: true, snapshot });
+      await renderMember(app, sessionId, memberId, t, { selectedTab });
+    } : null;
+    if (sessionId && handleSessionLiveEvent(type, data, sessionId, app, t, refreshMember)) return;
+    if (type === "supervisor") render();
+  }
+  else if (["chat.pending", "chat.reply", "chat.error"].includes(type)) {
+    handleStartEvent(type, data, t);
+    const route = currentRoute();
+    const sessionId = route.page === "sessions" ? route.parts[0] : null;
+    if (sessionId) handleSessionChatEvent(type, data, render, sessionId);
+    else render();
+  }
+  else if (type === "status.changed") render();
 });

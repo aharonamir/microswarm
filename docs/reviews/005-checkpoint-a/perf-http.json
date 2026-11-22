@@ -1,0 +1,15 @@
+{
+  "fixture": "console_status_fixture --scenario load",
+  "mode": "release",
+  "warm_request": "second GET",
+  "timings_us": {
+    "team": 3735,
+    "steps": 3728,
+    "timeline": 4092
+  },
+  "limits_ms": {
+    "team": 150,
+    "steps": 300,
+    "timeline": 300
+  }
+}

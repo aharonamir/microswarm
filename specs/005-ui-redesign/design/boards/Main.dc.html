@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session: Audit the auth module</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.av{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+.av-lead{background:#1C1917;color:#fff}.av-res{background:#E6E8FB;color:#3440A8}.av-tst{background:#F1E6F7;color:#6B3787}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{color:#1C1917;background:#F7F5F2}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}.btn-primary:hover{background:#134A47;color:#fff}
+.btn-deny{color:#8E241E;border-color:#E2B7B1}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:9px;color:#57534E;text-decoration:none;font-weight:500}
+.nav:hover{background:#EFEBE5;color:#1C1917}
+.nav-on{background:#fff;color:#1C1917;box-shadow:0 1px 2px rgba(28,25,23,.06);border:1px solid #E7E2DA}
+.srow{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:9px;text-decoration:none;color:#1C1917}
+.srow:hover{background:#EFEBE5;color:#1C1917}
+.step{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:6px 0;font-size:13px}
+.ico{width:16px;height:16px;flex:none}
+.reach{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#57534E}
+.lane{position:relative;height:10px;border-radius:5px;background:#F1EEE9}
+.bar{position:absolute;top:0;height:10px;border-radius:5px}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <!-- Sidebar -->
+  <nav aria-label="Main" style="flex: 1 1 220px; max-width: 100%; box-sizing: border-box; padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; border-right: 1px solid #E7E2DA; background: #F7F5F2;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 6px;">
+      <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+      <strong style="font-size: 15px;">MicroSwarm</strong>
+    </div>
+    <a class="btn btn-primary" href="#" style="justify-content: center; height: 44px;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>New session</a>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <a class="nav" href="Home.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg>Home</a>
+      <a class="nav" href="Approvals.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg><span style="flex-grow: 1;">Approvals</span><span class="pill p-wait" style="height: 20px; padding: 0 7px;">1</span></a>
+      <a class="nav" href="Trajectory.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg>Trajectories</a>
+      <a class="nav" href="Host.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg>Host</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span class="label" style="padding: 0 10px 6px;">Sessions</span>
+      <a class="srow nav-on" href="#" aria-current="page">
+        <strong style="font-weight: 600; font-size: 13.5px;">Audit the auth module</strong>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8E241E;"><span class="dot"></span>Waiting for you</span>
+      </a>
+      <a class="srow" href="#">
+        <strong style="font-weight: 500; font-size: 13.5px;">Weekly dependency report</strong>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #134A47;"><span class="dot"></span>Working · telegram</span>
+      </a>
+      <span class="label" style="padding: 14px 10px 6px;">Ended today</span>
+      <a class="srow" href="#">
+        <span style="font-size: 13.5px; color: #57534E;">Fix the flaky CI job</span>
+        <span style="font-size: 12px;" class="muted">Done · 11:20</span>
+      </a>
+    </div>
+    <div style="margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; font-size: 12px;">
+      <span style="display: flex; align-items: center; gap: 6px; color: #134A47;"><span class="dot"></span>Supervisor running</span>
+      <button class="btn" style="height: 32px; padding: 0 10px; font-size: 12px;" aria-pressed="false">EN · 中文</button>
+    </div>
+  </nav>
+
+  <!-- Conversation -->
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #FCFBF9;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 16px 28px; border-bottom: 1px solid #E7E2DA; background: #fff;">
+      <div style="flex: 1 1 280px; min-width: 0;">
+        <h1 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600;">Audit the auth module</h1>
+        <p class="muted" style="margin: 2px 0 0; font-size: 12.5px;">Web chat · started 14:02 · you talk to the lead; it brings in members</p>
+      </div>
+      <span class="pill p-wait"><span class="dot"></span>Waiting for you</span>
+      <div style="display: flex; align-items: center;" aria-label="3 agents in this session">
+        <span class="av av-lead" style="border: 2px solid #fff;">L</span>
+        <span class="av av-res" style="border: 2px solid #fff; margin-left: -6px;">R</span>
+        <span class="av av-tst" style="border: 2px solid #fff; margin-left: -6px;">T</span>
+      </div>
+      <a class="btn" href="Trajectory.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg>Trajectory</a>
+      <button class="btn">End session</button>
+    </header>
+
+    <div role="log" aria-label="Conversation" style="flex-grow: 1; padding: 28px; display: flex; flex-direction: column; gap: 24px; max-width: 820px; width: 100%; box-sizing: border-box; margin: 0 auto;">
+
+      <!-- You -->
+      <div style="align-self: flex-end; max-width: 78%; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+        <span class="muted" style="font-size: 12px;">You · 14:02</span>
+        <p style="margin: 0; background: #EDE8E1; padding: 10px 14px; border-radius: 16px 16px 4px 16px;">Audit the auth module for token refresh bugs and run its tests.</p>
+      </div>
+
+      <!-- Lead -->
+      <div style="display: flex; gap: 12px;">
+        <span class="av av-lead">L</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 12px;"><strong style="font-weight: 600;">Lead</strong> <span class="muted">· 14:02</span></span>
+          <p style="margin: 0;">I'll split this into two parts that can run at the same time: a researcher reads the token refresh code, and a tester runs the auth test suite. I'll check what they find and report back.</p>
+        </div>
+      </div>
+
+      <!-- Team run card -->
+      <section class="card" aria-label="Team working on this" style="margin-left: 40px; overflow: hidden;">
+        <header style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #EFEBE5; background: #FBFAF8;">
+          <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#57534E" stroke-width="1.5" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="8" r="1.5"/><path d="M4 5v6M4 8h6.5"/></svg>
+          <strong style="font-weight: 600; flex-grow: 1;">Team · 2 members</strong>
+          <span class="muted" style="font-size: 12.5px;">running 7 min</span>
+          <a href="Trajectory.dc.html" style="font-size: 12.5px;">Open trajectory</a>
+        </header>
+
+        <!-- researcher (expanded) -->
+        <div style="padding: 14px 16px; border-bottom: 1px solid #EFEBE5;">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <span class="av av-res">R</span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+                <a href="Member.dc.html" style="font-weight: 600; color: #1C1917;">researcher</a>
+                <span class="pill p-done"><svg class="ico" style="width: 12px; height: 12px;" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>Reported</span>
+                <span class="muted" style="font-size: 12.5px;">9 steps · 3 min 40 s</span>
+              </div>
+              <p style="margin: 4px 0 0; color: #57534E;">Read <span class="mono">/work/src/auth</span> for token refresh and expiry bugs. Read-only.</p>
+            </div>
+            <button class="btn" style="height: 32px; padding: 0 10px;" aria-expanded="true" aria-label="Hide researcher steps"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg></button>
+          </div>
+          <div style="margin: 10px 0 0 40px; padding-left: 14px; border-left: 2px solid #E6E8FB;">
+            <div class="step"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#6F6862" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span>Listed <span class="mono">src/auth</span> · 12 files</span><span class="muted mono">0.2 s</span><span class="pill p-done" style="height: 20px;">allowed</span></div>
+            <div class="step"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#6F6862" stroke-width="1.5" aria-hidden="true"><path d="M4 2h5l3 3v9H4z"/></svg><span>Read <span class="mono">refresh.rs</span></span><span class="muted mono">0.1 s</span><span class="pill p-done" style="height: 20px;">allowed</span></div>
+            <div class="step"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#6F6862" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="4"/><path d="m10 10 3.5 3.5"/></svg><span>Searched for <span class="mono">expires_at</span> · 6 matches</span><span class="muted mono">0.3 s</span><span class="pill p-done" style="height: 20px;">allowed</span></div>
+            <div class="step"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#6F6862" stroke-width="1.5" aria-hidden="true"><path d="M4 2h5l3 3v9H4z"/></svg><span>Read <span class="mono">token.rs</span>, <span class="mono">session.rs</span> and 3 more</span><span class="muted mono">0.6 s</span><span class="pill p-done" style="height: 20px;">allowed</span></div>
+            <div class="step" style="color: #3440A8;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 8h9M9 5l3 3-3 3"/></svg><span style="font-weight: 500;">Sent its report to the lead · 2 findings</span><span class="muted mono">14:08</span><span></span></div>
+          </div>
+        </div>
+
+        <!-- tester (collapsed, waiting) -->
+        <div style="padding: 14px 16px; background: #FFF8F6;">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <span class="av av-tst">T</span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+                <a href="Member.dc.html" style="font-weight: 600; color: #1C1917;">tester</a>
+                <span class="pill p-wait"><span class="dot"></span>Waiting for you</span>
+                <span class="muted" style="font-size: 12.5px;">2 steps · 4 min</span>
+              </div>
+              <p style="margin: 4px 0 0; color: #57534E;">Run the auth test suite and report failures. No file changes.</p>
+              <p style="margin: 6px 0 0; font-size: 13px; color: #8E241E;">Wants to run <span class="mono">cargo test -p auth</span>. See the request below.</p>
+            </div>
+            <button class="btn" style="height: 32px; padding: 0 10px;" aria-expanded="false" aria-label="Show tester steps"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lead relays finding -->
+      <div style="display: flex; gap: 12px;">
+        <span class="av av-lead">L</span>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 12px;"><strong style="font-weight: 600;">Lead</strong> <span class="muted">· 14:09 · using the researcher's report</span></span>
+          <p style="margin: 0;">The researcher found two issues. I checked both lines myself and they are real:</p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 2px;">
+            <div class="card" style="padding: 10px 14px; display: flex; gap: 10px; align-items: baseline;"><span class="pill p-warn" style="height: 20px;">high</span><span>Refresh tokens are not rotated after use. <span class="mono muted">src/auth/refresh.rs:88</span></span></div>
+            <div class="card" style="padding: 10px 14px; display: flex; gap: 10px; align-items: baseline;"><span class="pill p-done" style="height: 20px;">medium</span><span>Expiry is compared in local time instead of UTC. <span class="mono muted">src/auth/token.rs:41</span></span></div>
+          </div>
+          <p style="margin: 2px 0 0;">I'm waiting on the test run before I suggest fixes.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Docked: needs you + composer -->
+    <div style="position: sticky; bottom: 0; padding: 0 28px 20px; background: linear-gradient(rgba(252,251,249,0), #FCFBF9 24px);">
+      <div style="max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px;">
+        <section aria-label="Needs your approval" style="background: #fff; border: 1.5px solid #B3312A; border-radius: 14px; padding: 14px 16px; box-shadow: 0 6px 20px rgba(142,36,30,.08); display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;">
+            <span class="av av-tst">T</span>
+            <strong style="font-weight: 600; flex: 1 1 220px;">The tester wants to run a command</strong>
+            <span class="mono muted" style="font-size: 12px;">K7QF · expires in 11 min</span>
+          </div>
+          <pre class="mono" style="margin: 0; background: #1C1917; color: #F5F1EA; border-radius: 10px; padding: 10px 14px; font-size: 13px; white-space: pre-wrap;">$ cargo test -p auth</pre>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px 16px;">
+            <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="10" rx="2"/></svg>Runs in the tester's container</span>
+            <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg>Reads <span class="mono">/work</span>, can't write</span>
+            <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M4 12 12 4"/></svg>No network</span>
+            <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>One simple command, no pipes</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+            <button class="btn btn-primary" style="height: 44px; padding: 0 20px;">Approve this command</button>
+            <button class="btn btn-deny" style="height: 44px; padding: 0 20px;">Deny</button>
+            <a href="Approvals.dc.html" style="font-size: 13px;">Why it asks</a>
+          </div>
+        </section>
+        <form style="background: #fff; border: 1px solid #D9D2C7; border-radius: 16px; padding: 12px 12px 10px 16px; box-shadow: 0 2px 8px rgba(28,25,23,.05); display: flex; flex-direction: column; gap: 8px;">
+          <label for="msg" class="label">Message the lead</label>
+          <textarea id="msg" rows="2" placeholder="Ask a question, give new instructions, or ask it to stop a member…" style="border: 0; outline: none; resize: none; font: 14px/20px 'IBM Plex Sans',sans-serif; color: #1C1917; background: transparent;"></textarea>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="muted" style="font-size: 12px; flex-grow: 1;">Only the lead reads this. It passes instructions on to members.</span>
+            <button class="btn btn-primary" type="button" style="height: 40px;">Send<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 8h9M9 5l3 3-3 3"/></svg></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <!-- Team panel -->
+  <aside aria-label="Team" style="flex: 1 1 300px; max-width: 100%; box-sizing: border-box; padding: 20px 18px; border-left: 1px solid #E7E2DA; background: #fff; display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: baseline; justify-content: space-between;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600;">Team</h2>
+      <span class="muted" style="font-size: 12px;">each in its own container</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; justify-content: space-between;" class="muted"><span style="font-size: 12px;">14:02</span><span style="font-size: 12px;">now 14:10</span></div>
+      <div style="display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 8px; align-items: center;">
+        <span class="av av-lead" style="width: 22px; height: 22px; font-size: 10px; border-radius: 6px;">L</span>
+        <div class="lane"><span class="bar" style="left: 0; width: 14%; background: #1C1917;"></span><span class="bar" style="left: 82%; width: 10%; background: #1C1917;"></span></div>
+        <span class="av av-res" style="width: 22px; height: 22px; font-size: 10px; border-radius: 6px;">R</span>
+        <div class="lane"><span class="bar" style="left: 12%; width: 46%; background: #6872DB;"></span></div>
+        <span class="av av-tst" style="width: 22px; height: 22px; font-size: 10px; border-radius: 6px;">T</span>
+        <div class="lane"><span class="bar" style="left: 12%; width: 14%; background: #9A62B8;"></span><span class="bar" style="left: 26%; width: 74%; background: repeating-linear-gradient(135deg,#F3C6BF 0 4px,#FBEAE7 4px 8px);"></span></div>
+      </div>
+      <span class="muted" style="font-size: 12px;">Striped: waiting for you.</span>
+    </div>
+
+    <a class="card" href="#" style="padding: 12px 14px; text-decoration: none; color: #1C1917; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 10px;"><span class="av av-lead">L</span><strong style="font-weight: 600; flex-grow: 1;">Lead</strong><span class="pill p-work"><span class="dot"></span>Waiting on tester</span></div>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="mono">/work</span> read and write</span>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="5.5" cy="8" r="2.5"/><path d="M8 8h6M12 8v2.5"/></svg>Uses <span class="mono">github</span>, <span class="mono">model-key</span></span>
+    </a>
+
+    <a class="card" href="Member.dc.html" style="padding: 12px 14px; text-decoration: none; color: #1C1917; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 10px;"><span class="av av-res">R</span><strong style="font-weight: 600; flex-grow: 1;">researcher</strong><span class="pill p-done">Reported · idle</span></div>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="mono">/work/src/auth</span> read only</span>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M4 12 12 4"/></svg>No network · no credentials</span>
+      <span style="font-size: 12px; color: #7A4E0B; display: flex; gap: 6px; align-items: center;"><span class="dot"></span>1 request narrowed</span>
+    </a>
+
+    <a class="card" href="Member.dc.html" style="padding: 12px 14px; text-decoration: none; color: #1C1917; display: flex; flex-direction: column; gap: 8px; border-color: #E2B7B1;">
+      <div style="display: flex; align-items: center; gap: 10px;"><span class="av av-tst">T</span><strong style="font-weight: 600; flex-grow: 1;">tester</strong><span class="pill p-wait"><span class="dot"></span>Waiting for you</span></div>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="mono">/work</span> read only</span>
+      <span class="reach"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="M4 12 12 4"/></svg>No network · no credentials</span>
+    </a>
+
+    <p class="muted" style="margin: 0; font-size: 12.5px;">Open an agent to see its steps and exactly what it can reach. Members only talk to the lead.</p>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

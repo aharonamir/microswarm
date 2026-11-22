@@ -13,6 +13,7 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/css; charset=utf-8",
             include_bytes!("../web/styles.css"),
         ),
+        "/img/mark.svg" => ("image/svg+xml", include_bytes!("../web/img/mark.svg")),
         "/js/app.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/app.js"),
@@ -20,6 +21,62 @@ pub fn get(path: &str) -> Option<Asset> {
         "/js/dom.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/dom.js"),
+        ),
+        "/js/format.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/format.js"),
+        ),
+        "/js/live.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/live.js"),
+        ),
+        "/js/components/nav.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/nav.js"),
+        ),
+        "/js/components/avatar.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/avatar.js"),
+        ),
+        "/js/components/pill.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/pill.js"),
+        ),
+        "/js/components/step.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/step.js"),
+        ),
+        "/js/components/teamcard.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/teamcard.js"),
+        ),
+        "/js/components/dock.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/dock.js"),
+        ),
+        "/js/components/tabs.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/tabs.js"),
+        ),
+        "/js/components/sheet.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/sheet.js"),
+        ),
+        "/js/components/agentstrip.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/agentstrip.js"),
+        ),
+        "/js/components/drawer.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/drawer.js"),
+        ),
+        "/js/components/lanes.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/lanes.js"),
+        ),
+        "/js/components/teampanel.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/teampanel.js"),
         ),
         "/js/router.js" => (
             "text/javascript; charset=utf-8",
@@ -37,17 +94,21 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/i18n.js"),
         ),
-        "/js/pages/sessions.js" => (
+        "/js/pages/session.js" => (
             "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/sessions.js"),
+            include_bytes!("../web/js/pages/session.js"),
         ),
         "/js/pages/approvals.js" => (
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/approvals.js"),
         ),
-        "/js/pages/trace.js" => (
+        "/js/pages/trajectory.js" => (
             "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/trace.js"),
+            include_bytes!("../web/js/pages/trajectory.js"),
+        ),
+        "/js/components/inspector.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/inspector.js"),
         ),
         "/js/pages/host.js" => (
             "text/javascript; charset=utf-8",
@@ -57,9 +118,17 @@ pub fn get(path: &str) -> Option<Asset> {
             "text/javascript; charset=utf-8",
             include_bytes!("../web/js/pages/member.js"),
         ),
-        "/js/pages/overview.js" => (
+        "/js/pages/new-session.js" => (
             "text/javascript; charset=utf-8",
-            include_bytes!("../web/js/pages/overview.js"),
+            include_bytes!("../web/js/pages/new-session.js"),
+        ),
+        "/js/pages/home.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/pages/home.js"),
+        ),
+        "/js/components/start-session.js" => (
+            "text/javascript; charset=utf-8",
+            include_bytes!("../web/js/components/start-session.js"),
         ),
         "/i18n/en.json" => (
             "application/json; charset=utf-8",

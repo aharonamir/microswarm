@@ -271,6 +271,42 @@ pub fn trace(home: &Path, id: &str) -> Result<Value, String> {
     Ok(json!({"sessions":sessions,"events":result.events}))
 }
 
+pub fn member_report(home: &Path, id: &str) -> Result<Value, String> {
+    if !valid_session_id(id) {
+        return Err("invalid session id".into());
+    }
+    let db = supervisor(home)?;
+    let exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1 AND parent_id IS NOT NULL)",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if !exists {
+        return Err("session not found".into());
+    }
+    let trace = ms_runtime::trace::build(home, id, None)?;
+    let event = trace
+        .events
+        .iter()
+        .rev()
+        .find(|event| event["session_id"] == id && event["type"] == "delegation.reply");
+    let text = event
+        .and_then(|event| event["data"]["text"].as_str())
+        .map(|text| text.chars().take(20 * 1024).collect::<String>());
+    let status = text
+        .as_deref()
+        .and_then(|text| text.lines().next())
+        .and_then(|line| line.strip_prefix("Status:"))
+        .map(str::trim)
+        .map(str::to_lowercase)
+        .filter(|value| matches!(value.as_str(), "done" | "partial" | "blocked"));
+    Ok(
+        json!({"text":text,"at":event.map(|event|event["ts"].clone()).unwrap_or(Value::Null),"status":status}),
+    )
+}
+
 pub fn messages(
     home: &Path,
     id: &str,
@@ -303,7 +339,7 @@ pub fn messages(
         for row in rows {
             let (row_id, kind, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
-            let item = match kind.as_str() {
+            let mut item = match kind.as_str() {
                 "user_message" => {
                     json!({"kind":"user","at":at,"text":body["text"],"via":body["from"]})
                 }
@@ -326,6 +362,9 @@ pub fn messages(
                     json!({"kind":"team","at":at,"team":{"event":"approval_result","detail":body["decision"]}})
                 }
             };
+            if item["kind"] == "team" {
+                item["team_group_id"] = json!(format!("team-{row_id}"));
+            }
             items.push((at, 0, row_id, item));
         }
     }
@@ -350,11 +389,12 @@ pub fn messages(
         for row in rows {
             let (row_id, _, body, at) = row.map_err(|e| e.to_string())?;
             let body: Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+            let based_on_role = based_on_role(home, &root_db, id, &at);
             items.push((
                 at.clone(),
                 1,
                 row_id,
-                json!({"kind":"lead","at":at,"text":body["text"]}),
+                json!({"kind":"lead","at":at,"text":body["text"],"based_on_role":based_on_role}),
             ));
         }
     }
@@ -380,6 +420,22 @@ pub fn messages(
     Ok(
         json!({"items":items.into_iter().skip(start).map(|(_,_,_,item)|item).collect::<Vec<_>>(),"next_before":next_before}),
     )
+}
+
+fn based_on_role(home: &Path, supervisor_db: &Connection, id: &str, at: &str) -> Option<String> {
+    let path = home.join("sessions").join(id).join("control/inbound.db");
+    let db = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .ok()?;
+    let member: String = db.query_row("SELECT json_extract(body,'$.member_id') FROM inbound WHERE kind='member_reply' AND created_at<=?1 ORDER BY created_at DESC,id DESC LIMIT 1", [at], |row| row.get(0)).optional().ok()??;
+    supervisor_db
+        .query_row("SELECT role FROM sessions WHERE id=?1", [member], |row| {
+            row.get(0)
+        })
+        .optional()
+        .ok()?
 }
 
 fn parse_message_cursor(cursor: &str) -> Option<(String, u8, i64)> {
@@ -465,7 +521,25 @@ pub fn host(home: &Path) -> Value {
         .filter_map(|name| name.as_str().map(|name| json!({"name":name,"used_by":[]})))
         .collect::<Vec<_>>();
     let channels=config.get("channels").and_then(toml::Value::as_array).cloned().unwrap_or_default().iter().map(|channel|json!({"kind":channel.get("kind").and_then(toml::Value::as_str).unwrap_or("unknown"),"detail":"Configured","enabled":true})).collect::<Vec<_>>();
-    json!({"host":{"doctor":doctor,"channels":channels,"tools":[{"id":"web.search","provider":search_provider,"configured":search_provider.is_some(),"credential_present":search_credential_present,"enabled":search_enabled}],"skills":[],"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":{}}})
+    let ceiling_file = if home.join("config/ceiling.toml").exists() {
+        home.join("config/ceiling.toml")
+    } else {
+        home.join("ceiling.toml")
+    };
+    let ceiling = read_config_value(&ceiling_file);
+    json!({"host":{"doctor":doctor,"channels":channels,"tools":[{"id":"web.search","provider":search_provider,"configured":search_provider.is_some(),"credential_present":search_credential_present,"enabled":search_enabled}],"skills":installed_roles(home),"credentials":credentials,"limits":config.get("limits").cloned().unwrap_or(toml::Value::Table(Default::default())),"ceiling":ceiling.get("ceiling").unwrap_or(&ceiling)}})
+}
+
+fn installed_roles(home: &Path) -> Vec<Value> {
+    let Ok(db) = supervisor(home) else {
+        return vec![];
+    };
+    let Ok(mut statement) = db.prepare(
+        "SELECT skill,skill_version,role,spawn_policy FROM team_roles ORDER BY skill,role",
+    ) else {
+        return vec![];
+    };
+    statement.query_map([], |row| Ok(json!({"name":row.get::<_,String>(0)?,"version":row.get::<_,String>(1)?,"role":row.get::<_,String>(2)?,"policy":row.get::<_,String>(3)?}))).map(|rows| rows.filter_map(Result::ok).collect()).unwrap_or_default()
 }
 
 fn configured_tool_in_scope(config: &toml::Value, server: &str, tool: &str) -> bool {
@@ -631,7 +705,7 @@ pub fn scope(home: &Path, id: &str, member: bool) -> Result<Value, String> {
         json!({"dimension":dimension,"requested":requested.get(*dimension).cloned().unwrap_or(Value::Null),"lead":lead.get(*dimension).cloned().unwrap_or(Value::Null),"ceiling":ceiling_values,"granted":granted.get(*dimension).cloned().unwrap_or(Value::Null),"narrowed":narrowed})
     }).collect::<Vec<_>>();
     Ok(
-        json!({"member_id":id,"lead_id":root,"role":role,"derived_from":granted["derived_from"],"source_ref":granted["source_ref"],"scope_hash":granted["hash"],"rows":rows,"profile":profile}),
+        json!({"member_id":id,"lead_id":root,"role":role,"derived_from":granted["derived_from"],"source_ref":granted["source_ref"],"scope_hash":granted["hash"],"granted":granted,"lead_scope":lead,"rows":rows,"profile":profile}),
     )
 }
 
@@ -735,7 +809,64 @@ fn approval_value(home: &Path, row: ApprovalRow) -> Result<Value, String> {
     let spawn = (kind == "spawn").then(
         || json!({"role":payload["role"],"task":payload["task"],"requested":payload["scope"]}),
     );
+    let agent = json!({"id":requester,"kind":"member","role":role,"colour_index":1,"initial":role.chars().next().unwrap_or('M').to_uppercase().to_string()});
+    let tool_name = payload["binding"]["tool"].as_str().unwrap_or("tool");
+    let command = payload["arguments"]["command"].as_str();
+    let sentence = if tool_name == "shell.run" {
+        json!({"key":"step.shell.ask","args":{"command":command.unwrap_or("")}})
+    } else {
+        json!({"key":"step.approval.asked","args":{"role":role,"what":tool_name}})
+    };
+    let brief = if kind == "spawn" {
+        payload["task"].as_str().map(str::to_owned)
+    } else {
+        db.query_row(
+            "SELECT task FROM delegations WHERE member_id=?1 ORDER BY created_at DESC LIMIT 1",
+            [&requester],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+    };
+    let policy = json!({"rule":format!("{tool_name} = ask"),"source":"policy","source_ref":null});
+    let facts = command.map(|command| vec![json!({"key":"parse.simple"}),json!({"key":"parse.program","args":{"program":command.split_whitespace().next().unwrap_or("")}}),json!({"key":"parse.no_pipes"})]).unwrap_or_default();
+    let runs_summary = crate::views::reach::summary(&runs_in);
+    let spawn_preview = if kind == "spawn" {
+        spawn_preview(home, &root, &payload)
+    } else {
+        None
+    };
     Ok(
-        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_in}),
+        json!({"id":id,"code":code,"state":status,"kind":kind,"root_session_id":root,"requesting_session_id":requester,"requesting_role":role,"expires_at":expires,"created_at":created,"resolved_at":resolved,"reissued_as":reissued,"tool_call":tool_call,"spawn":spawn,"runs_in":runs_summary,"raw":{"runs_in":runs_in},"agent":agent,"sentence":sentence,"brief":brief.map(|text|json!({"text":text,"from":"lead","at":created})),"policy":policy,"facts":facts,"spawn_preview":spawn_preview}),
     )
+}
+
+fn spawn_preview(home: &Path, root: &str, payload: &Value) -> Option<Value> {
+    let db = supervisor(home).ok()?;
+    let raw: Option<String> = db
+        .query_row(
+            "SELECT scope_json FROM sessions WHERE id=?1",
+            [root],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten()?;
+    let lead: ms_proto::Scope = serde_json::from_str(&raw?).ok()?;
+    let request: ms_proto::Scope = serde_json::from_value(payload["scope"].clone()).ok()?;
+    let path = if home.join("config/ceiling.toml").exists() {
+        home.join("config/ceiling.toml")
+    } else {
+        home.join("ceiling.toml")
+    };
+    let config = read_config_value(&path);
+    let ceiling: ms_proto::ScopeCeiling = config
+        .get("ceiling")
+        .cloned()
+        .and_then(|value| serde_json::to_value(value).ok())
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    ms_proto::intersect_scope(&request, &lead, &ceiling)
+        .ok()
+        .and_then(|scope| serde_json::to_value(scope).ok())
+        .and_then(|granted| crate::views::reach::derive(&json!({"granted":granted,"lead_scope":lead,"rows":[{"dimension":"mounts","requested":request.mounts,"ceiling":ceiling.paths}]}), false).ok())
 }

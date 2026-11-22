@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.av{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+.av-sm{width:24px;height:24px;font-size:10.5px;border-radius:7px;border:2px solid #fff}
+.av-lead{background:#1C1917;color:#fff}.av-res{background:#E6E8FB;color:#3440A8}.av-tst{background:#F1E6F7;color:#6B3787}.av-wr{background:#E4F1E2;color:#2F6B2D}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{color:#1C1917;background:#F7F5F2}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}.btn-primary:hover{background:#134A47;color:#fff}
+.btn-deny{color:#8E241E;border-color:#E2B7B1}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:9px;color:#57534E;text-decoration:none;font-weight:500}
+.nav:hover{background:#EFEBE5;color:#1C1917}
+.nav-on{background:#fff;color:#1C1917;box-shadow:0 1px 2px rgba(28,25,23,.06);border:1px solid #E7E2DA}
+.ico{width:16px;height:16px;flex:none}
+.trow{display:grid;grid-template-columns:minmax(200px,1.3fr) 160px 90px minmax(220px,2fr) 70px;gap:16px;align-items:center;padding:14px 18px;border-top:1px solid #F1EEE9;text-decoration:none;color:#1C1917}
+.trow:hover{background:#FBFAF8;color:#1C1917}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <nav aria-label="Main" style="flex: 1 1 220px; max-width: 100%; box-sizing: border-box; padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; border-right: 1px solid #E7E2DA;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 6px;">
+      <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+      <strong style="font-size: 15px;">MicroSwarm</strong>
+    </div>
+    <a class="btn btn-primary" href="#start" style="justify-content: center; height: 44px;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>New session</a>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <a class="nav nav-on" href="#" aria-current="page"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg>Home</a>
+      <a class="nav" href="Approvals.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg><span style="flex-grow: 1;">Approvals</span><span class="pill p-wait" style="height: 20px; padding: 0 7px;">1</span></a>
+      <a class="nav" href="Trajectory.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg>Trajectories</a>
+      <a class="nav" href="Host.dc.html"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg>Host</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span class="label" style="padding: 0 10px 6px;">Sessions</span>
+      <a class="nav" href="Main.dc.html" style="height: auto; padding: 8px 10px; flex-direction: column; align-items: flex-start; gap: 2px;"><span style="color: #1C1917;">Audit the auth module</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8E241E; font-weight: 400;"><span class="dot"></span>Waiting for you</span></a>
+      <a class="nav" href="#" style="height: auto; padding: 8px 10px; flex-direction: column; align-items: flex-start; gap: 2px;"><span style="color: #1C1917;">Weekly dependency report</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #134A47; font-weight: 400;"><span class="dot"></span>Working · telegram</span></a>
+    </div>
+    <div style="margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; font-size: 12px;">
+      <span style="display: flex; align-items: center; gap: 6px; color: #134A47;"><span class="dot"></span>Supervisor running</span>
+      <button class="btn" style="height: 32px; padding: 0 10px; font-size: 12px;" aria-pressed="false">EN · 中文</button>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 640px; min-width: 0; box-sizing: border-box; padding: 32px 36px 40px;">
+    <div style="max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px;">
+      <header>
+        <h1 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600;">1 thing needs you. 2 sessions are running.</h1>
+        <p class="muted" style="margin: 6px 0 0;">5 containers up · 3 approvals today · last restart 2 days ago</p>
+      </header>
+
+      <form id="start" class="card" style="padding: 16px 16px 12px 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 2px 10px rgba(28,25,23,.05);">
+        <label for="task" style="font-weight: 600;">Start a session</label>
+        <textarea id="task" rows="2" placeholder="What should the lead work on?" style="border: 0; outline: none; resize: none; font: 15px/22px 'IBM Plex Sans',sans-serif; color: #1C1917; background: transparent;"></textarea>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;">
+          <button class="btn" type="button" style="height: 32px; font-size: 12.5px;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/></svg><span class="mono" style="font-size: 12px;">~/code/api</span> as <span class="mono" style="font-size: 12px;">/work</span></button>
+          <button class="btn" type="button" style="height: 32px; font-size: 12.5px;">Team: code-review-team</button>
+          <span style="flex-grow: 1;"></span>
+          <button class="btn btn-primary" type="button">Start</button>
+        </div>
+      </form>
+
+      <section aria-labelledby="h-needs" style="display: flex; flex-direction: column; gap: 10px;">
+        <h2 id="h-needs" class="label" style="margin: 0;">Needs you</h2>
+        <article style="background: #fff; border: 1.5px solid #B3312A; border-radius: 14px; padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;">
+          <span class="av av-tst">T</span>
+          <div style="flex: 1 1 360px; min-width: 0;">
+            <p style="margin: 0;"><strong style="font-weight: 600;">The tester wants to run</strong> <span class="mono" style="background: #F1EEE9; padding: 2px 6px; border-radius: 5px;">cargo test -p auth</span></p>
+            <p class="muted" style="margin: 2px 0 0; font-size: 12.5px;">In <a href="Main.dc.html">Audit the auth module</a> · in its own container, read-only, no network · expires in 11 min</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-deny">Deny</button>
+            <button class="btn btn-primary">Approve</button>
+          </div>
+        </article>
+      </section>
+
+      <section aria-labelledby="h-run" style="display: flex; flex-direction: column; gap: 10px;">
+        <h2 id="h-run" class="label" style="margin: 0;">Running</h2>
+        <div class="card" style="overflow-x: auto;">
+          <div style="min-width: 860px;">
+            <div class="trow muted" style="border-top: 0; padding-top: 10px; padding-bottom: 10px; font-size: 12px;"><span>Session</span><span>Status</span><span>Team</span><span>Latest</span><span style="text-align: right;">For</span></div>
+            <a class="trow" href="Main.dc.html">
+              <span style="display: flex; flex-direction: column;"><strong style="font-weight: 600;">Audit the auth module</strong><span class="muted" style="font-size: 12px;">web</span></span>
+              <span><span class="pill p-wait"><span class="dot"></span>Waiting for you</span></span>
+              <span style="display: flex;"><span class="av av-sm av-lead">L</span><span class="av av-sm av-res" style="margin-left: -6px;">R</span><span class="av av-sm av-tst" style="margin-left: -6px;">T</span></span>
+              <span style="color: #57534E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Lead: “The researcher found two issues. I checked both lines…”</span>
+              <span class="mono muted" style="text-align: right;">8 min</span>
+            </a>
+            <a class="trow" href="#">
+              <span style="display: flex; flex-direction: column;"><strong style="font-weight: 600;">Weekly dependency report</strong><span class="muted" style="font-size: 12px;">telegram · @amir</span></span>
+              <span><span class="pill p-work"><span class="dot"></span>Working</span></span>
+              <span style="display: flex;"><span class="av av-sm av-lead">L</span><span class="av av-sm av-wr" style="margin-left: -6px;">W</span></span>
+              <span style="color: #57534E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">writer is reading <span class="mono">Cargo.lock</span> · step 6</span>
+              <span class="mono muted" style="text-align: right;">3 min</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-done" style="display: flex; flex-direction: column; gap: 10px;">
+        <h2 id="h-done" class="label" style="margin: 0;">Ended today</h2>
+        <div class="card" style="overflow-x: auto;">
+          <div style="min-width: 860px;">
+            <a class="trow" href="Trajectory.dc.html" style="border-top: 0;">
+              <span style="display: flex; flex-direction: column;"><strong style="font-weight: 500;">Fix the flaky CI job</strong><span class="muted" style="font-size: 12px;">cli</span></span>
+              <span><span class="pill p-done">Done</span></span>
+              <span style="display: flex;"><span class="av av-sm av-lead">L</span></span>
+              <span style="color: #57534E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Pinned the test runner and removed the shared temp dir.</span>
+              <span class="mono muted" style="text-align: right;">11:20</span>
+            </a>
+            <a class="trow" href="Trajectory.dc.html">
+              <span style="display: flex; flex-direction: column;"><strong style="font-weight: 500;">Summarise the RFC thread</strong><span class="muted" style="font-size: 12px;">telegram</span></span>
+              <span><span class="pill p-warn">Ended early</span></span>
+              <span style="display: flex;"><span class="av av-sm av-lead">L</span><span class="av av-sm av-res" style="margin-left: -6px;">R</span></span>
+              <span style="color: #57534E; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">You denied network access for the reader; the lead stopped.</span>
+              <span class="mono muted" style="text-align: right;">09:47</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

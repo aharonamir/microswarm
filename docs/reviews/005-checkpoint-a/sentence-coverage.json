@@ -1,0 +1,14 @@
+{
+  "fixture_event_types": [
+    "approval.requested",
+    "delegation.request",
+    "delegation.spawned",
+    "permit.decision",
+    "scope.narrowed",
+    "tool.call",
+    "tool.result",
+    "turn.end",
+    "turn.start"
+  ],
+  "events_without_sentence_mapping": []
+}

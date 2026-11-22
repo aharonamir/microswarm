@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trajectory: Audit the auth module</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.av{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+.av-sm{width:22px;height:22px;font-size:10px;border-radius:6px}
+.av-you{background:#EDE8E1;color:#57534E}.av-lead{background:#1C1917;color:#fff}.av-res{background:#E6E8FB;color:#3440A8}.av-tst{background:#F1E6F7;color:#6B3787}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}
+.seg{height:34px;padding:0 12px;border:0;border-radius:8px;background:none;font:500 13px/1 'IBM Plex Sans',sans-serif;color:#57534E;cursor:pointer}
+.seg-on{background:#fff;color:#1C1917;box-shadow:0 1px 2px rgba(28,25,23,.1)}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;justify-content:center;width:44px;height:40px;border-radius:9px;color:#57534E;text-decoration:none}
+.ico{width:16px;height:16px;flex:none}
+.stat{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:12px;background:#fff;border:1px solid #E7E2DA;min-width:0}
+.stat b{font-size:20px;line-height:26px;font-weight:600}
+.lane{position:relative;height:28px;border-radius:7px;background:#F7F5F2}
+.span{position:absolute;top:4px;height:20px;border-radius:5px;font-size:11.5px;line-height:20px;padding:0 6px;box-sizing:border-box;overflow:hidden;white-space:nowrap;color:#fff}
+.tick{position:absolute;top:4px;width:2px;height:20px;background:rgba(255,255,255,.7)}
+.mark{position:absolute;top:7px;width:14px;height:14px;transform:translateX(-7px) rotate(45deg);border-radius:3px}
+.grid{position:absolute;top:0;bottom:0;width:1px;background:#EFEBE5}
+.srow{display:grid;grid-template-columns:52px 22px minmax(0,1fr) auto 56px;gap:10px;align-items:center;padding:8px 12px;border-radius:9px;font-size:13px}
+.srow:hover{background:#F7F5F2}
+.dl{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 12px;margin:0;font-size:13px}
+.dl dt{color:#6F6862}.dl dd{margin:0;min-width:0;overflow-wrap:anywhere}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <nav aria-label="Main" style="flex: 0 0 64px; box-sizing: border-box; padding: 18px 10px; display: flex; flex-direction: column; align-items: center; gap: 14px; border-right: 1px solid #E7E2DA;">
+    <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+    <a class="btn btn-primary" href="#" aria-label="New session" style="width: 44px; height: 44px; padding: 0; justify-content: center;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></a>
+    <a class="nav" href="Home.dc.html" aria-label="Home"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg></a>
+    <a class="nav" href="Approvals.dc.html" aria-label="Approvals"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg></a>
+    <a class="nav" href="#" aria-label="Trajectories" aria-current="page" style="background: #fff; border: 1px solid #E7E2DA; color: #1C1917;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg></a>
+    <a class="nav" href="Host.dc.html" aria-label="Host"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg></a>
+  </nav>
+
+  <main style="flex: 999 1 640px; min-width: 0; box-sizing: border-box; padding: 20px 28px 32px; display: flex; flex-direction: column; gap: 18px;">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px;">
+      <div style="flex: 1 1 320px; min-width: 0;">
+        <a href="Main.dc.html" style="font-size: 12.5px;">Audit the auth module</a>
+        <h1 style="margin: 2px 0 0; font-size: 20px; line-height: 26px; font-weight: 600;">Trajectory</h1>
+        <p class="muted" style="margin: 2px 0 0; font-size: 13px;">Every step every agent took, on one clock. Pick a step to see why it was allowed.</p>
+      </div>
+      <div role="group" aria-label="Show" style="display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: #EDE8E1;">
+        <button class="seg seg-on" aria-pressed="true">Everything</button>
+        <button class="seg" aria-pressed="false">Decisions</button>
+        <button class="seg" aria-pressed="false">Problems</button>
+      </div>
+      <button class="btn">Export JSON</button>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+      <div class="stat"><span class="muted" style="font-size: 12px;">Running for</span><b>8 min</b></div>
+      <div class="stat"><span class="muted" style="font-size: 12px;">Agents</span><b>3</b></div>
+      <div class="stat"><span class="muted" style="font-size: 12px;">Steps</span><b>31</b></div>
+      <div class="stat" style="border-color: #F0D2CD;"><span style="font-size: 12px; color: #8E241E;">Waiting for you</span><b style="color: #8E241E;">4 min</b></div>
+      <div class="stat" style="border-color: #F0DDB5;"><span style="font-size: 12px; color: #7A4E0B;">Access reduced</span><b style="color: #7A4E0B;">2</b></div>
+      <div class="stat"><span class="muted" style="font-size: 12px;">Denied or failed</span><b>0</b></div>
+    </div>
+
+    <!-- Lanes -->
+    <section class="card" aria-label="Timeline" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; overflow-x: auto;">
+      <div style="min-width: 640px; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; align-items: center;">
+        <span></span>
+        <div style="position: relative; height: 18px; font-size: 11.5px;" class="mono muted">
+          <span style="position: absolute; left: 0;">14:02</span><span style="position: absolute; left: 25%;">14:04</span><span style="position: absolute; left: 50%;">14:06</span><span style="position: absolute; left: 75%;">14:08</span><span style="position: absolute; right: 0;">now</span>
+        </div>
+
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;"><span class="av av-sm av-you">Y</span>You</span>
+        <div class="lane">
+          <span class="mark" style="left: 1%; background: #57534E;" title="Your message"></span>
+          <span class="mark" style="left: 50%; background: #B3312A;" title="Approval asked of you"></span>
+        </div>
+
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;"><span class="av av-sm av-lead">L</span>Lead</span>
+        <div class="lane">
+          <span class="span" style="left: 1%; width: 11%; background: #1C1917;">plans</span>
+          <span class="span" style="left: 75%; width: 10%; background: #1C1917;">checks</span>
+          <span class="span" style="left: 85%; width: 15%; background: #D9D2C7; color: #57534E;">waits</span>
+        </div>
+
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;"><span class="av av-sm av-res">R</span>researcher</span>
+        <div class="lane">
+          <span class="span" style="left: 13%; width: 62%; background: #6872DB;">reads src/auth · 9 steps<span class="tick" style="left: 18%;"></span><span class="tick" style="left: 31%;"></span><span class="tick" style="left: 44%;"></span><span class="tick" style="left: 52%;"></span><span class="tick" style="left: 71%;"></span></span>
+          <span class="mark" style="left: 75%; background: #3440A8;" title="Report sent"></span>
+        </div>
+
+        <span style="display: flex; align-items: center; gap: 8px; font-size: 13px;"><span class="av av-sm av-tst">T</span>tester</span>
+        <div class="lane">
+          <span class="span" style="left: 13%; width: 37%; background: #9A62B8;">reads test config</span>
+          <span class="span" style="left: 50%; width: 50%; background: repeating-linear-gradient(135deg,#F3C6BF 0 5px,#FBEAE7 5px 10px); color: #8E241E; font-weight: 500; outline: 2px solid #1C1917; outline-offset: 1px;">waiting for your approval</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px;" class="muted">
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 8px; border-radius: 3px; background: #6872DB;"></span>working</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 14px; height: 8px; border-radius: 3px; background: repeating-linear-gradient(135deg,#F3C6BF 0 3px,#FBEAE7 3px 6px);"></span>waiting for you</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 2px; height: 10px; background: #6872DB;"></span>one tool call</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; transform: rotate(45deg); background: #57534E; border-radius: 2px;"></span>message or report</span>
+      </div>
+    </section>
+
+    <!-- Steps -->
+    <section class="card" aria-label="Steps" style="padding: 8px 6px;">
+      <div style="padding: 10px 12px 4px; display: flex; align-items: baseline; gap: 10px;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">1 · The lead plans</h2><span class="muted mono" style="font-size: 12px;">14:02</span></div>
+      <div class="srow"><span class="mono muted">14:02</span><span class="av av-sm av-you">Y</span><span>You asked: “Audit the auth module for token refresh bugs and run its tests.”</span><span></span><span class="mono muted">—</span></div>
+      <div class="srow"><span class="mono muted">14:03</span><span class="av av-sm av-lead">L</span><span>Started <strong style="font-weight: 600;">researcher</strong> with read access to <span class="mono">/work/src/auth</span></span><span class="pill p-warn">reduced</span><span class="mono muted">1.8 s</span></div>
+      <div class="srow"><span class="mono muted">14:03</span><span class="av av-sm av-lead">L</span><span>Started <strong style="font-weight: 600;">tester</strong> with read access to <span class="mono">/work</span></span><span class="pill p-done">allowed</span><span class="mono muted">1.6 s</span></div>
+
+      <div style="padding: 14px 12px 4px; display: flex; align-items: baseline; gap: 10px;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">2 · Members work in parallel</h2><span class="muted mono" style="font-size: 12px;">14:03 – 14:08</span></div>
+      <div class="srow"><span class="mono muted">14:03</span><span class="av av-sm av-res">R</span><span>Read <span class="mono">refresh.rs</span>, <span class="mono">token.rs</span> and 6 more files</span><span class="pill p-done">allowed</span><span class="mono muted">2.1 s</span></div>
+      <div class="srow"><span class="mono muted">14:04</span><span class="av av-sm av-tst">T</span><span>Read <span class="mono">Cargo.toml</span> and <span class="mono">tests/auth.rs</span></span><span class="pill p-done">allowed</span><span class="mono muted">0.4 s</span></div>
+      <div class="srow" style="background: #FDF3F1; outline: 1.5px solid #1C1917;"><span class="mono muted">14:06</span><span class="av av-sm av-tst">T</span><span>Asked to run <span class="mono">cargo test -p auth</span></span><span class="pill p-wait"><span class="dot"></span>waiting for you</span><span class="mono muted">4 min</span></div>
+      <div class="srow"><span class="mono muted">14:08</span><span class="av av-sm av-res">R</span><span>Reported to the lead: done, 2 findings</span><span></span><span class="mono muted">—</span></div>
+
+      <div style="padding: 14px 12px 4px; display: flex; align-items: baseline; gap: 10px;"><h2 style="margin: 0; font-size: 14px; font-weight: 600;">3 · The lead checks and replies</h2><span class="muted mono" style="font-size: 12px;">14:08 – 14:09</span></div>
+      <div class="srow"><span class="mono muted">14:08</span><span class="av av-sm av-lead">L</span><span>Re-read <span class="mono">refresh.rs:88</span> and <span class="mono">token.rs:41</span> to verify the report</span><span class="pill p-done">allowed</span><span class="mono muted">0.3 s</span></div>
+      <div class="srow"><span class="mono muted">14:09</span><span class="av av-sm av-lead">L</span><span>Replied to you with 2 confirmed findings</span><span></span><span class="mono muted">—</span></div>
+    </section>
+  </main>
+
+  <!-- Inspector -->
+  <aside aria-label="Selected step" style="flex: 1 1 360px; max-width: 100%; box-sizing: border-box; padding: 20px 22px; background: #fff; border-left: 1px solid #E7E2DA; display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="av av-tst">T</span>
+      <div style="flex-grow: 1; min-width: 0;">
+        <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600;">tester asked to run a command</h2>
+        <span class="muted mono" style="font-size: 12px;">14:06:12 · step 18 of 31</span>
+      </div>
+    </div>
+    <span class="pill p-wait" style="align-self: flex-start;"><span class="dot"></span>Waiting for you · 4 min</span>
+
+    <div style="background: #F7F5F2; border-radius: 12px; padding: 12px 14px;">
+      <span class="label">Why it stopped</span>
+      <p style="margin: 4px 0 0;">The tester's policy says <span class="mono">shell.run</span> needs your approval, so the supervisor paused it and asked you. Nothing has run yet.</p>
+    </div>
+
+    <dl class="dl">
+      <dt>Agent</dt><dd>tester, member of the lead</dd>
+      <dt>Tool</dt><dd class="mono">microswarm-tools / shell.run</dd>
+      <dt>Command</dt><dd class="mono">cargo test -p auth</dd>
+      <dt>Read as</dt><dd>one simple command, program <span class="mono">cargo</span>, no pipes or redirects</dd>
+      <dt>Runs in</dt><dd>tester's container · <span class="mono">/work</span> read only · no network</dd>
+      <dt>Approval</dt><dd><span class="mono">K7QF</span>, bound to this exact call (<span class="mono">sha256:9f2c…</span>)</dd>
+    </dl>
+
+    <div style="display: flex; gap: 10px;">
+      <a class="btn btn-primary" href="Approvals.dc.html">Review the approval</a>
+      <a class="btn" href="Member.dc.html">Open tester</a>
+    </div>
+
+    <details style="border-top: 1px solid #EFEBE5; padding-top: 12px;">
+      <summary style="cursor: pointer; font-size: 13px; font-weight: 500;">Raw events (2)</summary>
+      <pre class="mono" style="margin: 10px 0 0; background: #1C1917; color: #F5F1EA; border-radius: 10px; padding: 12px; font-size: 11.5px; line-height: 17px; white-space: pre-wrap; overflow-wrap: anywhere;">{ "seq": 18, "type": "approval.requested",
+  "agent_role": "tester", "code": "K7QF",
+  "tool": "shell.run",
+  "argument_hash": "sha256:9f2c1a…" }</pre>
+    </details>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

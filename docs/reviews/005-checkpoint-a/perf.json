@@ -1,0 +1,14 @@
+{
+  "fixture": "load-equivalent: 2,000 events across 6 agents",
+  "mode": "release, warmed",
+  "timings_us": {
+    "team": 794,
+    "steps_first_page": 10787,
+    "timeline": 13168
+  },
+  "budgets_ms": {
+    "team": 150,
+    "steps_first_page": 300,
+    "timeline": 300
+  }
+}

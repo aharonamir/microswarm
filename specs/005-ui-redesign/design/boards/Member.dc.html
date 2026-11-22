@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Member: researcher</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F5F2;color:#1C1917;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:20px}
+a{color:#1D6A66}a:hover{color:#134A47}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.av{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:12px;flex:none}
+.av-lead{background:#1C1917;color:#fff}.av-res{background:#E6E8FB;color:#3440A8}.av-tst{background:#F1E6F7;color:#6B3787}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:currentColor}
+.p-work{background:#E3F0EE;color:#134A47}.p-wait{background:#FBEAE7;color:#8E241E}.p-done{background:#EFECE7;color:#57534E}.p-warn{background:#FBF0DC;color:#7A4E0B}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid #D9D2C7;background:#fff;color:#1C1917;font:500 13px/1 'IBM Plex Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{color:#1C1917;background:#F7F5F2}
+.btn-primary{background:#1D6A66;border-color:#1D6A66;color:#fff}
+.label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6F6862}
+.card{background:#fff;border:1px solid #E7E2DA;border-radius:14px}
+.muted{color:#6F6862}
+.nav{display:flex;align-items:center;gap:10px;height:40px;padding:0 10px;border-radius:9px;color:#57534E;text-decoration:none;font-weight:500}
+.ico{width:16px;height:16px;flex:none}
+.tab{height:40px;padding:0 4px;border:0;border-bottom:2px solid transparent;background:none;font:500 13.5px/1 'IBM Plex Sans',sans-serif;color:#6F6862;cursor:pointer}
+.tab-on{color:#1C1917;border-bottom-color:#1C1917}
+.row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 0;border-top:1px solid #F1EEE9}
+.col{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:#F7F5F2;min-width:0}
+.it{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12px;padding:3px 8px;border-radius:6px;background:#fff;border:1px solid #E7E2DA;overflow-wrap:anywhere}
+.cut{color:#8E241E;text-decoration:line-through;background:#FDF3F1;border-color:#F0D2CD}
+.low{color:#7A4E0B;background:#FDF6E8;border-color:#F0DDB5}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch;">
+
+  <!-- Sidebar (collapsed to icons while a drawer is open) -->
+  <nav aria-label="Main" style="flex: 0 0 64px; box-sizing: border-box; padding: 18px 10px; display: flex; flex-direction: column; align-items: center; gap: 14px; border-right: 1px solid #E7E2DA;">
+    <span aria-hidden="true" style="width: 30px; height: 30px; border-radius: 8px; background: #1C1917; display: inline-flex; align-items: center; justify-content: center; flex: none;"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 11 4.5 5.5M11 11l6.5-4M11 11l-5 6.5M11 11l6 5.5" stroke="#5FB3AA" stroke-width="1.2" fill="none"/><circle cx="11" cy="11" r="3.2" fill="#FFFFFF"/><circle cx="4.5" cy="5.5" r="2" fill="#5FB3AA"/><circle cx="17.5" cy="7" r="2" fill="#5FB3AA"/><circle cx="6" cy="17.5" r="2" fill="#5FB3AA"/><circle cx="17" cy="16.5" r="1.6" fill="#5FB3AA"/></svg></span>
+    <a class="btn btn-primary" href="#" aria-label="New session" style="width: 44px; height: 44px; padding: 0; justify-content: center;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></a>
+    <a class="nav" href="Home.dc.html" aria-label="Home" style="width: 44px; justify-content: center; padding: 0;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg></a>
+    <a class="nav" href="Approvals.dc.html" aria-label="Approvals, 1 waiting" style="width: 44px; justify-content: center; padding: 0; position: relative;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg><span style="position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #B3312A;"></span></a>
+    <a class="nav" href="Trajectory.dc.html" aria-label="Trajectories" style="width: 44px; justify-content: center; padding: 0;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 4h7M5 8h9M3 12h6"/></svg></a>
+    <a class="nav" href="Host.dc.html" aria-label="Host" style="width: 44px; justify-content: center; padding: 0;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="11" height="4" rx="1"/><rect x="2.5" y="9" width="11" height="4" rx="1"/></svg></a>
+  </nav>
+
+  <!-- Conversation, still visible -->
+  <main style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; background: #FCFBF9;">
+    <header style="display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid #E7E2DA; background: #fff;">
+      <h1 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; flex-grow: 1;">Audit the auth module</h1>
+      <span class="pill p-wait"><span class="dot"></span>Waiting for you</span>
+    </header>
+    <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px; opacity: .55;">
+      <div style="align-self: flex-end; max-width: 80%;"><p style="margin: 0; background: #EDE8E1; padding: 10px 14px; border-radius: 16px 16px 4px 16px;">Audit the auth module for token refresh bugs and run its tests.</p></div>
+      <div style="display: flex; gap: 12px;"><span class="av av-lead">L</span><p style="margin: 0;">I'll split this into two parts that can run at the same time…</p></div>
+    </div>
+    <section class="card" style="margin: 0 24px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 0 0 3px #E6E8FB;">
+      <div style="display: flex; align-items: center; gap: 10px;"><strong style="flex-grow: 1; font-weight: 600;">Team · 2 members</strong><span class="muted" style="font-size: 12px;">running 7 min</span></div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; background: #F3F4FD;"><span class="av av-res">R</span><strong style="font-weight: 600; flex-grow: 1;">researcher</strong><span class="pill p-done">Reported</span></div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 8px;"><span class="av av-tst">T</span><strong style="font-weight: 600; flex-grow: 1;">tester</strong><span class="pill p-wait"><span class="dot"></span>Waiting for you</span></div>
+    </section>
+    <div style="margin-top: auto; padding: 20px 24px;">
+      <div style="background: #fff; border: 1px solid #D9D2C7; border-radius: 16px; padding: 14px 16px; color: #6F6862;">Message the lead…</div>
+    </div>
+  </main>
+
+  <!-- Member drawer -->
+  <aside aria-label="researcher" style="flex: 1 1 560px; max-width: 100%; box-sizing: border-box; background: #fff; border-left: 1px solid #E7E2DA; box-shadow: -12px 0 32px rgba(28,25,23,.06); display: flex; flex-direction: column;">
+    <header style="padding: 18px 24px 0; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span class="av av-res" style="width: 36px; height: 36px; font-size: 14px; border-radius: 10px;">R</span>
+        <div style="flex-grow: 1; min-width: 0;">
+          <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600;">researcher</h2>
+          <p class="muted" style="margin: 0; font-size: 12.5px;">Member of this session · from team skill <span class="mono">code-review-team@1.2.0</span></p>
+        </div>
+        <span class="pill p-done">Reported · idle</span>
+        <button class="btn" aria-label="Close" style="width: 40px; padding: 0; justify-content: center;"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+      </div>
+      <div style="background: #F7F5F2; border-radius: 12px; padding: 12px 14px;">
+        <span class="label">Its task, from the lead</span>
+        <p style="margin: 4px 0 0;">Read the code under <span class="mono">/work/src/auth</span> and list problems in token refresh and expiry checks. Read-only; another member runs the tests. For each problem give file:line, severity and a one-line fix.</p>
+      </div>
+      <div role="tablist" style="display: flex; gap: 20px; border-bottom: 1px solid #E7E2DA;">
+        <button class="tab" role="tab" aria-selected="false">Steps · 9</button>
+        <button class="tab tab-on" role="tab" aria-selected="true">What it can reach</button>
+        <button class="tab" role="tab" aria-selected="false">Report</button>
+      </div>
+    </header>
+
+    <div style="padding: 18px 24px 24px; display: flex; flex-direction: column; gap: 22px;">
+      <p style="margin: 0; font-size: 15px; line-height: 22px;">It can <strong style="font-weight: 600;">read one folder</strong>. It has <strong style="font-weight: 600;">no network</strong> and <strong style="font-weight: 600;">no credentials</strong>. Two things it asked for were reduced, and it was never given more than the lead holds.</p>
+
+      <section style="display: flex; flex-direction: column;">
+        <h3 class="label" style="margin: 0 0 4px;">Can reach</h3>
+        <div class="row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#1D6A66" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg><span>Reads <span class="mono">/work/src/auth</span></span><span class="muted" style="font-size: 12.5px;">read only</span></div>
+        <div class="row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#1D6A66" stroke-width="2" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg><span>Uses <span class="mono">fs.read</span>, <span class="mono">fs.list</span>, <span class="mono">grep</span> on its own</span><span class="muted" style="font-size: 12.5px;">allowed</span></div>
+        <div class="row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#7A4E0B" stroke-width="1.6" aria-hidden="true"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></svg><span>Runs shell commands only after you approve each one</span><span class="muted" style="font-size: 12.5px;">asks you</span></div>
+      </section>
+
+      <section style="display: flex; flex-direction: column;">
+        <h3 class="label" style="margin: 0 0 4px;">Asked for, but reduced</h3>
+        <div class="row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#7A4E0B" stroke-width="1.6" aria-hidden="true"><path d="M3 8h10"/></svg><span>Write access to <span class="mono">/work/src/auth</span> became <strong style="font-weight: 600;">read only</strong></span><span class="pill p-warn" style="height: 22px;">team skill limit</span></div>
+        <div class="row"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="#8E241E" stroke-width="1.6" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg><span>Network access to <span class="mono">crates.io</span> was removed</span><span class="pill p-wait" style="height: 22px;">never allowed on this host</span></div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10px;">
+        <h3 class="label" style="margin: 0;">How its access was worked out</h3>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; align-items: stretch;">
+          <div class="col"><span style="font-size: 12px; font-weight: 600;">1 · Lead asked for</span><span class="it">/work/src/auth rw</span><span class="it">net: crates.io</span></div>
+          <div class="col"><span style="font-size: 12px; font-weight: 600;">2 · Lead holds</span><span class="it">/work rw</span><span class="it">net: crates.io</span></div>
+          <div class="col"><span style="font-size: 12px; font-weight: 600;">3 · Host allows</span><span class="it">/work/src ro</span><span class="it cut">net: crates.io</span></div>
+          <div class="col" style="background: #E3F0EE;"><span style="font-size: 12px; font-weight: 600; color: #134A47;">= Granted</span><span class="it low">/work/src/auth ro</span><span class="muted" style="font-size: 12px;">no network</span></div>
+        </div>
+        <p class="muted" style="margin: 0; font-size: 12.5px;">A member gets only what appears in all three. The supervisor computes this; neither agent can change it.</p>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10px;">
+        <h3 class="label" style="margin: 0;">The container around it</h3>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+          <div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 4px;"><strong style="font-weight: 600; font-size: 13px;">Files</strong><span class="muted" style="font-size: 12.5px;">System read-only. Its own scratch space is wiped when it ends.</span></div>
+          <div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 4px;"><strong style="font-weight: 600; font-size: 13px;">Process</strong><span class="muted" style="font-size: 12.5px;">No extra privileges. 1 CPU, 512 MB.</span></div>
+          <div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 4px;"><strong style="font-weight: 600; font-size: 13px;">Network</strong><span class="muted" style="font-size: 12.5px;">Only model calls, through the session proxy.</span></div>
+        </div>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-top: 4px;">
+        <button class="btn">Ask the lead to dismiss it</button>
+        <a href="Trajectory.dc.html" style="font-size: 13px;">See its steps in the trajectory</a>
+        <span class="mono muted" style="margin-left: auto; font-size: 11.5px;">01ARZ3…FAW · scope sha256:7c1e…</span>
+      </div>
+    </div>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

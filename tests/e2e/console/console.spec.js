@@ -43,8 +43,8 @@ test.beforeAll(async ({ browser }) => {
   login.on("requestfailed", request => console.error(`browser request failed: ${request.url()} ${request.failure()?.errorText}`));
   await login.route("**/api/v1/**", route => mockApi(route));
   await login.goto(`/login?token=${encodeURIComponent(token)}`);
-  await expect(login).toHaveURL("http://127.0.0.1:8792/");
-  await expect(login.locator("#app")).toContainText("Start a conversation");
+  await expect(login).toHaveURL("http://127.0.0.1:8792/#/home");
+  await expect(login.locator("#app")).toContainText("1 thing needs you");
   startupMs = Date.now() - startedAt;
   await login.close();
 });
@@ -58,13 +58,13 @@ test.afterAll(async () => {
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
   for (const pageCase of [
-    { name: "overview", hash: "#/overview", heading: "Needs your attention" },
+    { name: "overview", hash: "#/overview", heading: "1 thing needs you" },
     { name: "new session", hash: "#/sessions", heading: "Start a conversation" },
     { name: "sessions", hash: `#/sessions/${ROOT}`, heading: hostile },
-    { name: "approvals", hash: "#/approvals", heading: "microswarm-tools / shell.run" },
-    { name: "trace", hash: `#/trace/${ROOT}`, heading: "Trace" },
-    { name: "host", hash: "#/host", heading: "Host" },
-    { name: "member", hash: `#/members/${MEMBER}`, heading: "reviewer" },
+    { name: "approvals", hash: "#/approvals", heading: "The reviewer wants to run a command" },
+    { name: "trace", hash: `#/trace/${ROOT}`, heading: "Trajectory" },
+    { name: "host", hash: "#/host", heading: "Configuration and permissions for this host" },
+    { name: "member", hash: `#/sessions/${ROOT}/members/${MEMBER}`, heading: "reviewer" },
   ]) {
     test(`${pageCase.name} is usable and accessible at ${viewport.width}px`, async () => {
       const page = await context.newPage();
@@ -86,11 +86,11 @@ test("primary navigation and chat controls are keyboard reachable with reduced m
   await page.route("**/api/v1/**", route => mockApi(route));
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/#/sessions");
-  const overviewLink = page.locator('.primary-nav a[href="#/overview"]');
-  await overviewLink.focus();
-  await expect(overviewLink).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#\/overview$/);
+  const homeLink = page.locator('.primary-nav a[href="#/home"]');
+  await homeLink.focus();
+  await expect(homeLink).toBeFocused();
+  await homeLink.press("Enter");
+  await expect(page).toHaveURL(/#\/home$/);
   await page.goto(`/#/sessions/${ROOT}`);
   const composer = page.getByLabel("Message the lead");
   await expect(composer).toBeVisible();
@@ -98,6 +98,82 @@ test("primary navigation and chat controls are keyboard reachable with reduced m
   await expect(composer).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: "Send" })).toBeFocused();
+  await page.close();
+});
+
+test("mobile mark toggles navigation and tablet nav icons align with the mark", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/sessions");
+  const menu = page.getByRole("button", { name: "Menu" });
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveAttribute("aria-expanded", "false");
+  await menu.click();
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  const wordmark = page.getByRole("link", { name: "MicroSwarm" });
+  await expect(wordmark).toHaveAttribute("href", "#/home");
+  await wordmark.click();
+  await expect(page).toHaveURL(/#\/home$/);
+
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/#/sessions");
+  const alignment = await page.evaluate(() => {
+    const center = element => {
+      const rect = element.getBoundingClientRect();
+      return rect.left + rect.width / 2;
+    };
+    const markCenter = center(document.querySelector(".brand-mark-home"));
+    return { markCenter, offsets: [...document.querySelectorAll(".primary-nav a")].filter(link => link.getClientRects().length).map(link => Math.abs(center(link) - markCenter)) };
+  });
+  expect(alignment.offsets.every(offset => offset <= 1), JSON.stringify(alignment)).toBe(true);
+  await page.close();
+});
+
+test("outside clicks dismiss mobile navigation and desktop session controls stay within their pane", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/sessions");
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.mouse.click(380, 820);
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeHidden();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/sessions");
+  const sizing = await page.evaluate(() => {
+    const header = document.querySelector(".global-header").getBoundingClientRect();
+    const rail = document.querySelector(".page-rail").getBoundingClientRect();
+    const main = document.querySelector(".new-session-page").getBoundingClientRect();
+    const button = document.querySelector(".new-session-page button[type=submit]").getBoundingClientRect();
+    const navLinks = [...document.querySelectorAll(".primary-nav > a")];
+    const navigationFitsParent = navLinks.every(link => {
+      const rect = link.getBoundingClientRect();
+      return rect.left >= header.left && rect.right <= header.right;
+    });
+    return { rail: rail.width, main: main.width, buttonWithinRail: button.left >= main.left && button.right <= main.right, navigationFitsParent };
+  });
+  expect(sizing.rail).toBeLessThan(320);
+  expect(sizing.main).toBeGreaterThan(sizing.rail);
+  expect(sizing.buttonWithinRail).toBe(true);
+  expect(sizing.navigationFitsParent).toBe(true);
+  await page.close();
+});
+
+test("render consistent Tabler SVG icons for every navigation destination", async () => {
+  const page = await context.newPage();
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/sessions");
+  await page.getByRole("button", { name: "Menu" }).click();
+  const icons = page.locator('.primary-nav a[data-route] svg.nav-icon');
+  await expect(icons).toHaveCount(5);
+  for (const icon of await icons.all()) {
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("stroke", "currentColor");
+    await expect(icon.locator("path")).not.toHaveCount(0);
+  }
   await page.close();
 });
 
@@ -119,8 +195,8 @@ test("ended sessions remain visible with reason and trace link", async () => {
     return mockApi(route);
   });
   await page.goto("/#/sessions");
-  await expect(page.getByRole("heading", { name: "Ended today" })).toBeVisible();
-  const ended = page.getByRole("link", { name: /Ended by you/ });
+  await expect(page.locator(".page-rail").getByRole("heading", { name: "Ended today" })).toBeVisible();
+  const ended = page.locator(`.session-link[href="#/trace/${ROOT}"]`);
   await expect(ended).toHaveAttribute("href", `#/trace/${ROOT}`);
   await page.close();
 });
@@ -129,7 +205,7 @@ test("status updates reach the browser DOM with p95 below 500 ms", async () => {
   const latencies = [];
   const page = await context.newPage();
   await page.goto(`/#/sessions/${ROOT}`);
-  await expect(page.locator(".status-banner")).toContainText("Ready for your next message");
+  await expect(page.locator(".session-status-line")).toContainText("Ready for your next message");
   for (let sample = 0; sample < 20; sample++) {
     const status = sample % 2 === 0 ? "busy" : "ready";
     const seq = sample + 1;
@@ -141,7 +217,7 @@ test("status updates reach the browser DOM with p95 below 500 ms", async () => {
     const delivered = JSON.parse(await nextFixtureLine());
     expect(delivered.delivered).toBe(seq);
     const expected = status === "busy" ? "Working" : "Ready for your next message";
-    await expect(page.locator(".status-banner")).toContainText(expected);
+    await expect(page.locator(".session-status-line")).toContainText(expected);
     latencies.push(Date.now() - committedAt);
   }
   await page.close();
@@ -155,8 +231,8 @@ test("hostile agent text stays inert in a real browser", async () => {
   const page = await context.newPage();
   await page.route("**/api/v1/**", route => mockApi(route));
   await page.goto(`/#/sessions/${ROOT}`);
-  await expect(page.locator(".message-user .message-text")).toContainText(hostile);
-  await expect(page.locator("img, script:not([src])")).toHaveCount(0);
+  await expect(page.locator(".message-you .message-text")).toContainText(hostile);
+  await expect(page.locator(".message-text img, .message-text script:not([src])")).toHaveCount(0);
   await expect(page.locator("[role=alert]")).toHaveCount(0);
   await page.close();
 });
@@ -165,6 +241,7 @@ test("Host validates credential names in Chromium", async () => {
   const page = await context.newPage();
   await page.route("**/api/v1/**", route => mockApi(route));
   await page.goto("/#/host");
+  await page.getByRole("button", { name: "Add credential", exact: true }).click();
   const name = page.getByRole("textbox", { name: "Credential name" });
   await name.fill("bad/name");
   await expect.poll(() => name.evaluate(input => input.checkValidity())).toBe(false);
@@ -194,6 +271,14 @@ test("Host shows when web.search is configured for new sessions", async () => {
 
 test("chat send posts through the console and keeps the session locked while pending", async () => {
   const page = await context.newPage();
+  // This request test must not replay status events from the earlier latency test.
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { setTimeout(() => this.onopen?.(), 0); }
+      addEventListener() {}
+      close() {}
+    };
+  });
   let request;
   await page.route("**/api/v1/**", async route => {
     const url = new URL(route.request().url());
@@ -237,7 +322,7 @@ test("status events preserve an unsent composer draft", async () => {
   await page.close();
 });
 
-test("a new web session opened from / selects its first reply", async () => {
+test("a new web session opened from Sessions selects its first reply", async () => {
   const page = await context.newPage();
   await page.addInitScript(() => {
     window.EventSource = class {
@@ -254,15 +339,15 @@ test("a new web session opened from / selects its first reply", async () => {
     }
     return mockApi(route);
   });
-  await page.goto("/");
+  await page.goto("/#/sessions");
   await page.getByLabel("Message the lead").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
   await page.evaluate(() => window.__consoleEvents.emit("chat.pending", {
     type: "chat.pending", request_id: "new-web-session", session_id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
   }));
   await expect(page).toHaveURL(`http://127.0.0.1:8792/#/sessions/${ROOT}`);
-  await expect(page.locator(".session-main h1")).toHaveCount(1);
-  await expect(page.locator(".session-main h1")).toHaveText(hostile);
+  await expect(page.locator(".session-title")).toHaveCount(1);
+  await expect(page.locator(".session-title")).toHaveText(hostile);
   await page.close();
 });
 
@@ -330,8 +415,8 @@ test("approval decision posts only through its code route", async () => {
   await expect.poll(() => request?.url()).toContain("/api/v1/approvals/A1B2/approve");
   expect(request.postDataJSON()).toEqual({});
   expect(request.headers()["x-ms-console"]).toBeTruthy();
-  await page.getByRole("tab", { name: "Decided" }).click();
-  await expect(page.getByRole("link", { name: /A1B2 approved/ })).toBeVisible();
+  await page.getByRole("button", { name: "Decided", exact: true }).click();
+  await expect(page.locator(".approval-queue-item").filter({ hasText: "Allowed" })).toBeVisible();
   await expect(page.getByText("Already decided on another channel")).toHaveCount(0);
   await page.close();
 });
@@ -342,9 +427,13 @@ async function mockApi(route, activeSession = session) {
   if (route.request().method() !== "GET") return route.fulfill({ status: 204, body: "" });
   let body = {};
   if (url.pathname === "/api/v1/overview") body = { pending_approvals: 1 };
+  else if (url.pathname === "/api/v1/home") body = { summary: { needs_you: 1, running: 1 }, needs_you: [], running: [], ended_today: [], system: {} };
   else if (url.pathname === "/api/v1/sessions") body = { sessions: url.searchParams.get("group") === "ended" ? [] : [activeSession] };
   else if (url.pathname === `/api/v1/sessions/${ROOT}`) body = { session: activeSession, team: [{ ...activeSession, id: MEMBER, role: "reviewer", scope: { mounts: [] } }], banner: { tone: activeSession.status_words.tone, detail: "Supervisor status" } };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/messages`) body = { items: [{ kind: "user", at: new Date().toISOString(), text: hostile }, { kind: "lead", at: new Date().toISOString(), text: "Lead reply" }], next_before: null };
+  else if (url.pathname === `/api/v1/sessions/${ROOT}/team`) body = { agents: [], groups: [] };
+  else if (url.pathname === `/api/v1/sessions/${ROOT}/steps`) body = { steps: [], phases: [], last_seq: 0 };
+  else if (url.pathname === `/api/v1/sessions/${ROOT}/timeline`) body = { range: { start: new Date().toISOString(), end: new Date().toISOString() }, stats: {}, lanes: [] };
   else if (url.pathname === `/api/v1/sessions/${ROOT}/activity`) body = { events: [{ observation: true, agent_role: "reviewer", type: "tool.result", at: new Date().toISOString(), data: { text: hostile } }] };
   else if (url.pathname === "/api/v1/approvals") body = { approvals: [{ id: "approval-1", code: "A1B2", state: "pending", kind: "tool_call", root_session_id: ROOT, requesting_role: "reviewer", tool_call: { server: "microswarm-tools", tool: "shell.run", arguments: { command: "cargo test" }, argument_hash: "sha256:abc", parsed: { kind: "simple", commands: ["cargo test"] } }, runs_in: {} }] };
   else if (url.pathname === "/api/v1/approvals/A1B2") body = { approval: (await mockApiValue("/api/v1/approvals")).approvals[0] };
@@ -369,3 +458,26 @@ async function expectFixtureLine(expected) {
 async function mockApiValue(path) {
   return { approvals: [{ id: "approval-1", code: "A1B2", state: "pending", kind: "tool_call", root_session_id: ROOT, requesting_role: "reviewer", tool_call: { server: "microswarm-tools", tool: "shell.run", arguments: { command: "cargo test" }, argument_hash: "sha256:abc", parsed: { kind: "simple", commands: ["cargo test"] } }, runs_in: {} }] };
 }
+
+test("redesigned routes redirect legacy hashes and preserve navigation focus", async () => {
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.EventSource = class {
+      constructor() { this.listeners = {}; window.__consoleEvents = this; setTimeout(() => this.onopen?.(), 0); }
+      addEventListener(type, callback) { this.listeners[type] = callback; }
+      close() {}
+      emit(type, data) { this.listeners[type]?.({ data: JSON.stringify(data), lastEventId: "1" }); }
+    };
+  });
+  await page.route("**/api/v1/**", route => mockApi(route));
+  await page.goto("/#/sessions");
+  const home = page.getByRole("link", { name: "Home" });
+  await home.focus();
+  await page.evaluate(rootId => window.__consoleEvents.emit("status.changed", { type: "status.changed", session_id: rootId }), ROOT);
+  await expect(home).toBeFocused();
+  await page.goto(`/#/trace/${ROOT}`);
+  await expect(page).toHaveURL(new RegExp(`#\\/sessions\\/${ROOT}\\/trajectory`));
+  await page.goto(`/#/members/${MEMBER}`);
+  await expect(page).toHaveURL(new RegExp(`#\\/sessions\\/${ROOT}\\/members\\/${MEMBER}`));
+  await page.close();
+});

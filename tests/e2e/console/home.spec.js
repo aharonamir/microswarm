@@ -1,0 +1,12 @@
+import { test, expect } from '@playwright/test';
+import { startConsole, ROOT, approvals } from './support.js';
+let harness;
+test.beforeAll(async({browser})=>{harness=await startConsole(browser);});
+test.afterAll(async()=>harness?.close());
+const row={session_id:ROOT,title:'Audit auth',channel:'web',status:{key:'status.working'},agents:[],latest:{text_or_sentence:{key:'step.read',args:{path:'auth.rs'}}},started_at:'2026-11-21T10:00:00Z'};
+const model={summary:{needs_you:1,running:1},needs_you:[{...approvals[0],approval_id:approvals[0].id,session_id:ROOT,session_title:'Audit auth'}],running:[row],ended_today:[{...row,outcome_key:'status.ended',ended_at:'2026-11-21T09:00:00Z'}],system:{}};
+async function open(data=model){const page=await harness.context.newPage();await page.route('**/api/v1/home',r=>r.fulfill({json:data}));await page.goto(`${harness.baseUrl}/#/home`);return page;}
+test('Home shows its summary and session tables as sentences',async()=>{const page=await open();await expect(page.locator('.home-summary')).toContainText('1 thing needs you');await expect(page.locator('.home-session-table')).toHaveCount(2);await expect(page.locator('.home-session-table').first()).toContainText('Read auth.rs');await page.close();});
+test('Home decides a pending approval through its code route',async()=>{const page=await open();let called=false;await page.route('**/api/v1/approvals/K7QF/approve',r=>{called=true;return r.fulfill({json:{decision:'approved'}});});await page.getByRole('button',{name:'Approve',exact:true}).click();await expect.poll(()=>called).toBe(true);await page.close();});
+test('Home explains when nothing needs attention',async()=>{const page=await open({...model,summary:{needs_you:0,running:0},needs_you:[],running:[],ended_today:[]});await expect(page.getByText('Nothing needs you right now.',{exact:true})).toBeVisible();await page.close();});
+test('Home starts a session and navigates to the reply',async()=>{const page=await open();let body;await page.route('**/api/v1/sessions',r=>{if(r.request().method()==='POST'){body=r.request().postDataJSON();return r.fulfill({status:202,json:{request_id:'new-home',session_id:ROOT}});}return r.fallback();});await page.getByLabel('What should the lead work on?').fill('Review auth');await page.getByRole('button',{name:'Start',exact:true}).click();await expect(page).toHaveURL(new RegExp(`/sessions/${ROOT}$`));expect(body).toEqual({text:'Review auth'});await page.close();});

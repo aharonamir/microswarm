@@ -1,0 +1,141 @@
+{
+  "lanes": [
+    {
+      "agent": {
+        "colour_index": 0,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "initial": "L",
+        "kind": "lead",
+        "role": "lead"
+      },
+      "marks": [
+        {
+          "at": "2026-11-19T14:14:28.000Z",
+          "kind": "spawn",
+          "seq": 100,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
+        },
+        {
+          "at": "2026-11-19T14:14:29.000Z",
+          "kind": "spawn",
+          "seq": 101,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:3"
+        },
+        {
+          "at": "2026-11-19T14:14:30.000Z",
+          "kind": "reduced",
+          "seq": 102,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:2"
+        },
+        {
+          "at": "2026-11-19T14:14:30.000Z",
+          "kind": "reduced",
+          "seq": 103,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV:3"
+        }
+      ],
+      "spans": [
+        {
+          "end": "2026-11-19T14:14:31.000Z",
+          "start": "2026-11-19T14:14:25.000Z",
+          "state": "working"
+        }
+      ]
+    },
+    {
+      "agent": {
+        "colour_index": 1,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+        "initial": "R",
+        "kind": "member",
+        "role": "researcher"
+      },
+      "marks": [
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 1,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:1"
+        },
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 4,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:1"
+        },
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 7,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAW:7"
+        }
+      ],
+      "spans": []
+    },
+    {
+      "agent": {
+        "colour_index": 2,
+        "id": "01ARZ3NDEKTSV4RRFFQ69G5FAX",
+        "initial": "T",
+        "kind": "member",
+        "role": "tester"
+      },
+      "marks": [
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 10,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:10"
+        },
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 13,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:13"
+        },
+        {
+          "at": "2026-11-19T14:14:32.000Z",
+          "kind": "tool",
+          "seq": 14,
+          "step_id": "01ARZ3NDEKTSV4RRFFQ69G5FAX:14"
+        },
+        {
+          "at": "2026-11-19T14:14:45.000Z",
+          "kind": "approval",
+          "seq": 120,
+          "step_id": null
+        }
+      ],
+      "spans": [
+        {
+          "end": "2026-11-19T14:14:45.000Z",
+          "start": "2026-11-19T14:14:45.000Z",
+          "state": "waiting_you"
+        }
+      ]
+    },
+    {
+      "agent": {
+        "id": "you",
+        "initial": "Y",
+        "kind": "you",
+        "role": "you"
+      },
+      "marks": [],
+      "spans": []
+    }
+  ],
+  "range": {
+    "end": "2026-11-19T14:14:45.000Z",
+    "start": "2026-11-19T14:14:25.000Z"
+  },
+  "stats": {
+    "agents": 3,
+    "denied_or_failed": 1,
+    "duration_ms": 19000,
+    "model_calls": 0,
+    "reduced": 2,
+    "steps": 8,
+    "waiting_you_ms": 0
+  }
+}
