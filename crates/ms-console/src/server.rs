@@ -275,7 +275,7 @@ fn session_view_data(
     if !crate::read::valid_session_id(id) {
         return Err((StatusCode::BAD_REQUEST, "invalid_session_id"));
     }
-    let trace = ms_runtime::trace::build(home, id, None).map_err(|e| read_error(&e))?;
+    let trace = ms_runtime::trace::build_cached(home, id).map_err(|e| read_error(&e))?;
     let agents = crate::views::agents(&trace);
     Ok((trace, agents))
 }
